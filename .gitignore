@@ -1,0 +1,53 @@
+# Secrets / credentials — NEVER commit (this repo will go public)
+.env
+.env.*
+*.key
+*.pem
+secrets.*
+gpt_config.json
+credentials.txt
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node / web frontend
+node_modules/
+dist/
+.next/
+.vite/
+
+# PyInstaller / build output — ROOT ONLY (must NOT match the swmmcanada/build package
+# or tests/build dir, which are real source).
+/build/
+frontend/build/
+
+# Large geo / data artifacts (track sources, not bulk downloads)
+data/raw/
+data/cache/
+backend/cache/
+*.sqlite3
+*.tif
+*.tiff
+*.gpkg
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Local planning (PRDs, scratch) — not for the public repo
+.claude/
+
+# Internal design docs (ADRs, specs, design rationale, context) — kept local only
+docs/
+/CONTEXT.md
+/DESIGN.md

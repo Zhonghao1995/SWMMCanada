@@ -1,0 +1,85 @@
+{
+ "type": "FeatureCollection",
+ "features": [
+  {
+   "type": "Feature",
+   "id": 23,
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -123.37061797922912,
+     48.425104577468105
+    ]
+   },
+   "properties": {
+    "OBJECTID": 23,
+    "dofSubtype": 1,
+    "InfrastructureID": "D7021",
+    "WaterType": "STM",
+    "Comments": "Outfall #618",
+    "ModifiedOn": 1761856874000,
+    "DataSource": "APX",
+    "Location": "",
+    "Elevation": 0.867,
+    "AverageFlow": null,
+    "PeakFlow": null,
+    "OutfallCategory": null,
+    "OutfallNo": "CRD 618",
+    "SymbolRotation": 0,
+    "OwnedBy": "VC",
+    "Jurisdiction": "VC",
+    "LifecycleStatus": "ACT",
+    "InstallDate": null,
+    "Custodian": "VC",
+    "CustodianNotes": "",
+    "CreatedBy": "GIS",
+    "ModifiedBy": "GIS",
+    "CreatedOn": 1608156738000,
+    "AssetID": "DOF007021",
+    "CatchmentArea": null,
+    "DrawingNumber": "",
+    "SurveyRequired": null
+   }
+  },
+  {
+   "type": "Feature",
+   "id": 24,
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -123.36878097527844,
+     48.42248438831058
+    ]
+   },
+   "properties": {
+    "OBJECTID": 24,
+    "dofSubtype": 1,
+    "InfrastructureID": "D7020",
+    "WaterType": "STM",
+    "Comments": "Outfall #614",
+    "ModifiedOn": 1778220039000,
+    "DataSource": "APX",
+    "Location": "north end of causeway Inner Harbour",
+    "Elevation": -0.036,
+    "AverageFlow": null,
+    "PeakFlow": null,
+    "OutfallCategory": null,
+    "OutfallNo": "CRD 614",
+    "SymbolRotation": 0,
+    "OwnedBy": "VC",
+    "Jurisdiction": "VC",
+    "LifecycleStatus": "ACT",
+    "InstallDate": null,
+    "Custodian": "VC",
+    "CustodianNotes": "",
+    "CreatedBy": "GIS",
+    "ModifiedBy": "CartegraphIntegration",
+    "CreatedOn": 1608156738000,
+    "AssetID": "DOF007020",
+    "CatchmentArea": null,
+    "DrawingNumber": "",
+    "SurveyRequired": null
+   }
+  }
+ ]
+}

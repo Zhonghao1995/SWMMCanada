@@ -1,0 +1,451 @@
+{
+ "displayFieldName": "Diameter",
+ "fieldAliases": {
+  "OBJECTID": "OBJECTID",
+  "dgmSubtype": "Subtype",
+  "InfrastructureID": "InfrastructureID",
+  "WaterType": "WaterType",
+  "Comments": "Comments",
+  "ModifiedOn": "DataDate",
+  "AvgDepth": "AvgDepth",
+  "UpstreamNodeID": "UpstreamNodeID",
+  "DownstreamNodeID": "DownstreamNodeID",
+  "Diameter": "Diameter",
+  "UpstreamInvert": "UpstreamInvert",
+  "DownstreamInvert": "DownstreamInvert",
+  "VerticalMeasurement": "VerticalMeasurement",
+  "HorizontalMeasurement": "HorizontalMeasurement",
+  "Slope": "Approx. Slope (%)",
+  "OutfallCategory": "OutfallCategory",
+  "DataSource": "DataSource",
+  "DrawingNumber": "Drawing Number",
+  "OwnedBy": "Owner",
+  "Jurisdiction": "Jurisdiction",
+  "LifecycleStatus": "LifecycleStatus",
+  "Material": "Material",
+  "GroundSurfaceType": "GroundSurfaceType",
+  "ImportanceFactor": "ImportanceFactor",
+  "CrossSectionShape": "CrossSectionShape",
+  "HostPipeMaterial": "HostPipeMaterial",
+  "InstallDate": "InstallDate",
+  "Custodian": "Custodian",
+  "CustodianNotes": "CustodianNotes",
+  "CreatedBy": "CreatedBy",
+  "ModifiedBy": "ModifiedBy",
+  "CreatedOn": "CreatedOn",
+  "AssetID": "AssetID",
+  "Length_2D": "Length_2D",
+  "SHAPE_Length": "SHAPE_Length",
+  "DiameterNumeric": "DiameterNumeric",
+  "Depth": "Depth"
+ },
+ "geometryType": "esriGeometryPolyline",
+ "spatialReference": {
+  "wkid": 4326,
+  "latestWkid": 4326
+ },
+ "fields": [
+  {
+   "name": "OBJECTID",
+   "type": "esriFieldTypeOID",
+   "alias": "OBJECTID"
+  },
+  {
+   "name": "dgmSubtype",
+   "type": "esriFieldTypeInteger",
+   "alias": "Subtype"
+  },
+  {
+   "name": "InfrastructureID",
+   "type": "esriFieldTypeString",
+   "alias": "InfrastructureID",
+   "length": 15
+  },
+  {
+   "name": "WaterType",
+   "type": "esriFieldTypeString",
+   "alias": "WaterType",
+   "length": 3
+  },
+  {
+   "name": "Comments",
+   "type": "esriFieldTypeString",
+   "alias": "Comments",
+   "length": 255
+  },
+  {
+   "name": "ModifiedOn",
+   "type": "esriFieldTypeDate",
+   "alias": "DataDate",
+   "length": 8
+  },
+  {
+   "name": "AvgDepth",
+   "type": "esriFieldTypeDouble",
+   "alias": "AvgDepth"
+  },
+  {
+   "name": "UpstreamNodeID",
+   "type": "esriFieldTypeString",
+   "alias": "UpstreamNodeID",
+   "length": 20
+  },
+  {
+   "name": "DownstreamNodeID",
+   "type": "esriFieldTypeString",
+   "alias": "DownstreamNodeID",
+   "length": 20
+  },
+  {
+   "name": "Diameter",
+   "type": "esriFieldTypeInteger",
+   "alias": "Diameter"
+  },
+  {
+   "name": "UpstreamInvert",
+   "type": "esriFieldTypeDouble",
+   "alias": "UpstreamInvert"
+  },
+  {
+   "name": "DownstreamInvert",
+   "type": "esriFieldTypeDouble",
+   "alias": "DownstreamInvert"
+  },
+  {
+   "name": "VerticalMeasurement",
+   "type": "esriFieldTypeInteger",
+   "alias": "VerticalMeasurement"
+  },
+  {
+   "name": "HorizontalMeasurement",
+   "type": "esriFieldTypeInteger",
+   "alias": "HorizontalMeasurement"
+  },
+  {
+   "name": "Slope",
+   "type": "esriFieldTypeDouble",
+   "alias": "Approx. Slope (%)"
+  },
+  {
+   "name": "OutfallCategory",
+   "type": "esriFieldTypeString",
+   "alias": "OutfallCategory",
+   "length": 4
+  },
+  {
+   "name": "DataSource",
+   "type": "esriFieldTypeString",
+   "alias": "DataSource",
+   "length": 25
+  },
+  {
+   "name": "DrawingNumber",
+   "type": "esriFieldTypeString",
+   "alias": "Drawing Number",
+   "length": 12
+  },
+  {
+   "name": "OwnedBy",
+   "type": "esriFieldTypeString",
+   "alias": "Owner",
+   "length": 3
+  },
+  {
+   "name": "Jurisdiction",
+   "type": "esriFieldTypeString",
+   "alias": "Jurisdiction",
+   "length": 3
+  },
+  {
+   "name": "LifecycleStatus",
+   "type": "esriFieldTypeString",
+   "alias": "LifecycleStatus",
+   "length": 3
+  },
+  {
+   "name": "Material",
+   "type": "esriFieldTypeString",
+   "alias": "Material",
+   "length": 4
+  },
+  {
+   "name": "GroundSurfaceType",
+   "type": "esriFieldTypeString",
+   "alias": "GroundSurfaceType",
+   "length": 3
+  },
+  {
+   "name": "ImportanceFactor",
+   "type": "esriFieldTypeString",
+   "alias": "ImportanceFactor",
+   "length": 2
+  },
+  {
+   "name": "CrossSectionShape",
+   "type": "esriFieldTypeString",
+   "alias": "CrossSectionShape",
+   "length": 4
+  },
+  {
+   "name": "HostPipeMaterial",
+   "type": "esriFieldTypeString",
+   "alias": "HostPipeMaterial",
+   "length": 50
+  },
+  {
+   "name": "InstallDate",
+   "type": "esriFieldTypeDate",
+   "alias": "InstallDate",
+   "length": 8
+  },
+  {
+   "name": "Custodian",
+   "type": "esriFieldTypeString",
+   "alias": "Custodian",
+   "length": 50
+  },
+  {
+   "name": "CustodianNotes",
+   "type": "esriFieldTypeString",
+   "alias": "CustodianNotes",
+   "length": 50
+  },
+  {
+   "name": "CreatedBy",
+   "type": "esriFieldTypeString",
+   "alias": "CreatedBy",
+   "length": 50
+  },
+  {
+   "name": "ModifiedBy",
+   "type": "esriFieldTypeString",
+   "alias": "ModifiedBy",
+   "length": 50
+  },
+  {
+   "name": "CreatedOn",
+   "type": "esriFieldTypeDate",
+   "alias": "CreatedOn",
+   "length": 8
+  },
+  {
+   "name": "AssetID",
+   "type": "esriFieldTypeString",
+   "alias": "AssetID",
+   "length": 9
+  },
+  {
+   "name": "Length_2D",
+   "type": "esriFieldTypeDouble",
+   "alias": "Length_2D"
+  },
+  {
+   "name": "SHAPE_Length",
+   "type": "esriFieldTypeDouble",
+   "alias": "SHAPE_Length"
+  },
+  {
+   "name": "DiameterNumeric",
+   "type": "esriFieldTypeString",
+   "alias": "DiameterNumeric",
+   "length": 200
+  },
+  {
+   "name": "Depth",
+   "type": "esriFieldTypeDouble",
+   "alias": "Depth"
+  }
+ ],
+ "features": [
+  {
+   "attributes": {
+    "OBJECTID": 5,
+    "dgmSubtype": 1,
+    "InfrastructureID": "D0879X",
+    "WaterType": "STM",
+    "Comments": "",
+    "ModifiedOn": 1720133993000,
+    "AvgDepth": null,
+    "UpstreamNodeID": "DMH000879",
+    "DownstreamNodeID": "DFG001568",
+    "Diameter": 200,
+    "UpstreamInvert": 8.891,
+    "DownstreamInvert": null,
+    "VerticalMeasurement": null,
+    "HorizontalMeasurement": null,
+    "Slope": 0,
+    "OutfallCategory": null,
+    "DataSource": "UNK",
+    "DrawingNumber": "NoDrawing",
+    "OwnedBy": "PRI",
+    "Jurisdiction": "VC",
+    "LifecycleStatus": "ABD",
+    "Material": "VITC",
+    "GroundSurfaceType": null,
+    "ImportanceFactor": "NR",
+    "CrossSectionShape": "CIR",
+    "HostPipeMaterial": null,
+    "InstallDate": -2208988800000,
+    "Custodian": "VC",
+    "CustodianNotes": "",
+    "CreatedBy": "GIS",
+    "ModifiedBy": "CartegraphIntegration",
+    "CreatedOn": 1608156946000,
+    "AssetID": "DGM000879",
+    "Length_2D": 72.97,
+    "SHAPE_Length": 72.97098895763796,
+    "DiameterNumeric": "200",
+    "Depth": null
+   },
+   "geometry": {
+    "paths": [
+     [
+      [
+       -123.36864554133699,
+       48.418611007533514
+      ],
+      [
+       -123.36863923657815,
+       48.41883815196306
+      ],
+      [
+       -123.36901115062595,
+       48.419039351700626
+      ],
+      [
+       -123.36917337823222,
+       48.41906174196449
+      ]
+     ]
+    ]
+   }
+  },
+  {
+   "attributes": {
+    "OBJECTID": 6,
+    "dgmSubtype": 1,
+    "InfrastructureID": "D7103X",
+    "WaterType": "STM",
+    "Comments": "",
+    "ModifiedOn": 1720133993000,
+    "AvgDepth": 1.93,
+    "UpstreamNodeID": "DMH003533",
+    "DownstreamNodeID": "DMH003495",
+    "Diameter": 300,
+    "UpstreamInvert": 9.268,
+    "DownstreamInvert": 7.038,
+    "VerticalMeasurement": null,
+    "HorizontalMeasurement": null,
+    "Slope": 2.45,
+    "OutfallCategory": null,
+    "DataSource": "UNK",
+    "DrawingNumber": "NoDrawing",
+    "OwnedBy": "VC",
+    "Jurisdiction": "VC",
+    "LifecycleStatus": "ACT",
+    "Material": "VITC",
+    "GroundSurfaceType": null,
+    "ImportanceFactor": "NR",
+    "CrossSectionShape": "CIR",
+    "HostPipeMaterial": null,
+    "InstallDate": -2524521600000,
+    "Custodian": "VC",
+    "CustodianNotes": "",
+    "CreatedBy": "GIS",
+    "ModifiedBy": "CartegraphIntegration",
+    "CreatedOn": 1608156946000,
+    "AssetID": "DGM007103",
+    "Length_2D": 90.98,
+    "SHAPE_Length": 90.98204440756852,
+    "DiameterNumeric": "300",
+    "Depth": null
+   },
+   "geometry": {
+    "paths": [
+     [
+      [
+       -123.37354207025267,
+       48.416172011816
+      ],
+      [
+       -123.37312209792151,
+       48.41694130323519
+      ]
+     ]
+    ]
+   }
+  },
+  {
+   "attributes": {
+    "OBJECTID": 58,
+    "dgmSubtype": 1,
+    "InfrastructureID": "D2215X",
+    "WaterType": "STM",
+    "Comments": "",
+    "ModifiedOn": 1720133994000,
+    "AvgDepth": 5.055,
+    "UpstreamNodeID": "DMH002215",
+    "DownstreamNodeID": "DMH002214",
+    "Diameter": 200,
+    "UpstreamInvert": 12.498,
+    "DownstreamInvert": 10.407,
+    "VerticalMeasurement": null,
+    "HorizontalMeasurement": null,
+    "Slope": 2.3,
+    "OutfallCategory": null,
+    "DataSource": "UNK",
+    "DrawingNumber": "NoDrawing",
+    "OwnedBy": "VC",
+    "Jurisdiction": "VC",
+    "LifecycleStatus": "ACT",
+    "Material": "VITC",
+    "GroundSurfaceType": null,
+    "ImportanceFactor": "NR",
+    "CrossSectionShape": "CIR",
+    "HostPipeMaterial": null,
+    "InstallDate": -2208988800000,
+    "Custodian": "VC",
+    "CustodianNotes": "",
+    "CreatedBy": "GIS",
+    "ModifiedBy": "CartegraphIntegration",
+    "CreatedOn": 1608156946000,
+    "AssetID": "DGM002215",
+    "Length_2D": 90.94,
+    "SHAPE_Length": 90.94423534702419,
+    "DiameterNumeric": "200",
+    "Depth": null
+   },
+   "geometry": {
+    "paths": [
+     [
+      [
+       -123.36471894411348,
+       48.427577465251055
+      ],
+      [
+       -123.36481922207238,
+       48.427572076036526
+      ],
+      [
+       -123.3653595207952,
+       48.427506441468175
+      ],
+      [
+       -123.36549778184946,
+       48.4275212020572
+      ],
+      [
+       -123.3655140695438,
+       48.427488239191455
+      ],
+      [
+       -123.36589653023657,
+       48.4275290690499
+      ]
+     ]
+    ]
+   }
+  }
+ ],
+ "exceededTransferLimit": true
+}

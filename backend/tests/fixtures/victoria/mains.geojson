@@ -1,0 +1,2877 @@
+{
+ "type": "FeatureCollection",
+ "features": [
+  {
+   "type": "Feature",
+   "id": 5,
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -123.36864554133699,
+      48.418611007533514
+     ],
+     [
+      -123.36863923657815,
+      48.41883815196306
+     ],
+     [
+      -123.36901115062595,
+      48.419039351700626
+     ],
+     [
+      -123.36917337823222,
+      48.41906174196449
+     ]
+    ]
+   },
+   "properties": {
+    "OBJECTID": 5,
+    "dgmSubtype": 1,
+    "InfrastructureID": "D0879X",
+    "WaterType": "STM",
+    "Comments": "",
+    "ModifiedOn": 1720133993000,
+    "AvgDepth": null,
+    "UpstreamNodeID": "DMH000879",
+    "DownstreamNodeID": "DFG001568",
+    "Diameter": 200,
+    "UpstreamInvert": 8.891,
+    "DownstreamInvert": null,
+    "VerticalMeasurement": null,
+    "HorizontalMeasurement": null,
+    "Slope": 0,
+    "OutfallCategory": null,
+    "DataSource": "UNK",
+    "DrawingNumber": "NoDrawing",
+    "OwnedBy": "PRI",
+    "Jurisdiction": "VC",
+    "LifecycleStatus": "ABD",
+    "Material": "VITC",
+    "GroundSurfaceType": null,
+    "ImportanceFactor": "NR",
+    "CrossSectionShape": "CIR",
+    "HostPipeMaterial": null,
+    "InstallDate": -2208988800000,
+    "Custodian": "VC",
+    "CustodianNotes": "",
+    "CreatedBy": "GIS",
+    "ModifiedBy": "CartegraphIntegration",
+    "CreatedOn": 1608156946000,
+    "AssetID": "DGM000879",
+    "Length_2D": 72.97,
+    "SHAPE_Length": 72.97098895763796,
+    "DiameterNumeric": "200",
+    "Depth": null
+   }
+  },
+  {
+   "type": "Feature",
+   "id": 6,
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -123.37354207025267,
+      48.416172011816
+     ],
+     [
+      -123.37312209792151,
+      48.41694130323519
+     ]
+    ]
+   },
+   "properties": {
+    "OBJECTID": 6,
+    "dgmSubtype": 1,
+    "InfrastructureID": "D7103X",
+    "WaterType": "STM",
+    "Comments": "",
+    "ModifiedOn": 1720133993000,
+    "AvgDepth": 1.93,
+    "UpstreamNodeID": "DMH003533",
+    "DownstreamNodeID": "DMH003495",
+    "Diameter": 300,
+    "UpstreamInvert": 9.268,
+    "DownstreamInvert": 7.038,
+    "VerticalMeasurement": null,
+    "HorizontalMeasurement": null,
+    "Slope": 2.45,
+    "OutfallCategory": null,
+    "DataSource": "UNK",
+    "DrawingNumber": "NoDrawing",
+    "OwnedBy": "VC",
+    "Jurisdiction": "VC",
+    "LifecycleStatus": "ACT",
+    "Material": "VITC",
+    "GroundSurfaceType": null,
+    "ImportanceFactor": "NR",
+    "CrossSectionShape": "CIR",
+    "HostPipeMaterial": null,
+    "InstallDate": -2524521600000,
+    "Custodian": "VC",
+    "CustodianNotes": "",
+    "CreatedBy": "GIS",
+    "ModifiedBy": "CartegraphIntegration",
+    "CreatedOn": 1608156946000,
+    "AssetID": "DGM007103",
+    "Length_2D": 90.98,
+    "SHAPE_Length": 90.98204440756852,
+    "DiameterNumeric": "300",
+    "Depth": null
+   }
+  },
+  {
+   "type": "Feature",
+   "id": 58,
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -123.36471894411348,
+      48.427577465251055
+     ],
+     [
+      -123.36481922207238,
+      48.427572076036526
+     ],
+     [
+      -123.3653595207952,
+      48.427506441468175
+     ],
+     [
+      -123.36549778184946,
+      48.4275212020572
+     ],
+     [
+      -123.3655140695438,
+      48.427488239191455
+     ],
+     [
+      -123.36589653023657,
+      48.4275290690499
+     ]
+    ]
+   },
+   "properties": {
+    "OBJECTID": 58,
+    "dgmSubtype": 1,
+    "InfrastructureID": "D2215X",
+    "WaterType": "STM",
+    "Comments": "",
+    "ModifiedOn": 1720133994000,
+    "AvgDepth": 5.055,
+    "UpstreamNodeID": "DMH002215",
+    "DownstreamNodeID": "DMH002214",
+    "Diameter": 200,
+    "UpstreamInvert": 12.498,
+    "DownstreamInvert": 10.407,
+    "VerticalMeasurement": null,
+    "HorizontalMeasurement": null,
+    "Slope": 2.3,
+    "OutfallCategory": null,
+    "DataSource": "UNK",
+    "DrawingNumber": "NoDrawing",
+    "OwnedBy": "VC",
+    "Jurisdiction": "VC",
+    "LifecycleStatus": "ACT",
+    "Material": "VITC",
+    "GroundSurfaceType": null,
+    "ImportanceFactor": "NR",
+    "CrossSectionShape": "CIR",
+    "HostPipeMaterial": null,
+    "InstallDate": -2208988800000,
+    "Custodian": "VC",
+    "CustodianNotes": "",
+    "CreatedBy": "GIS",
+    "ModifiedBy": "CartegraphIntegration",
+    "CreatedOn": 1608156946000,
+    "AssetID": "DGM002215",
+    "Length_2D": 90.94,
+    "SHAPE_Length": 90.94423534702419,
+    "DiameterNumeric": "200",
+    "Depth": null
+   }
+  },
+  {
+   "type": "Feature",
+   "id": 59,
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -123.36709920838912,
+      48.427803305427794
+     ],
+     [
+      -123.36730766401094,
+      48.42783166667035
+     ]
+    ]
+   },
+   "properties": {
+    "OBJECTID": 59,
+    "dgmSubtype": 2,
+    "InfrastructureID": "D2211X",
+    "WaterType": "STM",
+    "Comments": "",
+    "ModifiedOn": 1720133994000,
+    "AvgDepth": 4.83,
+    "UpstreamNodeID": "DMH002211",
+    "DownstreamNodeID": "DFG000681",
+    "Diameter": -1,
+    "UpstreamInvert": 7.49,
+    "DownstreamInvert": 7.333,
+    "VerticalMeasurement": 915,
+    "HorizontalMeasurement": 1220,
+    "Slope": 1,
+    "OutfallCategory": null,
+    "DataSource": "SUR",
+    "DrawingNumber": "NoDrawing",
+    "OwnedBy": "VC",
+    "Jurisdiction": "VC",
+    "LifecycleStatus": "ACT",
+    "Material": "BRK",
+    "GroundSurfaceType": null,
+    "ImportanceFactor": "H",
+    "CrossSectionShape": "ARCH",
+    "HostPipeMaterial": null,
+    "InstallDate": -2208988800000,
+    "Custodian": "VC",
+    "CustodianNotes": "",
+    "CreatedBy": "GIS",
+    "ModifiedBy": "CartegraphIntegration",
+    "CreatedOn": 1608156946000,
+    "AssetID": "DGM002211",
+    "Length_2D": 15.74,
+    "SHAPE_Length": 15.739925331600562,
+    "DiameterNumeric": "-1",
+    "Depth": null
+   }
+  },
+  {
+   "type": "Feature",
+   "id": 60,
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -123.36697199517509,
+      48.42658854163705
+     ],
+     [
+      -123.36730709685148,
+      48.426626327656045
+     ],
+     [
+      -123.36735744077167,
+      48.42662286432165
+     ]
+    ]
+   },
+   "properties": {
+    "OBJECTID": 60,
+    "dgmSubtype": 1,
+    "InfrastructureID": "D2321X",
+    "WaterType": "STM",
+    "Comments": "No elevation data found",
+    "ModifiedOn": 1781634926000,
+    "AvgDepth": 1.478,
+    "UpstreamNodeID": "DMH002321",
+    "DownstreamNodeID": "DMH002320",
+    "Diameter": 200,
+    "UpstreamInvert": 15.3,
+    "DownstreamInvert": 14.141,
+    "VerticalMeasurement": null,
+    "HorizontalMeasurement": null,
+    "Slope": 4.01,
+    "OutfallCategory": null,
+    "DataSource": "UNK",
+    "DrawingNumber": "NoDrawing",
+    "OwnedBy": "VC",
+    "Jurisdiction": "VC",
+    "LifecycleStatus": "ACT",
+    "Material": "PE",
+    "GroundSurfaceType": null,
+    "ImportanceFactor": "NR",
+    "CrossSectionShape": "CIR",
+    "HostPipeMaterial": "VITC",
+    "InstallDate": 315532800000,
+    "Custodian": "VC",
+    "CustodianNotes": "",
+    "CreatedBy": "GIS",
+    "ModifiedBy": "AGOUDINE",
+    "CreatedOn": 1608156946000,
+    "AssetID": "DGM002321",
+    "Length_2D": 28.89,
+    "SHAPE_Length": 28.888040869237187,
+    "DiameterNumeric": "200",
+    "Depth": null
+   }
+  },
+  {
+   "type": "Feature",
+   "id": 61,
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -123.36989074471842,
+      48.42517272438868
+     ],
+     [
+      -123.3699544791091,
+      48.42518965611498
+     ],
+     [
+      -123.37061797922912,
+      48.425104577468105
+     ]
+    ]
+   },
+   "properties": {
+    "OBJECTID": 61,
+    "dgmSubtype": 10,
+    "InfrastructureID": "D2400X",
+    "WaterType": "STM",
+    "Comments": "",
+    "ModifiedOn": 1720133994000,
+    "AvgDepth": null,
+    "UpstreamNodeID": "DMH002400",
+    "DownstreamNodeID": "DOF007021",
+    "Diameter": 200,
+    "UpstreamInvert": 1.998,
+    "DownstreamInvert": 0.867,
+    "VerticalMeasurement": null,
+    "HorizontalMeasurement": null,
+    "Slope": 2.05,
+    "OutfallCategory": null,
+    "DataSource": "UNK",
+    "DrawingNumber": "NoDrawing",
+    "OwnedBy": "VC",
+    "Jurisdiction": "VC",
+    "LifecycleStatus": "ACT",
+    "Material": "VITC",
+    "GroundSurfaceType": null,
+    "ImportanceFactor": "NR",
+    "CrossSectionShape": "CIR",
+    "HostPipeMaterial": null,
+    "InstallDate": -1988150400000,
+    "Custodian": "VC",
+    "CustodianNotes": "",
+    "CreatedBy": "GIS",
+    "ModifiedBy": "CartegraphIntegration",
+    "CreatedOn": 1608156946000,
+    "AssetID": "DGM002400",
+    "Length_2D": 55.07,
+    "SHAPE_Length": 55.066108959340355,
+    "DiameterNumeric": "200",
+    "Depth": null
+   }
+  },
+  {
+   "type": "Feature",
+   "id": 66,
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -123.37309746595784,
+      48.42049937535272
+     ],
+     [
+      -123.3746222749379,
+      48.420884178796896
+     ]
+    ]
+   },
+   "properties": {
+    "OBJECTID": 66,
+    "dgmSubtype": 1,
+    "InfrastructureID": "D5419X",
+    "WaterType": "STM",
+    "Comments": "No elevation data found",
+    "ModifiedOn": 1720133994000,
+    "AvgDepth": null,
+    "UpstreamNodeID": "DMH005419",
+    "DownstreamNodeID": "DMH005418",
+    "Diameter": 150,
+    "UpstreamInvert": 7.13,
+    "DownstreamInvert": 5.83,
+    "VerticalMeasurement": null,
+    "HorizontalMeasurement": null,
+    "Slope": 1.44,
+    "OutfallCategory": null,
+    "DataSource": "UNK",
+    "DrawingNumber": "NoDrawing",
+    "OwnedBy": "VC",
+    "Jurisdiction": "VC",
+    "LifecycleStatus": "ACT",
+    "Material": "VITC",
+    "GroundSurfaceType": null,
+    "ImportanceFactor": "H",
+    "CrossSectionShape": "CIR",
+    "HostPipeMaterial": null,
+    "InstallDate": -2524521600000,
+    "Custodian": "VC",
+    "CustodianNotes": "",
+    "CreatedBy": "GIS",
+    "ModifiedBy": "CartegraphIntegration",
+    "CreatedOn": 1608156946000,
+    "AssetID": "DGM005419",
+    "Length_2D": 120.65,
+    "SHAPE_Length": 120.65329990614819,
+    "DiameterNumeric": "150",
+    "Depth": null
+   }
+  },
+  {
+   "type": "Feature",
+   "id": 67,
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -123.3746222749379,
+      48.420884178796896
+     ],
+     [
+      -123.3747405039639,
+      48.420918301893366
+     ],
+     [
+      -123.37475868916196,
+      48.42092171670074
+     ],
+     [
+      -123.37477719032138,
+      48.42092198021271
+     ],
+     [
+      -123.37479546539718,
+      48.42091908470894
+     ],
+     [
+      -123.37481297896824,
+      48.42091311502158
+     ],
+     [
+      -123.37482921792383,
+      48.42090424604987
+     ],
+     [
+      -123.37484370649683,
+      48.42089273763598
+     ],
+     [
+      -123.37484942698119,
+      48.42089005152471
+     ]
+    ]
+   },
+   "properties": {
+    "OBJECTID": 67,
+    "dgmSubtype": 1,
+    "InfrastructureID": "D5418X",
+    "WaterType": "STM",
+    "Comments": "",
+    "ModifiedOn": 1720133994000,
+    "AvgDepth": 0.74,
+    "UpstreamNodeID": "DMH005418",
+    "DownstreamNodeID": "DMH001490",
+    "Diameter": 150,
+    "UpstreamInvert": 5.83,
+    "DownstreamInvert": 5.329,
+    "VerticalMeasurement": null,
+    "HorizontalMeasurement": null,
+    "Slope": 0,
+    "OutfallCategory": null,
+    "DataSource": "UNK",
+    "DrawingNumber": "NoDrawing",
+    "OwnedBy": "VC",
+    "Jurisdiction": "VC",
+    "LifecycleStatus": "ACT",
+    "Material": "VITC",
+    "GroundSurfaceType": null,
+    "ImportanceFactor": "M",
+    "CrossSectionShape": "CIR",
+    "HostPipeMaterial": null,
+    "InstallDate": -2524521600000,
+    "Custodian": "VC",
+    "CustodianNotes": "",
+    "CreatedBy": "GIS",
+    "ModifiedBy": "CartegraphIntegration",
+    "CreatedOn": 1608156946000,
+    "AssetID": "DGM005418",
+    "Length_2D": 18.94,
+    "SHAPE_Length": 18.910352050333717,
+    "DiameterNumeric": "150",
+    "Depth": null
+   }
+  },
+  {
+   "type": "Feature",
+   "id": 124,
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -123.3686915782006,
+      48.422575081057545
+     ],
+     [
+      -123.36878097527844,
+      48.42248438831058
+     ]
+    ]
+   },
+   "properties": {
+    "OBJECTID": 124,
+    "dgmSubtype": 10,
+    "InfrastructureID": "D2450X",
+    "WaterType": "STM",
+    "Comments": "",
+    "ModifiedOn": 1720133999000,
+    "AvgDepth": null,
+    "UpstreamNodeID": "DMH002450",
+    "DownstreamNodeID": "DOF007020",
+    "Diameter": -1,
+    "UpstreamInvert": 0.85,
+    "DownstreamInvert": -0.036,
+    "VerticalMeasurement": 1800,
+    "HorizontalMeasurement": 1200,
+    "Slope": 7.35,
+    "OutfallCategory": null,
+    "DataSource": "UNK",
+    "DrawingNumber": "NoDrawing",
+    "OwnedBy": "VC",
+    "Jurisdiction": "VC",
+    "LifecycleStatus": "ACT",
+    "Material": "RC",
+    "GroundSurfaceType": null,
+    "ImportanceFactor": "NR",
+    "CrossSectionShape": "UNK",
+    "HostPipeMaterial": null,
+    "InstallDate": -2208988800000,
+    "Custodian": "VC",
+    "CustodianNotes": "",
+    "CreatedBy": "GIS",
+    "ModifiedBy": "CartegraphIntegration",
+    "CreatedOn": 1608156946000,
+    "AssetID": "DGM002450",
+    "Length_2D": 12.06,
+    "SHAPE_Length": 12.057002414849652,
+    "DiameterNumeric": "-1",
+    "Depth": null
+   }
+  },
+  {
+   "type": "Feature",
+   "id": 125,
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -123.36851091691065,
+      48.42263087335323
+     ],
+     [
+      -123.3686915782006,
+      48.422575081057545
+     ]
+    ]
+   },
+   "properties": {
+    "OBJECTID": 125,
+    "dgmSubtype": 3,
+    "InfrastructureID": "D2451X",
+    "WaterType": "STM",
+    "Comments": "",
+    "ModifiedOn": 1720133999000,
+    "AvgDepth": 1.92,
+    "UpstreamNodeID": "DMH002451",
+    "DownstreamNodeID": "DMH002450",
+    "Diameter": -1,
+    "UpstreamInvert": 4.718,
+    "DownstreamInvert": 0.85,
+    "VerticalMeasurement": 1800,
+    "HorizontalMeasurement": 1200,
+    "Slope": 26.25,
+    "OutfallCategory": null,
+    "DataSource": "UNK",
+    "DrawingNumber": "NoDrawing",
+    "OwnedBy": "VC",
+    "Jurisdiction": "VC",
+    "LifecycleStatus": "ACT",
+    "Material": "RC",
+    "GroundSurfaceType": null,
+    "ImportanceFactor": "NR",
+    "CrossSectionShape": "UNK",
+    "HostPipeMaterial": null,
+    "InstallDate": -2082844800000,
+    "Custodian": "VC",
+    "CustodianNotes": "",
+    "CreatedBy": "GIS",
+    "ModifiedBy": "CartegraphIntegration",
+    "CreatedOn": 1608156946000,
+    "AssetID": "DGM002451",
+    "Length_2D": 14.73,
+    "SHAPE_Length": 14.734834938571211,
+    "DiameterNumeric": "-1",
+    "Depth": null
+   }
+  },
+  {
+   "type": "Feature",
+   "id": 126,
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -123.36810933021457,
+      48.42286280762773
+     ],
+     [
+      -123.36827395359556,
+      48.422772142707494
+     ]
+    ]
+   },
+   "properties": {
+    "OBJECTID": 126,
+    "dgmSubtype": 3,
+    "InfrastructureID": "D2461X",
+    "WaterType": "STM",
+    "Comments": "",
+    "ModifiedOn": 1720133999000,
+    "AvgDepth": null,
+    "UpstreamNodeID": "DMH002461",
+    "DownstreamNodeID": "DFG000574",
+    "Diameter": -1,
+    "UpstreamInvert": 2.95,
+    "DownstreamInvert": 2.94,
+    "VerticalMeasurement": 1800,
+    "HorizontalMeasurement": 1200,
+    "Slope": 0.06,
+    "OutfallCategory": null,
+    "DataSource": "UNK",
+    "DrawingNumber": "NoDrawing",
+    "OwnedBy": "VC",
+    "Jurisdiction": "VC",
+    "LifecycleStatus": "ACT",
+    "Material": "BRK",
+    "GroundSurfaceType": null,
+    "ImportanceFactor": "NR",
+    "CrossSectionShape": "UNK",
+    "HostPipeMaterial": null,
+    "InstallDate": -2208988800000,
+    "Custodian": "VC",
+    "CustodianNotes": "",
+    "CreatedBy": "GIS",
+    "ModifiedBy": "CartegraphIntegration",
+    "CreatedOn": 1608156946000,
+    "AssetID": "DGM002461",
+    "Length_2D": 15.81,
+    "SHAPE_Length": 15.808412540100898,
+    "DiameterNumeric": "-1",
+    "Depth": null
+   }
+  },
+  {
+   "type": "Feature",
+   "id": 127,
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -123.36755019580764,
+      48.422709977596185
+     ],
+     [
+      -123.36755560414093,
+      48.42270272170141
+     ]
+    ]
+   },
+   "properties": {
+    "OBJECTID": 127,
+    "dgmSubtype": 1,
+    "InfrastructureID": "D2462X",
+    "WaterType": "STM",
+    "Comments": "",
+    "ModifiedOn": 1720133999000,
+    "AvgDepth": null,
+    "UpstreamNodeID": "DMH002462",
+    "DownstreamNodeID": "DFG000573",
+    "Diameter": 200,
+    "UpstreamInvert": 3.33,
+    "DownstreamInvert": 3.33,
+    "VerticalMeasurement": null,
+    "HorizontalMeasurement": null,
+    "Slope": 0,
+    "OutfallCategory": null,
+    "DataSource": "UNK",
+    "DrawingNumber": "NoDrawing",
+    "OwnedBy": "VC",
+    "Jurisdiction": "VC",
+    "LifecycleStatus": "ACT",
+    "Material": "VITC",
+    "GroundSurfaceType": null,
+    "ImportanceFactor": "NR",
+    "CrossSectionShape": "CIR",
+    "HostPipeMaterial": null,
+    "InstallDate": -2208988800000,
+    "Custodian": "VC",
+    "CustodianNotes": "",
+    "CreatedBy": "GIS",
+    "ModifiedBy": "CartegraphIntegration",
+    "CreatedOn": 1608156946000,
+    "AssetID": "DGM002462",
+    "Length_2D": 0.9,
+    "SHAPE_Length": 0.900331694817039,
+    "DiameterNumeric": "200",
+    "Depth": null
+   }
+  },
+  {
+   "type": "Feature",
+   "id": 128,
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -123.36584616204219,
+      48.422133128033956
+     ],
+     [
+      -123.36586632135248,
+      48.42215098505846
+     ]
+    ]
+   },
+   "properties": {
+    "OBJECTID": 128,
+    "dgmSubtype": 3,
+    "InfrastructureID": "D2509X",
+    "WaterType": "STM",
+    "Comments": "",
+    "ModifiedOn": 1720133999000,
+    "AvgDepth": 5.0655,
+    "UpstreamNodeID": "DMH002509",
+    "DownstreamNodeID": "DMH002470",
+    "Diameter": 1500,
+    "UpstreamInvert": 3.775,
+    "DownstreamInvert": 3.772,
+    "VerticalMeasurement": null,
+    "HorizontalMeasurement": null,
+    "Slope": 0.12,
+    "OutfallCategory": null,
+    "DataSource": "UNK",
+    "DrawingNumber": "NoDrawing",
+    "OwnedBy": "VC",
+    "Jurisdiction": "VC",
+    "LifecycleStatus": "ACT",
+    "Material": "RC",
+    "GroundSurfaceType": null,
+    "ImportanceFactor": "NR",
+    "CrossSectionShape": "CIR",
+    "HostPipeMaterial": null,
+    "InstallDate": -2208988800000,
+    "Custodian": "VC",
+    "CustodianNotes": "",
+    "CreatedBy": "GIS",
+    "ModifiedBy": "CartegraphIntegration",
+    "CreatedOn": 1608156946000,
+    "AssetID": "DGM002509",
+    "Length_2D": 2.48,
+    "SHAPE_Length": 2.4828185599702604,
+    "DiameterNumeric": "1500",
+    "Depth": null
+   }
+  },
+  {
+   "type": "Feature",
+   "id": 139,
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -123.36363040635068,
+      48.4195183756294
+     ],
+     [
+      -123.36451855791088,
+      48.41993452227654
+     ]
+    ]
+   },
+   "properties": {
+    "OBJECTID": 139,
+    "dgmSubtype": 2,
+    "InfrastructureID": "D2729X",
+    "WaterType": "STM",
+    "Comments": "",
+    "ModifiedOn": 1720133999000,
+    "AvgDepth": 2.1,
+    "UpstreamNodeID": "DMH002729",
+    "DownstreamNodeID": "DMH002726",
+    "Diameter": 600,
+    "UpstreamInvert": 3.892,
+    "DownstreamInvert": 3.841,
+    "VerticalMeasurement": null,
+    "HorizontalMeasurement": null,
+    "Slope": 0.06,
+    "OutfallCategory": null,
+    "DataSource": "UNK",
+    "DrawingNumber": "NoDrawing",
+    "OwnedBy": "VC",
+    "Jurisdiction": "VC",
+    "LifecycleStatus": "ACT",
+    "Material": "VITC",
+    "GroundSurfaceType": "GRS",
+    "ImportanceFactor": "NR",
+    "CrossSectionShape": "CIR",
+    "HostPipeMaterial": null,
+    "InstallDate": -2208988800000,
+    "Custodian": "VC",
+    "CustodianNotes": "",
+    "CreatedBy": "GIS",
+    "ModifiedBy": "CartegraphIntegration",
+    "CreatedOn": 1608156946000,
+    "AssetID": "DGM002729",
+    "Length_2D": 80.36,
+    "SHAPE_Length": 80.36139904373395,
+    "DiameterNumeric": "600",
+    "Depth": null
+   }
+  },
+  {
+   "type": "Feature",
+   "id": 140,
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -123.36237298860499,
+      48.420770390234004
+     ],
+     [
+      -123.3629216712117,
+      48.42099069133954
+     ]
+    ]
+   },
+   "properties": {
+    "OBJECTID": 140,
+    "dgmSubtype": 1,
+    "InfrastructureID": "D2517X",
+    "WaterType": "STM",
+    "Comments": "",
+    "ModifiedOn": 1720133999000,
+    "AvgDepth": 3.035,
+    "UpstreamNodeID": "DMH002517",
+    "DownstreamNodeID": "DMH002514",
+    "Diameter": 200,
+    "UpstreamInvert": 12.3,
+    "DownstreamInvert": 11.05,
+    "VerticalMeasurement": null,
+    "HorizontalMeasurement": null,
+    "Slope": 2.64,
+    "OutfallCategory": null,
+    "DataSource": "UNK",
+    "DrawingNumber": "NoDrawing",
+    "OwnedBy": "VC",
+    "Jurisdiction": "VC",
+    "LifecycleStatus": "ACT",
+    "Material": "VITC",
+    "GroundSurfaceType": null,
+    "ImportanceFactor": "NR",
+    "CrossSectionShape": "CIR",
+    "HostPipeMaterial": null,
+    "InstallDate": -2208988800000,
+    "Custodian": "VC",
+    "CustodianNotes": "",
+    "CreatedBy": "GIS",
+    "ModifiedBy": "CartegraphIntegration",
+    "CreatedOn": 1608156946000,
+    "AssetID": "DGM002517",
+    "Length_2D": 47.41,
+    "SHAPE_Length": 47.409317152988294,
+    "DiameterNumeric": "200",
+    "Depth": null
+   }
+  },
+  {
+   "type": "Feature",
+   "id": 141,
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -123.36271380293653,
+      48.42109152149527
+     ],
+     [
+      -123.3629216712117,
+      48.42099069133954
+     ]
+    ]
+   },
+   "properties": {
+    "OBJECTID": 141,
+    "dgmSubtype": 1,
+    "InfrastructureID": "D1589X",
+    "WaterType": "STM",
+    "Comments": "No elevation data found",
+    "ModifiedOn": 1720133999000,
+    "AvgDepth": 3.76,
+    "UpstreamNodeID": "DMH001589",
+    "DownstreamNodeID": "DMH002514",
+    "Diameter": 200,
+    "UpstreamInvert": 12.74,
+    "DownstreamInvert": 11.05,
+    "VerticalMeasurement": null,
+    "HorizontalMeasurement": null,
+    "Slope": 8.88,
+    "OutfallCategory": null,
+    "DataSource": "UNK",
+    "DrawingNumber": "NoDrawing",
+    "OwnedBy": "VC",
+    "Jurisdiction": "VC",
+    "LifecycleStatus": "ACT",
+    "Material": "VITC",
+    "GroundSurfaceType": null,
+    "ImportanceFactor": "NR",
+    "CrossSectionShape": "CIR",
+    "HostPipeMaterial": null,
+    "InstallDate": -2208988800000,
+    "Custodian": "VC",
+    "CustodianNotes": "",
+    "CreatedBy": "GIS",
+    "ModifiedBy": "CartegraphIntegration",
+    "CreatedOn": 1608156946000,
+    "AssetID": "DGM001589",
+    "Length_2D": 19.03,
+    "SHAPE_Length": 19.03012946083231,
+    "DiameterNumeric": "200",
+    "Depth": null
+   }
+  },
+  {
+   "type": "Feature",
+   "id": 142,
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -123.36261917217043,
+      48.41976097482234
+     ],
+     [
+      -123.36384162239267,
+      48.42054823022514
+     ]
+    ]
+   },
+   "properties": {
+    "OBJECTID": 142,
+    "dgmSubtype": 3,
+    "InfrastructureID": "D2521X",
+    "WaterType": "STM",
+    "Comments": "",
+    "ModifiedOn": 1720133999000,
+    "AvgDepth": 2.2555,
+    "UpstreamNodeID": "DMH002521",
+    "DownstreamNodeID": "DMH002513",
+    "Diameter": 1500,
+    "UpstreamInvert": 5.472,
+    "DownstreamInvert": 4.843,
+    "VerticalMeasurement": null,
+    "HorizontalMeasurement": null,
+    "Slope": 0.5,
+    "OutfallCategory": null,
+    "DataSource": "UNK",
+    "DrawingNumber": "NoDrawing",
+    "OwnedBy": "VC",
+    "Jurisdiction": "VC",
+    "LifecycleStatus": "ACT",
+    "Material": "RC",
+    "GroundSurfaceType": null,
+    "ImportanceFactor": "NR",
+    "CrossSectionShape": "CIR",
+    "HostPipeMaterial": null,
+    "InstallDate": 441763200000,
+    "Custodian": "VC",
+    "CustodianNotes": "",
+    "CreatedBy": "GIS",
+    "ModifiedBy": "CartegraphIntegration",
+    "CreatedOn": 1608156946000,
+    "AssetID": "DGM002521",
+    "Length_2D": 125.85,
+    "SHAPE_Length": 125.85004552858688,
+    "DiameterNumeric": "1500",
+    "Depth": null
+   }
+  },
+  {
+   "type": "Feature",
+   "id": 143,
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -123.36325031870423,
+      48.4183034521351
+     ],
+     [
+      -123.36230785402175,
+      48.417894053904845
+     ]
+    ]
+   },
+   "properties": {
+    "OBJECTID": 143,
+    "dgmSubtype": 1,
+    "InfrastructureID": "D1577X",
+    "WaterType": "STM",
+    "Comments": "",
+    "ModifiedOn": 1720133999000,
+    "AvgDepth": 1.71,
+    "UpstreamNodeID": "DMH001577",
+    "DownstreamNodeID": "DMH001573",
+    "Diameter": 200,
+    "UpstreamInvert": 9.698,
+    "DownstreamInvert": 7.928,
+    "VerticalMeasurement": null,
+    "HorizontalMeasurement": null,
+    "Slope": 2.13,
+    "OutfallCategory": null,
+    "DataSource": "UNK",
+    "DrawingNumber": "NoDrawing",
+    "OwnedBy": "VC",
+    "Jurisdiction": "VC",
+    "LifecycleStatus": "ACT",
+    "Material": "VITC",
+    "GroundSurfaceType": null,
+    "ImportanceFactor": "NR",
+    "CrossSectionShape": "CIR",
+    "HostPipeMaterial": null,
+    "InstallDate": -2208988800000,
+    "Custodian": "VC",
+    "CustodianNotes": "",
+    "CreatedBy": "GIS",
+    "ModifiedBy": "CartegraphIntegration",
+    "CreatedOn": 1608156946000,
+    "AssetID": "DGM001577",
+    "Length_2D": 83.27,
+    "SHAPE_Length": 83.26900917518144,
+    "DiameterNumeric": "200",
+    "Depth": null
+   }
+  },
+  {
+   "type": "Feature",
+   "id": 144,
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -123.36636761151226,
+      48.42105316455393
+     ],
+     [
+      -123.3672193261823,
+      48.4211337082275
+     ],
+     [
+      -123.36726367751965,
+      48.42113706004256
+     ],
+     [
+      -123.36774708201112,
+      48.42118363061621
+     ]
+    ]
+   },
+   "properties": {
+    "OBJECTID": 144,
+    "dgmSubtype": 2,
+    "InfrastructureID": "D2748X",
+    "WaterType": "STM",
+    "Comments": "",
+    "ModifiedOn": 1722375710000,
+    "AvgDepth": null,
+    "UpstreamNodeID": "DMH002748",
+    "DownstreamNodeID": "DFG000385",
+    "Diameter": 600,
+    "UpstreamInvert": -1.649,
+    "DownstreamInvert": -1.65,
+    "VerticalMeasurement": null,
+    "HorizontalMeasurement": null,
+    "Slope": 0,
+    "OutfallCategory": null,
+    "DataSource": "UNK",
+    "DrawingNumber": "NoDrawing",
+    "OwnedBy": "VC",
+    "Jurisdiction": "VC",
+    "LifecycleStatus": "ACT",
+    "Material": "RC",
+    "GroundSurfaceType": null,
+    "ImportanceFactor": "NR",
+    "CrossSectionShape": "CIR",
+    "HostPipeMaterial": null,
+    "InstallDate": -2208988800000,
+    "Custodian": "VC",
+    "CustodianNotes": "",
+    "CreatedBy": "GIS",
+    "ModifiedBy": "GIS",
+    "CreatedOn": 1608156946000,
+    "AssetID": "DGM002748",
+    "Length_2D": 63.65,
+    "SHAPE_Length": 103.08952446490356,
+    "DiameterNumeric": "600",
+    "Depth": null
+   }
+  },
+  {
+   "type": "Feature",
+   "id": 145,
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -123.36893529215914,
+      48.419976967973135
+     ],
+     [
+      -123.36894571052437,
+      48.420564427197235
+     ]
+    ]
+   },
+   "properties": {
+    "OBJECTID": 145,
+    "dgmSubtype": 1,
+    "InfrastructureID": "D2705X",
+    "WaterType": "STM",
+    "Comments": "",
+    "ModifiedOn": 1720133999000,
+    "AvgDepth": 1.629,
+    "UpstreamNodeID": "DMH002705",
+    "DownstreamNodeID": "DMH002704",
+    "Diameter": 300,
+    "UpstreamInvert": 6.383,
+    "DownstreamInvert": 3.69,
+    "VerticalMeasurement": null,
+    "HorizontalMeasurement": null,
+    "Slope": 4.12,
+    "OutfallCategory": null,
+    "DataSource": "UNK",
+    "DrawingNumber": "NoDrawing",
+    "OwnedBy": "VC",
+    "Jurisdiction": "VC",
+    "LifecycleStatus": "ACT",
+    "Material": "VITC",
+    "GroundSurfaceType": null,
+    "ImportanceFactor": "NR",
+    "CrossSectionShape": "CIR",
+    "HostPipeMaterial": null,
+    "InstallDate": -2208988800000,
+    "Custodian": "VC",
+    "CustodianNotes": "",
+    "CreatedBy": "GIS",
+    "ModifiedBy": "CartegraphIntegration",
+    "CreatedOn": 1608156946000,
+    "AssetID": "DGM002705",
+    "Length_2D": 65.3,
+    "SHAPE_Length": 65.30359418768522,
+    "DiameterNumeric": "300",
+    "Depth": null
+   }
+  },
+  {
+   "type": "Feature",
+   "id": 146,
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -123.36889108952022,
+      48.419395718458794
+     ],
+     [
+      -123.36893529215914,
+      48.419976967973135
+     ]
+    ]
+   },
+   "properties": {
+    "OBJECTID": 146,
+    "dgmSubtype": 1,
+    "InfrastructureID": "D2706X",
+    "WaterType": "STM",
+    "Comments": "",
+    "ModifiedOn": 1720133999000,
+    "AvgDepth": null,
+    "UpstreamNodeID": "DMH002706",
+    "DownstreamNodeID": "DMH002705",
+    "Diameter": 200,
+    "UpstreamInvert": 7.556,
+    "DownstreamInvert": 6.383,
+    "VerticalMeasurement": null,
+    "HorizontalMeasurement": null,
+    "Slope": 1.81,
+    "OutfallCategory": null,
+    "DataSource": "UNK",
+    "DrawingNumber": "NoDrawing",
+    "OwnedBy": "VC",
+    "Jurisdiction": "VC",
+    "LifecycleStatus": "ACT",
+    "Material": "VITC",
+    "GroundSurfaceType": null,
+    "ImportanceFactor": "NR",
+    "CrossSectionShape": "CIR",
+    "HostPipeMaterial": null,
+    "InstallDate": -2208988800000,
+    "Custodian": "VC",
+    "CustodianNotes": "",
+    "CreatedBy": "GIS",
+    "ModifiedBy": "CartegraphIntegration",
+    "CreatedOn": 1608156946000,
+    "AssetID": "DGM002706",
+    "Length_2D": 64.69,
+    "SHAPE_Length": 64.69152172390159,
+    "DiameterNumeric": "200",
+    "Depth": null
+   }
+  },
+  {
+   "type": "Feature",
+   "id": 149,
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -123.37532225704236,
+      48.42213309807685
+     ],
+     [
+      -123.37428453351045,
+      48.42162000791619
+     ]
+    ]
+   },
+   "properties": {
+    "OBJECTID": 149,
+    "dgmSubtype": 1,
+    "InfrastructureID": "D3498X",
+    "WaterType": "STM",
+    "Comments": "",
+    "ModifiedOn": 1725466204000,
+    "AvgDepth": 1.31,
+    "UpstreamNodeID": "DMH003498",
+    "DownstreamNodeID": "DMH003499",
+    "Diameter": 200,
+    "UpstreamInvert": 5.074,
+    "DownstreamInvert": 4.071,
+    "VerticalMeasurement": null,
+    "HorizontalMeasurement": null,
+    "Slope": 1.05,
+    "OutfallCategory": null,
+    "DataSource": "UNK",
+    "DrawingNumber": "NoDrawing",
+    "OwnedBy": "VC",
+    "Jurisdiction": "VC",
+    "LifecycleStatus": "ACT",
+    "Material": "VITC",
+    "GroundSurfaceType": "ASP",
+    "ImportanceFactor": "NR",
+    "CrossSectionShape": "CIR",
+    "HostPipeMaterial": null,
+    "InstallDate": -2208988800000,
+    "Custodian": "VC",
+    "CustodianNotes": "",
+    "CreatedBy": "GIS",
+    "ModifiedBy": "AGOUDINE",
+    "CreatedOn": 1608156946000,
+    "AssetID": "DGM003498",
+    "Length_2D": 95.64,
+    "SHAPE_Length": 95.64216406346237,
+    "DiameterNumeric": "200",
+    "Depth": null
+   }
+  },
+  {
+   "type": "Feature",
+   "id": 150,
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -123.37248635264424,
+      48.421137600056454
+     ],
+     [
+      -123.37331117445584,
+      48.42134343743121
+     ]
+    ]
+   },
+   "properties": {
+    "OBJECTID": 150,
+    "dgmSubtype": 1,
+    "InfrastructureID": "D3503X",
+    "WaterType": "STM",
+    "Comments": "",
+    "ModifiedOn": 1720133999000,
+    "AvgDepth": 1.115,
+    "UpstreamNodeID": "DMH003503",
+    "DownstreamNodeID": "DMH003502",
+    "Diameter": 200,
+    "UpstreamInvert": 4.751,
+    "DownstreamInvert": 4.473,
+    "VerticalMeasurement": null,
+    "HorizontalMeasurement": null,
+    "Slope": 0.43,
+    "OutfallCategory": null,
+    "DataSource": "SUR",
+    "DrawingNumber": "NoDrawing",
+    "OwnedBy": "VC",
+    "Jurisdiction": "VC",
+    "LifecycleStatus": "ACT",
+    "Material": "VITC",
+    "GroundSurfaceType": "ASP",
+    "ImportanceFactor": "NR",
+    "CrossSectionShape": "CIR",
+    "HostPipeMaterial": null,
+    "InstallDate": -2208988800000,
+    "Custodian": "VC",
+    "CustodianNotes": "",
+    "CreatedBy": "GIS",
+    "ModifiedBy": "CartegraphIntegration",
+    "CreatedOn": 1608156946000,
+    "AssetID": "DGM003503",
+    "Length_2D": 65.17,
+    "SHAPE_Length": 65.17409482372793,
+    "DiameterNumeric": "200",
+    "Depth": null
+   }
+  },
+  {
+   "type": "Feature",
+   "id": 151,
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -123.37410477654937,
+      48.421543743951695
+     ],
+     [
+      -123.37428453351045,
+      48.42162000791619
+     ]
+    ]
+   },
+   "properties": {
+    "OBJECTID": 151,
+    "dgmSubtype": 1,
+    "InfrastructureID": "D3501X",
+    "WaterType": "STM",
+    "Comments": "",
+    "ModifiedOn": 1720133999000,
+    "AvgDepth": 1.31,
+    "UpstreamNodeID": "DMH003501",
+    "DownstreamNodeID": "DMH003499",
+    "Diameter": 200,
+    "UpstreamInvert": 4.238,
+    "DownstreamInvert": 4.031,
+    "VerticalMeasurement": null,
+    "HorizontalMeasurement": null,
+    "Slope": 1.32,
+    "OutfallCategory": null,
+    "DataSource": "SUR",
+    "DrawingNumber": "NoDrawing",
+    "OwnedBy": "VC",
+    "Jurisdiction": "VC",
+    "LifecycleStatus": "ACT",
+    "Material": "VITC",
+    "GroundSurfaceType": "ASP",
+    "ImportanceFactor": "NR",
+    "CrossSectionShape": "CIR",
+    "HostPipeMaterial": null,
+    "InstallDate": -2208988800000,
+    "Custodian": "VC",
+    "CustodianNotes": "",
+    "CreatedBy": "GIS",
+    "ModifiedBy": "CartegraphIntegration",
+    "CreatedOn": 1608156946000,
+    "AssetID": "DGM003501",
+    "Length_2D": 15.74,
+    "SHAPE_Length": 15.7715036696062,
+    "DiameterNumeric": "200",
+    "Depth": null
+   }
+  },
+  {
+   "type": "Feature",
+   "id": 167,
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -123.3629216712117,
+      48.42099069133954
+     ],
+     [
+      -123.36378817882378,
+      48.4205739313979
+     ]
+    ]
+   },
+   "properties": {
+    "OBJECTID": 167,
+    "dgmSubtype": 1,
+    "InfrastructureID": "D2514X",
+    "WaterType": "STM",
+    "Comments": "",
+    "ModifiedOn": 1781634926000,
+    "AvgDepth": null,
+    "UpstreamNodeID": "DMH002514",
+    "DownstreamNodeID": "DFG000513",
+    "Diameter": 250,
+    "UpstreamInvert": 11.02,
+    "DownstreamInvert": 6.75,
+    "VerticalMeasurement": null,
+    "HorizontalMeasurement": null,
+    "Slope": 5.4,
+    "OutfallCategory": null,
+    "DataSource": "UNK",
+    "DrawingNumber": "NoDrawing",
+    "OwnedBy": "VC",
+    "Jurisdiction": "VC",
+    "LifecycleStatus": "ACT",
+    "Material": "PE",
+    "GroundSurfaceType": null,
+    "ImportanceFactor": "NR",
+    "CrossSectionShape": "CIR",
+    "HostPipeMaterial": "VITC",
+    "InstallDate": 315532800000,
+    "Custodian": "VC",
+    "CustodianNotes": "",
+    "CreatedBy": "GIS",
+    "ModifiedBy": "AGOUDINE",
+    "CreatedOn": 1608156946000,
+    "AssetID": "DGM002514",
+    "Length_2D": 79.1,
+    "SHAPE_Length": 79.09608827335813,
+    "DiameterNumeric": "250",
+    "Depth": null
+   }
+  },
+  {
+   "type": "Feature",
+   "id": 168,
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -123.36392459014681,
+      48.42051100194502
+     ],
+     [
+      -123.36451855791088,
+      48.41993452227654
+     ]
+    ]
+   },
+   "properties": {
+    "OBJECTID": 168,
+    "dgmSubtype": 1,
+    "InfrastructureID": "D2727X",
+    "WaterType": "STM",
+    "Comments": "",
+    "ModifiedOn": 1720133999000,
+    "AvgDepth": 3.48,
+    "UpstreamNodeID": "DMH002727",
+    "DownstreamNodeID": "DMH002726",
+    "Diameter": 200,
+    "UpstreamInvert": 4.077,
+    "DownstreamInvert": 3.821,
+    "VerticalMeasurement": null,
+    "HorizontalMeasurement": null,
+    "Slope": 0.33,
+    "OutfallCategory": null,
+    "DataSource": "UNK",
+    "DrawingNumber": "NoDrawing",
+    "OwnedBy": "VC",
+    "Jurisdiction": "VC",
+    "LifecycleStatus": "ACT",
+    "Material": "VITC",
+    "GroundSurfaceType": null,
+    "ImportanceFactor": "NR",
+    "CrossSectionShape": "CIR",
+    "HostPipeMaterial": null,
+    "InstallDate": -2208988800000,
+    "Custodian": "VC",
+    "CustodianNotes": "",
+    "CreatedBy": "GIS",
+    "ModifiedBy": "CartegraphIntegration",
+    "CreatedOn": 1608156946000,
+    "AssetID": "DGM002727",
+    "Length_2D": 77.7,
+    "SHAPE_Length": 77.70056974116162,
+    "DiameterNumeric": "200",
+    "Depth": null
+   }
+  },
+  {
+   "type": "Feature",
+   "id": 169,
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -123.36526416719633,
+      48.41917798798756
+     ],
+     [
+      -123.36451855791088,
+      48.41993452227654
+     ]
+    ]
+   },
+   "properties": {
+    "OBJECTID": 169,
+    "dgmSubtype": 1,
+    "InfrastructureID": "D2728X",
+    "WaterType": "STM",
+    "Comments": "",
+    "ModifiedOn": 1720133999000,
+    "AvgDepth": 1.82,
+    "UpstreamNodeID": "DMH002728",
+    "DownstreamNodeID": "DMH002726",
+    "Diameter": 200,
+    "UpstreamInvert": 10.869,
+    "DownstreamInvert": 4.141,
+    "VerticalMeasurement": null,
+    "HorizontalMeasurement": null,
+    "Slope": 6.69,
+    "OutfallCategory": null,
+    "DataSource": "UNK",
+    "DrawingNumber": "NoDrawing",
+    "OwnedBy": "VC",
+    "Jurisdiction": "VC",
+    "LifecycleStatus": "ACT",
+    "Material": "VITC",
+    "GroundSurfaceType": null,
+    "ImportanceFactor": "NR",
+    "CrossSectionShape": "CIR",
+    "HostPipeMaterial": null,
+    "InstallDate": -2208988800000,
+    "Custodian": "VC",
+    "CustodianNotes": "",
+    "CreatedBy": "GIS",
+    "ModifiedBy": "CartegraphIntegration",
+    "CreatedOn": 1608156946000,
+    "AssetID": "DGM002728",
+    "Length_2D": 100.57,
+    "SHAPE_Length": 100.57320871704741,
+    "DiameterNumeric": "200",
+    "Depth": null
+   }
+  },
+  {
+   "type": "Feature",
+   "id": 170,
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -123.36550413710151,
+      48.41846653269463
+     ],
+     [
+      -123.36568863105678,
+      48.41851311364435
+     ]
+    ]
+   },
+   "properties": {
+    "OBJECTID": 170,
+    "dgmSubtype": 1,
+    "InfrastructureID": "D3587X",
+    "WaterType": "STM",
+    "Comments": "",
+    "ModifiedOn": 1720133999000,
+    "AvgDepth": 1.21,
+    "UpstreamNodeID": "DMH003587",
+    "DownstreamNodeID": "DMH003590",
+    "Diameter": 150,
+    "UpstreamInvert": 13.863,
+    "DownstreamInvert": 13.255,
+    "VerticalMeasurement": null,
+    "HorizontalMeasurement": null,
+    "Slope": 4.16,
+    "OutfallCategory": null,
+    "DataSource": "UNK",
+    "DrawingNumber": "NoDrawing",
+    "OwnedBy": "VC",
+    "Jurisdiction": "VC",
+    "LifecycleStatus": "ACT",
+    "Material": "VITC",
+    "GroundSurfaceType": null,
+    "ImportanceFactor": "NR",
+    "CrossSectionShape": "CIR",
+    "HostPipeMaterial": null,
+    "InstallDate": -2208988800000,
+    "Custodian": "VC",
+    "CustodianNotes": "",
+    "CreatedBy": "GIS",
+    "ModifiedBy": "CartegraphIntegration",
+    "CreatedOn": 1608156946000,
+    "AssetID": "DGM003587",
+    "Length_2D": 14.6,
+    "SHAPE_Length": 14.599822869152144,
+    "DiameterNumeric": "150",
+    "Depth": null
+   }
+  },
+  {
+   "type": "Feature",
+   "id": 171,
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -123.36568863105678,
+      48.41851311364435
+     ],
+     [
+      -123.36730687583588,
+      48.41840471240647
+     ]
+    ]
+   },
+   "properties": {
+    "OBJECTID": 171,
+    "dgmSubtype": 1,
+    "InfrastructureID": "D3590X",
+    "WaterType": "STM",
+    "Comments": "",
+    "ModifiedOn": 1754374073000,
+    "AvgDepth": 1.6675,
+    "UpstreamNodeID": "DMH003590",
+    "DownstreamNodeID": "DMH003591",
+    "Diameter": 200,
+    "UpstreamInvert": 13.095,
+    "DownstreamInvert": 10.648,
+    "VerticalMeasurement": null,
+    "HorizontalMeasurement": null,
+    "Slope": 2.02,
+    "OutfallCategory": null,
+    "DataSource": "SUR",
+    "DrawingNumber": "NoDrawing",
+    "OwnedBy": "VC",
+    "Jurisdiction": "VC",
+    "LifecycleStatus": "ACT",
+    "Material": "VITC",
+    "GroundSurfaceType": null,
+    "ImportanceFactor": "NR",
+    "CrossSectionShape": "CIR",
+    "HostPipeMaterial": null,
+    "InstallDate": -1388534400000,
+    "Custodian": "VC",
+    "CustodianNotes": "",
+    "CreatedBy": "GIS",
+    "ModifiedBy": "CartegraphIntegration",
+    "CreatedOn": 1608156946000,
+    "AssetID": "DGM003590",
+    "Length_2D": 120.34,
+    "SHAPE_Length": 120.34017139155964,
+    "DiameterNumeric": "200",
+    "Depth": null
+   }
+  },
+  {
+   "type": "Feature",
+   "id": 172,
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -123.36925984308176,
+      48.41819427524866
+     ],
+     [
+      -123.37046728226967,
+      48.41811107612358
+     ]
+    ]
+   },
+   "properties": {
+    "OBJECTID": 172,
+    "dgmSubtype": 1,
+    "InfrastructureID": "D3594X",
+    "WaterType": "STM",
+    "Comments": "",
+    "ModifiedOn": 1720133999000,
+    "AvgDepth": 1.225,
+    "UpstreamNodeID": "DMH003594",
+    "DownstreamNodeID": "DMH003596",
+    "Diameter": 200,
+    "UpstreamInvert": 9.288,
+    "DownstreamInvert": 7.7,
+    "VerticalMeasurement": null,
+    "HorizontalMeasurement": null,
+    "Slope": 1.77,
+    "OutfallCategory": null,
+    "DataSource": "SUR",
+    "DrawingNumber": "NoDrawing",
+    "OwnedBy": "VC",
+    "Jurisdiction": "VC",
+    "LifecycleStatus": "ABD",
+    "Material": "VITC",
+    "GroundSurfaceType": null,
+    "ImportanceFactor": "M",
+    "CrossSectionShape": "CIR",
+    "HostPipeMaterial": null,
+    "InstallDate": -1988150400000,
+    "Custodian": "VC",
+    "CustodianNotes": "",
+    "CreatedBy": "GIS",
+    "ModifiedBy": "CartegraphIntegration",
+    "CreatedOn": 1608156946000,
+    "AssetID": "DGM003594",
+    "Length_2D": 89.82,
+    "SHAPE_Length": 89.81746209919628,
+    "DiameterNumeric": "200",
+    "Depth": null
+   }
+  },
+  {
+   "type": "Feature",
+   "id": 173,
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -123.36548337045436,
+      48.418458565634744
+     ],
+     [
+      -123.36550413710151,
+      48.41846653269463
+     ]
+    ]
+   },
+   "properties": {
+    "OBJECTID": 173,
+    "dgmSubtype": 1,
+    "InfrastructureID": "D3586X",
+    "WaterType": "STM",
+    "Comments": "No elevation data found",
+    "ModifiedOn": 1720133999000,
+    "AvgDepth": null,
+    "UpstreamNodeID": "DFG000096",
+    "DownstreamNodeID": "DMH003587",
+    "Diameter": 150,
+    "UpstreamInvert": 14.1,
+    "DownstreamInvert": 13.923,
+    "VerticalMeasurement": null,
+    "HorizontalMeasurement": null,
+    "Slope": 0.75,
+    "OutfallCategory": null,
+    "DataSource": "UNK",
+    "DrawingNumber": "NoDrawing",
+    "OwnedBy": "VC",
+    "Jurisdiction": "VC",
+    "LifecycleStatus": "ACT",
+    "Material": "VITC",
+    "GroundSurfaceType": null,
+    "ImportanceFactor": "NR",
+    "CrossSectionShape": "CIR",
+    "HostPipeMaterial": null,
+    "InstallDate": -2208988800000,
+    "Custodian": "VC",
+    "CustodianNotes": "",
+    "CreatedBy": "GIS",
+    "ModifiedBy": "CartegraphIntegration",
+    "CreatedOn": 1608156946000,
+    "AssetID": "DGM003586",
+    "Length_2D": 1.77,
+    "SHAPE_Length": 1.7734750348289778,
+    "DiameterNumeric": "150",
+    "Depth": null
+   }
+  },
+  {
+   "type": "Feature",
+   "id": 174,
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -123.36538554179302,
+      48.4183490851027
+     ],
+     [
+      -123.36550413710151,
+      48.41846653269463
+     ]
+    ]
+   },
+   "properties": {
+    "OBJECTID": 174,
+    "dgmSubtype": 1,
+    "InfrastructureID": "D3585X",
+    "WaterType": "STM",
+    "Comments": "No elevation data found",
+    "ModifiedOn": 1720133999000,
+    "AvgDepth": null,
+    "UpstreamNodeID": "DFG000098",
+    "DownstreamNodeID": "DMH003587",
+    "Diameter": 150,
+    "UpstreamInvert": 14.3,
+    "DownstreamInvert": 13.913,
+    "VerticalMeasurement": null,
+    "HorizontalMeasurement": null,
+    "Slope": 2.46,
+    "OutfallCategory": null,
+    "DataSource": "UNK",
+    "DrawingNumber": "NoDrawing",
+    "OwnedBy": "VC",
+    "Jurisdiction": "VC",
+    "LifecycleStatus": "ACT",
+    "Material": "VITC",
+    "GroundSurfaceType": null,
+    "ImportanceFactor": "NR",
+    "CrossSectionShape": "CIR",
+    "HostPipeMaterial": null,
+    "InstallDate": -2208988800000,
+    "Custodian": "VC",
+    "CustodianNotes": "",
+    "CreatedBy": "GIS",
+    "ModifiedBy": "CartegraphIntegration",
+    "CreatedOn": 1608156946000,
+    "AssetID": "DGM003585",
+    "Length_2D": 15.73,
+    "SHAPE_Length": 15.729918318881744,
+    "DiameterNumeric": "150",
+    "Depth": null
+   }
+  },
+  {
+   "type": "Feature",
+   "id": 176,
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -123.37106118631324,
+      48.42076876770156
+     ],
+     [
+      -123.37165537113194,
+      48.42092967056924
+     ]
+    ]
+   },
+   "properties": {
+    "OBJECTID": 176,
+    "dgmSubtype": 1,
+    "InfrastructureID": "D3505X",
+    "WaterType": "STM",
+    "Comments": "",
+    "ModifiedOn": 1720133999000,
+    "AvgDepth": 0.84,
+    "UpstreamNodeID": "DMH003505",
+    "DownstreamNodeID": "DMH003504",
+    "Diameter": 200,
+    "UpstreamInvert": 5.397,
+    "DownstreamInvert": 5.368,
+    "VerticalMeasurement": null,
+    "HorizontalMeasurement": null,
+    "Slope": 0.06,
+    "OutfallCategory": null,
+    "DataSource": "UNK",
+    "DrawingNumber": "NoDrawing",
+    "OwnedBy": "VC",
+    "Jurisdiction": "VC",
+    "LifecycleStatus": "ACT",
+    "Material": "VITC",
+    "GroundSurfaceType": "ASP",
+    "ImportanceFactor": "NR",
+    "CrossSectionShape": "CIR",
+    "HostPipeMaterial": null,
+    "InstallDate": -2177452800000,
+    "Custodian": "VC",
+    "CustodianNotes": "",
+    "CreatedBy": "GIS",
+    "ModifiedBy": "CartegraphIntegration",
+    "CreatedOn": 1608156946000,
+    "AssetID": "DGM003505",
+    "Length_2D": 47.46,
+    "SHAPE_Length": 47.461108800559025,
+    "DiameterNumeric": "200",
+    "Depth": null
+   }
+  },
+  {
+   "type": "Feature",
+   "id": 179,
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -123.37088784212696,
+      48.418178827476765
+     ],
+     [
+      -123.37223530532486,
+      48.41809133575633
+     ]
+    ]
+   },
+   "properties": {
+    "OBJECTID": 179,
+    "dgmSubtype": 1,
+    "InfrastructureID": "D3597X",
+    "WaterType": "STM",
+    "Comments": "",
+    "ModifiedOn": 1720133999000,
+    "AvgDepth": 1.43,
+    "UpstreamNodeID": "DMH003597",
+    "DownstreamNodeID": "DMH003599",
+    "Diameter": 150,
+    "UpstreamInvert": 7.103,
+    "DownstreamInvert": 6.146,
+    "VerticalMeasurement": null,
+    "HorizontalMeasurement": null,
+    "Slope": 0.96,
+    "OutfallCategory": null,
+    "DataSource": "UNK",
+    "DrawingNumber": "NoDrawing",
+    "OwnedBy": "VC",
+    "Jurisdiction": "VC",
+    "LifecycleStatus": "ACT",
+    "Material": "VITC",
+    "GroundSurfaceType": null,
+    "ImportanceFactor": "NR",
+    "CrossSectionShape": "CIR",
+    "HostPipeMaterial": null,
+    "InstallDate": -2208988800000,
+    "Custodian": "VC",
+    "CustodianNotes": "",
+    "CreatedBy": "GIS",
+    "ModifiedBy": "CartegraphIntegration",
+    "CreatedOn": 1608156946000,
+    "AssetID": "DGM003597",
+    "Length_2D": 100.17,
+    "SHAPE_Length": 100.17388699081297,
+    "DiameterNumeric": "150",
+    "Depth": null
+   }
+  },
+  {
+   "type": "Feature",
+   "id": 180,
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -123.37046728226967,
+      48.41811107612358
+     ],
+     [
+      -123.37194294515648,
+      48.41801184565491
+     ]
+    ]
+   },
+   "properties": {
+    "OBJECTID": 180,
+    "dgmSubtype": 1,
+    "InfrastructureID": "D3596X",
+    "WaterType": "STM",
+    "Comments": "",
+    "ModifiedOn": 1720133999000,
+    "AvgDepth": 1.57,
+    "UpstreamNodeID": "DMH003596",
+    "DownstreamNodeID": "DMH003598",
+    "Diameter": 200,
+    "UpstreamInvert": 7.7,
+    "DownstreamInvert": 5.823,
+    "VerticalMeasurement": null,
+    "HorizontalMeasurement": null,
+    "Slope": 1.71,
+    "OutfallCategory": null,
+    "DataSource": "SUR",
+    "DrawingNumber": "NoDrawing",
+    "OwnedBy": "VC",
+    "Jurisdiction": "VC",
+    "LifecycleStatus": "ABD",
+    "Material": "VITC",
+    "GroundSurfaceType": null,
+    "ImportanceFactor": "M",
+    "CrossSectionShape": "CIR",
+    "HostPipeMaterial": null,
+    "InstallDate": -2208988800000,
+    "Custodian": "VC",
+    "CustodianNotes": "",
+    "CreatedBy": "GIS",
+    "ModifiedBy": "CartegraphIntegration",
+    "CreatedOn": 1608156946000,
+    "AssetID": "DGM003596",
+    "Length_2D": 109.74,
+    "SHAPE_Length": 109.74223561653478,
+    "DiameterNumeric": "200",
+    "Depth": null
+   }
+  },
+  {
+   "type": "Feature",
+   "id": 183,
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -123.37456431950145,
+      48.417642712205044
+     ],
+     [
+      -123.375906223865,
+      48.41828869265502
+     ]
+    ]
+   },
+   "properties": {
+    "OBJECTID": 183,
+    "dgmSubtype": 1,
+    "InfrastructureID": "D1497X",
+    "WaterType": "STM",
+    "Comments": "",
+    "ModifiedOn": 1781634926000,
+    "AvgDepth": 2.45,
+    "UpstreamNodeID": "DMH001497",
+    "DownstreamNodeID": "DMH001496",
+    "Diameter": 375,
+    "UpstreamInvert": 6.253,
+    "DownstreamInvert": 5.626,
+    "VerticalMeasurement": null,
+    "HorizontalMeasurement": null,
+    "Slope": 0.51,
+    "OutfallCategory": null,
+    "DataSource": "UNK",
+    "DrawingNumber": "NoDrawing",
+    "OwnedBy": "VC",
+    "Jurisdiction": "VC",
+    "LifecycleStatus": "ACT",
+    "Material": "PE",
+    "GroundSurfaceType": null,
+    "ImportanceFactor": "NR",
+    "CrossSectionShape": "CIR",
+    "HostPipeMaterial": "VITC",
+    "InstallDate": 315532800000,
+    "Custodian": "VC",
+    "CustodianNotes": "",
+    "CreatedBy": "GIS",
+    "ModifiedBy": "AGOUDINE",
+    "CreatedOn": 1608156946000,
+    "AssetID": "DGM001497",
+    "Length_2D": 122.53,
+    "SHAPE_Length": 122.53269851159953,
+    "DiameterNumeric": "375",
+    "Depth": null
+   }
+  },
+  {
+   "type": "Feature",
+   "id": 207,
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -123.37312209792151,
+      48.41694130323519
+     ],
+     [
+      -123.37456431950145,
+      48.417642712205044
+     ]
+    ]
+   },
+   "properties": {
+    "OBJECTID": 207,
+    "dgmSubtype": 1,
+    "InfrastructureID": "D3495X",
+    "WaterType": "STM",
+    "Comments": "",
+    "ModifiedOn": 1781634926000,
+    "AvgDepth": 2.265,
+    "UpstreamNodeID": "DMH003495",
+    "DownstreamNodeID": "DMH001497",
+    "Diameter": 375,
+    "UpstreamInvert": 7.038,
+    "DownstreamInvert": 6.273,
+    "VerticalMeasurement": null,
+    "HorizontalMeasurement": null,
+    "Slope": 0.58,
+    "OutfallCategory": null,
+    "DataSource": "UNK",
+    "DrawingNumber": "NoDrawing",
+    "OwnedBy": "VC",
+    "Jurisdiction": "VC",
+    "LifecycleStatus": "ACT",
+    "Material": "PE",
+    "GroundSurfaceType": null,
+    "ImportanceFactor": "NR",
+    "CrossSectionShape": "CIR",
+    "HostPipeMaterial": "VITC",
+    "InstallDate": 315532800000,
+    "Custodian": "VC",
+    "CustodianNotes": "",
+    "CreatedBy": "GIS",
+    "ModifiedBy": "AGOUDINE",
+    "CreatedOn": 1608156946000,
+    "AssetID": "DGM003495",
+    "Length_2D": 132.16,
+    "SHAPE_Length": 132.16046855544187,
+    "DiameterNumeric": "375",
+    "Depth": null
+   }
+  },
+  {
+   "type": "Feature",
+   "id": 208,
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -123.37221707156917,
+      48.41572130555567
+     ],
+     [
+      -123.37157164383107,
+      48.416908633718194
+     ]
+    ]
+   },
+   "properties": {
+    "OBJECTID": 208,
+    "dgmSubtype": 1,
+    "InfrastructureID": "D1550X",
+    "WaterType": "STM",
+    "Comments": "",
+    "ModifiedOn": 1750197464000,
+    "AvgDepth": 1.6,
+    "UpstreamNodeID": "DMH001550",
+    "DownstreamNodeID": "DMH001506",
+    "Diameter": 200,
+    "UpstreamInvert": 8.603,
+    "DownstreamInvert": 5.778,
+    "VerticalMeasurement": null,
+    "HorizontalMeasurement": null,
+    "Slope": 2.01,
+    "OutfallCategory": null,
+    "DataSource": "UNK",
+    "DrawingNumber": "UG-197",
+    "OwnedBy": "VC",
+    "Jurisdiction": "VC",
+    "LifecycleStatus": "ACT",
+    "Material": "VITC",
+    "GroundSurfaceType": "ASP",
+    "ImportanceFactor": "NR",
+    "CrossSectionShape": "CIR",
+    "HostPipeMaterial": null,
+    "InstallDate": -1514764800000,
+    "Custodian": "VC",
+    "CustodianNotes": "",
+    "CreatedBy": "GIS",
+    "ModifiedBy": "AGOUDINE",
+    "CreatedOn": 1608156946000,
+    "AssetID": "DGM001550",
+    "Length_2D": 140.35,
+    "SHAPE_Length": 140.35258437112958,
+    "DiameterNumeric": "200",
+    "Depth": null
+   }
+  },
+  {
+   "type": "Feature",
+   "id": 226,
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -123.37331117445584,
+      48.42134343743121
+     ],
+     [
+      -123.37410477654937,
+      48.421543743951695
+     ]
+    ]
+   },
+   "properties": {
+    "OBJECTID": 226,
+    "dgmSubtype": 1,
+    "InfrastructureID": "D3502X",
+    "WaterType": "STM",
+    "Comments": "",
+    "ModifiedOn": 1720134006000,
+    "AvgDepth": 1.14,
+    "UpstreamNodeID": "DMH003502",
+    "DownstreamNodeID": "DMH003501",
+    "Diameter": 150,
+    "UpstreamInvert": 4.463,
+    "DownstreamInvert": 4.298,
+    "VerticalMeasurement": null,
+    "HorizontalMeasurement": null,
+    "Slope": 0.26,
+    "OutfallCategory": null,
+    "DataSource": "SUR",
+    "DrawingNumber": "NoDrawing",
+    "OwnedBy": "VC",
+    "Jurisdiction": "VC",
+    "LifecycleStatus": "ACT",
+    "Material": "VITC",
+    "GroundSurfaceType": "ASP",
+    "ImportanceFactor": "NR",
+    "CrossSectionShape": "CIR",
+    "HostPipeMaterial": null,
+    "InstallDate": -2208988800000,
+    "Custodian": "VC",
+    "CustodianNotes": "",
+    "CreatedBy": "GIS",
+    "ModifiedBy": "CartegraphIntegration",
+    "CreatedOn": 1608156946000,
+    "AssetID": "DGM003502",
+    "Length_2D": 62.83,
+    "SHAPE_Length": 62.79565825134851,
+    "DiameterNumeric": "150",
+    "Depth": null
+   }
+  },
+  {
+   "type": "Feature",
+   "id": 355,
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -123.37399428962372,
+      48.41980472206148
+     ],
+     [
+      -123.37285439574636,
+      48.41951235105527
+     ]
+    ]
+   },
+   "properties": {
+    "OBJECTID": 355,
+    "dgmSubtype": 1,
+    "InfrastructureID": "D1487X",
+    "WaterType": "STM",
+    "Comments": "",
+    "ModifiedOn": 1720134013000,
+    "AvgDepth": 1.05,
+    "UpstreamNodeID": "DMH001487",
+    "DownstreamNodeID": "DMH005374",
+    "Diameter": 200,
+    "UpstreamInvert": 5.627,
+    "DownstreamInvert": 5.425,
+    "VerticalMeasurement": null,
+    "HorizontalMeasurement": null,
+    "Slope": 0.41,
+    "OutfallCategory": null,
+    "DataSource": "SUR",
+    "DrawingNumber": "NoDrawing",
+    "OwnedBy": "VC",
+    "Jurisdiction": "VC",
+    "LifecycleStatus": "ACT",
+    "Material": "PE",
+    "GroundSurfaceType": null,
+    "ImportanceFactor": "M",
+    "CrossSectionShape": "CIR",
+    "HostPipeMaterial": "VITC",
+    "InstallDate": 1199145600000,
+    "Custodian": "VC",
+    "CustodianNotes": "",
+    "CreatedBy": "GIS",
+    "ModifiedBy": "CartegraphIntegration",
+    "CreatedOn": 1608156946000,
+    "AssetID": "DGM001487",
+    "Length_2D": 90.38,
+    "SHAPE_Length": 90.38452174310763,
+    "DiameterNumeric": "200",
+    "Depth": null
+   }
+  },
+  {
+   "type": "Feature",
+   "id": 356,
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -123.37285439574636,
+      48.41951235105527
+     ],
+     [
+      -123.37176145877653,
+      48.41924282303456
+     ]
+    ]
+   },
+   "properties": {
+    "OBJECTID": 356,
+    "dgmSubtype": 1,
+    "InfrastructureID": "D5374X",
+    "WaterType": "STM",
+    "Comments": "",
+    "ModifiedOn": 1720134013000,
+    "AvgDepth": 1.715,
+    "UpstreamNodeID": "DMH005374",
+    "DownstreamNodeID": "DMH001488",
+    "Diameter": 200,
+    "UpstreamInvert": 5.427,
+    "DownstreamInvert": 5.254,
+    "VerticalMeasurement": null,
+    "HorizontalMeasurement": null,
+    "Slope": 0.43,
+    "OutfallCategory": null,
+    "DataSource": "SUR",
+    "DrawingNumber": "UG-156",
+    "OwnedBy": "VC",
+    "Jurisdiction": "VC",
+    "LifecycleStatus": "ACT",
+    "Material": "PE",
+    "GroundSurfaceType": null,
+    "ImportanceFactor": "M",
+    "CrossSectionShape": "CIR",
+    "HostPipeMaterial": "VITC",
+    "InstallDate": 1199145600000,
+    "Custodian": "VC",
+    "CustodianNotes": "",
+    "CreatedBy": "GIS",
+    "ModifiedBy": "CartegraphIntegration",
+    "CreatedOn": 1608156946000,
+    "AssetID": "DGM005374",
+    "Length_2D": 86.24,
+    "SHAPE_Length": 86.23729767843737,
+    "DiameterNumeric": "200",
+    "Depth": null
+   }
+  },
+  {
+   "type": "Feature",
+   "id": 358,
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -123.37176145877653,
+      48.41924282303456
+     ],
+     [
+      -123.37134187933627,
+      48.42000990208589
+     ]
+    ]
+   },
+   "properties": {
+    "OBJECTID": 358,
+    "dgmSubtype": 1,
+    "InfrastructureID": "D1488X",
+    "WaterType": "STM",
+    "Comments": "",
+    "ModifiedOn": 1720134013000,
+    "AvgDepth": 2.805,
+    "UpstreamNodeID": "DMH001488",
+    "DownstreamNodeID": "DMH003507",
+    "Diameter": 250,
+    "UpstreamInvert": 5.144,
+    "DownstreamInvert": 4.885,
+    "VerticalMeasurement": null,
+    "HorizontalMeasurement": null,
+    "Slope": 0.29,
+    "OutfallCategory": null,
+    "DataSource": "UNK",
+    "DrawingNumber": "UG-026",
+    "OwnedBy": "VC",
+    "Jurisdiction": "VC",
+    "LifecycleStatus": "ACT",
+    "Material": "VITC",
+    "GroundSurfaceType": "ASP",
+    "ImportanceFactor": "NR",
+    "CrossSectionShape": "CIR",
+    "HostPipeMaterial": null,
+    "InstallDate": -2145916800000,
+    "Custodian": "VC",
+    "CustodianNotes": "",
+    "CreatedBy": "GIS",
+    "ModifiedBy": "CartegraphIntegration",
+    "CreatedOn": 1608156946000,
+    "AssetID": "DGM001488",
+    "Length_2D": 90.74,
+    "SHAPE_Length": 90.7404010879475,
+    "DiameterNumeric": "250",
+    "Depth": null
+   }
+  },
+  {
+   "type": "Feature",
+   "id": 359,
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -123.37223530532486,
+      48.41809133575633
+     ],
+     [
+      -123.3724471107639,
+      48.41803881046224
+     ]
+    ]
+   },
+   "properties": {
+    "OBJECTID": 359,
+    "dgmSubtype": 1,
+    "InfrastructureID": "D3599X",
+    "WaterType": "STM",
+    "Comments": "",
+    "ModifiedOn": 1720134013000,
+    "AvgDepth": 2.25,
+    "UpstreamNodeID": "DMH003599",
+    "DownstreamNodeID": "DMH003493",
+    "Diameter": 200,
+    "UpstreamInvert": 6.146,
+    "DownstreamInvert": 4.476,
+    "VerticalMeasurement": null,
+    "HorizontalMeasurement": null,
+    "Slope": 9.99,
+    "OutfallCategory": null,
+    "DataSource": "UNK",
+    "DrawingNumber": "NoDrawing",
+    "OwnedBy": "VC",
+    "Jurisdiction": "VC",
+    "LifecycleStatus": "ACT",
+    "Material": "VITC",
+    "GroundSurfaceType": null,
+    "ImportanceFactor": "NR",
+    "CrossSectionShape": "CIR",
+    "HostPipeMaterial": null,
+    "InstallDate": -2208988800000,
+    "Custodian": "VC",
+    "CustodianNotes": "",
+    "CreatedBy": "GIS",
+    "ModifiedBy": "CartegraphIntegration",
+    "CreatedOn": 1608156946000,
+    "AssetID": "DGM003599",
+    "Length_2D": 16.72,
+    "SHAPE_Length": 16.724023105794114,
+    "DiameterNumeric": "200",
+    "Depth": null
+   }
+  },
+  {
+   "type": "Feature",
+   "id": 360,
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -123.37200209536256,
+      48.41879962105659
+     ],
+     [
+      -123.37176145877653,
+      48.41924282303456
+     ]
+    ]
+   },
+   "properties": {
+    "OBJECTID": 360,
+    "dgmSubtype": 1,
+    "InfrastructureID": "D1860X",
+    "WaterType": "STM",
+    "Comments": "",
+    "ModifiedOn": 1720134013000,
+    "AvgDepth": null,
+    "UpstreamNodeID": "DFG000507",
+    "DownstreamNodeID": "DMH001488",
+    "Diameter": 200,
+    "UpstreamInvert": 5.385,
+    "DownstreamInvert": 5.154,
+    "VerticalMeasurement": null,
+    "HorizontalMeasurement": null,
+    "Slope": 0.44,
+    "OutfallCategory": null,
+    "DataSource": "UNK",
+    "DrawingNumber": "UG-026",
+    "OwnedBy": "VC",
+    "Jurisdiction": "VC",
+    "LifecycleStatus": "ACT",
+    "Material": "VITC",
+    "GroundSurfaceType": null,
+    "ImportanceFactor": "NR",
+    "CrossSectionShape": "CIR",
+    "HostPipeMaterial": null,
+    "InstallDate": -2208988800000,
+    "Custodian": "VC",
+    "CustodianNotes": "",
+    "CreatedBy": "GIS",
+    "ModifiedBy": "CartegraphIntegration",
+    "CreatedOn": 1608156946000,
+    "AssetID": "DGM001860",
+    "Length_2D": 52.38,
+    "SHAPE_Length": 52.38284331740119,
+    "DiameterNumeric": "200",
+    "Depth": null
+   }
+  },
+  {
+   "type": "Feature",
+   "id": 361,
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -123.3721686489043,
+      48.41849285876888
+     ],
+     [
+      -123.37208467290955,
+      48.4186475291628
+     ]
+    ]
+   },
+   "properties": {
+    "OBJECTID": 361,
+    "dgmSubtype": 1,
+    "InfrastructureID": "D3512X",
+    "WaterType": "STM",
+    "Comments": "",
+    "ModifiedOn": 1720134013000,
+    "AvgDepth": null,
+    "UpstreamNodeID": "DFG000508",
+    "DownstreamNodeID": "DMH003510",
+    "Diameter": 200,
+    "UpstreamInvert": 5.468,
+    "DownstreamInvert": 5.376,
+    "VerticalMeasurement": null,
+    "HorizontalMeasurement": null,
+    "Slope": 0.5,
+    "OutfallCategory": null,
+    "DataSource": "UNK",
+    "DrawingNumber": "UG-026",
+    "OwnedBy": "VC",
+    "Jurisdiction": "VC",
+    "LifecycleStatus": "ACT",
+    "Material": "VITC",
+    "GroundSurfaceType": null,
+    "ImportanceFactor": "NR",
+    "CrossSectionShape": "CIR",
+    "HostPipeMaterial": null,
+    "InstallDate": -2208988800000,
+    "Custodian": "VC",
+    "CustodianNotes": "",
+    "CreatedBy": "GIS",
+    "ModifiedBy": "CartegraphIntegration",
+    "CreatedOn": 1608156946000,
+    "AssetID": "DGM003512",
+    "Length_2D": 18.28,
+    "SHAPE_Length": 18.28073285269758,
+    "DiameterNumeric": "200",
+    "Depth": null
+   }
+  },
+  {
+   "type": "Feature",
+   "id": 362,
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -123.37150550869171,
+      48.42005122587238
+     ],
+     [
+      -123.37134187933627,
+      48.42000990208589
+     ]
+    ]
+   },
+   "properties": {
+    "OBJECTID": 362,
+    "dgmSubtype": 1,
+    "InfrastructureID": "D3508X",
+    "WaterType": "STM",
+    "Comments": "",
+    "ModifiedOn": 1720134013000,
+    "AvgDepth": null,
+    "UpstreamNodeID": "DFG000506",
+    "DownstreamNodeID": "DMH003507",
+    "Diameter": 200,
+    "UpstreamInvert": 5.377,
+    "DownstreamInvert": 5.015,
+    "VerticalMeasurement": null,
+    "HorizontalMeasurement": null,
+    "Slope": 2.8,
+    "OutfallCategory": null,
+    "DataSource": "UNK",
+    "DrawingNumber": "NoDrawing",
+    "OwnedBy": "VC",
+    "Jurisdiction": "VC",
+    "LifecycleStatus": "ACT",
+    "Material": "VITC",
+    "GroundSurfaceType": null,
+    "ImportanceFactor": "NR",
+    "CrossSectionShape": "CIR",
+    "HostPipeMaterial": null,
+    "InstallDate": -2208988800000,
+    "Custodian": "VC",
+    "CustodianNotes": "",
+    "CreatedBy": "GIS",
+    "ModifiedBy": "CartegraphIntegration",
+    "CreatedOn": 1608156946000,
+    "AssetID": "DGM003508",
+    "Length_2D": 12.95,
+    "SHAPE_Length": 12.948799576969138,
+    "DiameterNumeric": "200",
+    "Depth": null
+   }
+  },
+  {
+   "type": "Feature",
+   "id": 363,
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -123.37484883999684,
+      48.42105378971768
+     ],
+     [
+      -123.37428453351045,
+      48.42162000791619
+     ]
+    ]
+   },
+   "properties": {
+    "OBJECTID": 363,
+    "dgmSubtype": 1,
+    "InfrastructureID": "D3557X",
+    "WaterType": "STM",
+    "Comments": "No elevation data found",
+    "ModifiedOn": 1720134013000,
+    "AvgDepth": null,
+    "UpstreamNodeID": "DFG000021",
+    "DownstreamNodeID": "DMH003499",
+    "Diameter": 300,
+    "UpstreamInvert": 4.359,
+    "DownstreamInvert": 3.981,
+    "VerticalMeasurement": null,
+    "HorizontalMeasurement": null,
+    "Slope": 0.5,
+    "OutfallCategory": null,
+    "DataSource": "UNK",
+    "DrawingNumber": "NoDrawing",
+    "OwnedBy": "VC",
+    "Jurisdiction": "VC",
+    "LifecycleStatus": "ACT",
+    "Material": "VITC",
+    "GroundSurfaceType": null,
+    "ImportanceFactor": "NR",
+    "CrossSectionShape": "CIR",
+    "HostPipeMaterial": null,
+    "InstallDate": -2208988800000,
+    "Custodian": "VC",
+    "CustodianNotes": "",
+    "CreatedBy": "GIS",
+    "ModifiedBy": "CartegraphIntegration",
+    "CreatedOn": 1608156946000,
+    "AssetID": "DGM003557",
+    "Length_2D": 75.53,
+    "SHAPE_Length": 75.52720872625746,
+    "DiameterNumeric": "300",
+    "Depth": null
+   }
+  },
+  {
+   "type": "Feature",
+   "id": 364,
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -123.37165537113194,
+      48.42092967056924
+     ],
+     [
+      -123.37248635264424,
+      48.421137600056454
+     ]
+    ]
+   },
+   "properties": {
+    "OBJECTID": 364,
+    "dgmSubtype": 1,
+    "InfrastructureID": "D3504X",
+    "WaterType": "STM",
+    "Comments": "Diameter changes to 200mm after DFG001800",
+    "ModifiedOn": 1725562748000,
+    "AvgDepth": 0.92,
+    "UpstreamNodeID": "DMH003504",
+    "DownstreamNodeID": "DMH003503",
+    "Diameter": 150,
+    "UpstreamInvert": 5.358,
+    "DownstreamInvert": 4.761,
+    "VerticalMeasurement": null,
+    "HorizontalMeasurement": null,
+    "Slope": 0.91,
+    "OutfallCategory": null,
+    "DataSource": "SUR",
+    "DrawingNumber": "NoDrawing",
+    "OwnedBy": "VC",
+    "Jurisdiction": "VC",
+    "LifecycleStatus": "ACT",
+    "Material": "VITC",
+    "GroundSurfaceType": "ASP",
+    "ImportanceFactor": "NR",
+    "CrossSectionShape": "CIR",
+    "HostPipeMaterial": null,
+    "InstallDate": -2208988800000,
+    "Custodian": "VC",
+    "CustodianNotes": "",
+    "CreatedBy": "GIS",
+    "ModifiedBy": "GIS",
+    "CreatedOn": 1608156946000,
+    "AssetID": "DGM003504",
+    "Length_2D": 65.68,
+    "SHAPE_Length": 65.68272008423645,
+    "DiameterNumeric": "150",
+    "Depth": null
+   }
+  },
+  {
+   "type": "Feature",
+   "id": 365,
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -123.36890980270442,
+      48.41734145781493
+     ],
+     [
+      -123.36887425273859,
+      48.41823891583164
+     ]
+    ]
+   },
+   "properties": {
+    "OBJECTID": 365,
+    "dgmSubtype": 1,
+    "InfrastructureID": "D3593X",
+    "WaterType": "STM",
+    "Comments": "",
+    "ModifiedOn": 1720134013000,
+    "AvgDepth": 1.309,
+    "UpstreamNodeID": "DMH003593",
+    "DownstreamNodeID": "DMH003592",
+    "Diameter": 200,
+    "UpstreamInvert": 9.961,
+    "DownstreamInvert": 9.479,
+    "VerticalMeasurement": null,
+    "HorizontalMeasurement": null,
+    "Slope": 0.5,
+    "OutfallCategory": null,
+    "DataSource": "SUR",
+    "DrawingNumber": "NoDrawing",
+    "OwnedBy": "VC",
+    "Jurisdiction": "VC",
+    "LifecycleStatus": "ACT",
+    "Material": "VITC",
+    "GroundSurfaceType": null,
+    "ImportanceFactor": "NR",
+    "CrossSectionShape": "CIR",
+    "HostPipeMaterial": null,
+    "InstallDate": -2208988800000,
+    "Custodian": "VC",
+    "CustodianNotes": "",
+    "CreatedBy": "GIS",
+    "ModifiedBy": "CartegraphIntegration",
+    "CreatedOn": 1608156946000,
+    "AssetID": "DGM003593",
+    "Length_2D": 99.79,
+    "SHAPE_Length": 99.79159821530075,
+    "DiameterNumeric": "200",
+    "Depth": null
+   }
+  },
+  {
+   "type": "Feature",
+   "id": 368,
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -123.36609738581339,
+      48.41738929611373
+     ],
+     [
+      -123.36767377791669,
+      48.41728417071256
+     ]
+    ]
+   },
+   "properties": {
+    "OBJECTID": 368,
+    "dgmSubtype": 1,
+    "InfrastructureID": "D1511X",
+    "WaterType": "STM",
+    "Comments": "",
+    "ModifiedOn": 1720134013000,
+    "AvgDepth": 1.495,
+    "UpstreamNodeID": "DMH001511",
+    "DownstreamNodeID": "DMH001510",
+    "Diameter": 200,
+    "UpstreamInvert": 14.99,
+    "DownstreamInvert": 12.818,
+    "VerticalMeasurement": null,
+    "HorizontalMeasurement": null,
+    "Slope": 1.85,
+    "OutfallCategory": null,
+    "DataSource": "UNK",
+    "DrawingNumber": "UG-534",
+    "OwnedBy": "VC",
+    "Jurisdiction": "VC",
+    "LifecycleStatus": "ACT",
+    "Material": "VITC",
+    "GroundSurfaceType": null,
+    "ImportanceFactor": "NR",
+    "CrossSectionShape": "CIR",
+    "HostPipeMaterial": null,
+    "InstallDate": -2208988800000,
+    "Custodian": "VC",
+    "CustodianNotes": "",
+    "CreatedBy": "GIS",
+    "ModifiedBy": "CartegraphIntegration",
+    "CreatedOn": 1608156946000,
+    "AssetID": "DGM001511",
+    "Length_2D": 117.23,
+    "SHAPE_Length": 117.22512466911103,
+    "DiameterNumeric": "200",
+    "Depth": null
+   }
+  }
+ ],
+ "exceededTransferLimit": true,
+ "properties": {
+  "exceededTransferLimit": true
+ }
+}

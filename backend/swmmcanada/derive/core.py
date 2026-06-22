@@ -1,0 +1,211 @@
+"""derive.core (spec 07 §3): turn already-acquired/clipped DEM + land-cover + soil(HSG)
+rasters plus `network`'s subcatchment polygons into REAL SWMM subcatchment parameters,
+overwriting the placeholder `pct_imperv` / `cn` / `pct_slope` carried by `SubcatchmentIn`.
+
+This stage is pure computation and fully offline: every input has already been acquired
+and clipped by `acquire.dem / acquire.landcover / acquire.soil`. For each subcatchment that
+carries a polygon (a list of (lon, lat) WGS84 coords), we:
+
+  * build a shapely polygon (EPSG:4326), reproject it into each raster's CRS (pyproj),
+    and mask the raster to the polygon (rasterio.mask.mask, all_touched);
+  * %imperv  = 100 * area-weighted mean of the land-cover impervious fraction over the
+    masked land-cover pixels;
+  * cn       = hsg_to_cn[<dominant HSG letter>], dominant = majority HSG code in the
+    polygon mapped 1->A, 2->B, 3->C, 4->D (HYSOGs dual codes 11-14 reduced to A-D);
+  * %slope   = mean terrain slope (percent rise) within the polygon, computed from the
+    DEM via numpy.gradient / pixel size.
+
+If a layer's polygon overlap is empty (no valid pixels), the corresponding existing value
+on the subcatchment is kept (never crash, never emit NaN). Subcatchments without a polygon
+are returned unchanged. A NEW list is returned (dataclasses.replace), preserving
+name / outlet_node / width_m / area_ha / polygon.
+"""
+from dataclasses import replace
+from pathlib import Path
+from typing import List, Optional, Tuple
+
+import numpy as np
+import rasterio
+from pyproj import Transformer
+from rasterio.crs import CRS
+from rasterio.mask import mask as rio_mask
+from shapely.geometry import mapping
+from shapely.geometry import shape as shp_shape
+from shapely.ops import transform as shp_transform
+
+from swmmcanada.acquire.landcover import LandcoverResult
+from swmmcanada.acquire.soil import SoilResult
+from swmmcanada.build.models import SubcatchmentIn
+
+# HYSOGs250m code -> HSG letter. Dual (shallow-water-table) codes 11-14 reduce to their
+# DRAINED group by default (A/D->A, B/D->B, C/D->C, D/D->D); spec 07 §3.0.
+_HSG_CODE_TO_LETTER = {
+    1: "A", 2: "B", 3: "C", 4: "D",
+    11: "A", 12: "B", 13: "C", 14: "D",
+}
+
+
+class DeriveError(Exception):
+    """Base for derive failures. (derive is offline; raised only on malformed inputs,
+    e.g. a raster missing CRS metadata.)"""
+
+
+def derive_parameters(
+    subcatchments: List[SubcatchmentIn],
+    dem_path: "Path | str",
+    landcover: LandcoverResult,
+    soil: SoilResult,
+) -> List[SubcatchmentIn]:
+    """Compute real SWMM parameters per subcatchment, overwriting placeholders.
+
+    Returns a NEW list of SubcatchmentIn. Subcatchments with `polygon is None` are passed
+    through unchanged. Empty raster overlap keeps the subcatchment's existing value.
+    """
+    out: List[SubcatchmentIn] = []
+    for sub in subcatchments:
+        if not sub.polygon:
+            out.append(sub)
+            continue
+
+        poly_4326 = shp_shape(
+            {"type": "Polygon", "coordinates": [[(float(lon), float(lat)) for lon, lat in sub.polygon]]}
+        )
+
+        pct_imperv = _impervious_pct(poly_4326, landcover, fallback=sub.pct_imperv)
+        cn = _curve_number(poly_4326, soil, fallback=sub.cn)
+        pct_slope = _mean_slope_pct(poly_4326, dem_path, fallback=sub.pct_slope)
+
+        out.append(replace(sub, pct_imperv=pct_imperv, cn=cn, pct_slope=pct_slope))
+    return out
+
+
+# --- per-layer zonal stats ----------------------------------------------------
+
+
+def _impervious_pct(poly_4326, landcover: LandcoverResult, *, fallback: float) -> float:
+    """Area-weighted mean impervious fraction (x100) over masked land-cover pixels."""
+    with rasterio.open(landcover.raster_path) as src:
+        data, _ = _mask_to_polygon(src, poly_4326)
+        if data is None:
+            return fallback
+        nodata = src.nodata
+
+    flat = data.ravel()
+    if nodata is not None:
+        flat = flat[flat != nodata]
+    if flat.size == 0:
+        return fallback
+
+    imperv_lookup = landcover.impervious
+    total = 0.0
+    count = 0
+    for code in np.unique(flat):
+        n = int(np.count_nonzero(flat == code))
+        frac = imperv_lookup.get(int(code), 0.0)  # unknown class -> impervious 0 (spec §5)
+        total += n * frac
+        count += n
+    if count == 0:
+        return fallback
+    return float(100.0 * total / count)
+
+
+def _curve_number(poly_4326, soil: SoilResult, *, fallback: float) -> float:
+    """CN from the dominant (majority) HSG code within the polygon."""
+    with rasterio.open(soil.hsg_raster) as src:
+        data, _ = _mask_to_polygon(src, poly_4326)
+        if data is None:
+            return fallback
+        nodata = src.nodata
+
+    flat = data.ravel()
+    if nodata is not None:
+        flat = flat[flat != nodata]
+    # Drop codes we cannot decode to an HSG letter (e.g. HYSOGs 255 NoData).
+    decodable = np.array([c for c in flat if int(c) in _HSG_CODE_TO_LETTER], dtype=flat.dtype)
+    if decodable.size == 0:
+        return fallback
+
+    codes, counts = np.unique(decodable, return_counts=True)
+    dominant_code = int(codes[int(np.argmax(counts))])
+    letter = _HSG_CODE_TO_LETTER[dominant_code]
+    cn = soil.hsg_to_cn.get(letter)
+    if cn is None:
+        return fallback
+    return float(cn)
+
+
+def _mean_slope_pct(poly_4326, dem_path: "Path | str", *, fallback: float) -> float:
+    """Mean terrain slope (percent rise) within the polygon, from the DEM.
+
+    Slope = 100 * |grad(z)| where grad is numpy.gradient over the masked DEM window,
+    scaled by the pixel size (metres) of the (projected) DEM grid.
+    """
+    with rasterio.open(dem_path) as src:
+        data, transform = _mask_to_polygon(src, poly_4326, fill=np.nan, as_float=True)
+        if data is None:
+            return fallback
+        nodata = src.nodata
+
+    band = data.astype("float64")
+    if nodata is not None:
+        band = np.where(band == float(nodata), np.nan, band)
+
+    # Need at least a 2x2 valid window to take a gradient.
+    if band.shape[0] < 2 or band.shape[1] < 2:
+        return fallback
+    if np.all(np.isnan(band)):
+        return fallback
+
+    px = abs(transform.a)  # pixel width (m)
+    py = abs(transform.e)  # pixel height (m)
+    if px <= 0 or py <= 0:
+        return fallback
+
+    # numpy.gradient returns (d/d_row, d/d_col) = (d/dy, d/dx).
+    dzdy, dzdx = np.gradient(band, py, px)
+    rise = np.sqrt(dzdx ** 2 + dzdy ** 2)
+    slope_pct = 100.0 * rise
+    valid = slope_pct[~np.isnan(slope_pct)]
+    if valid.size == 0:
+        return fallback
+    return float(np.mean(valid))
+
+
+# --- masking helper -----------------------------------------------------------
+
+
+def _mask_to_polygon(
+    src, poly_4326, *, fill=0, as_float: bool = False
+) -> Tuple[Optional[np.ndarray], Optional[object]]:
+    """Reproject `poly_4326` (EPSG:4326) into `src`'s CRS and mask the raster to it.
+
+    Returns (band2d, window_transform) for the cropped masked window, or (None, None) if
+    the polygon does not overlap the raster (no valid pixels). Uses all_touched=True so
+    tiny polygons that cover < 1 pixel still pick up the pixels they intersect.
+    """
+    if src.crs is None:
+        raise DeriveError(f"Raster {getattr(src, 'name', '?')} is missing CRS metadata.")
+
+    poly_src = _reproject_polygon(poly_4326, "EPSG:4326", src.crs)
+    geoms = [mapping(poly_src)]
+    try:
+        out, win_transform = rio_mask(
+            src, geoms, crop=True, all_touched=True, filled=True,
+            nodata=(np.nan if as_float else None),
+        )
+    except ValueError:
+        # rasterio raises "Input shapes do not overlap raster." when there is no overlap.
+        return None, None
+
+    band = out[0]
+    if band.size == 0:
+        return None, None
+    return band, win_transform
+
+
+def _reproject_polygon(poly, src_crs: str, dst_crs):
+    dst = dst_crs if isinstance(dst_crs, str) else CRS(dst_crs).to_string()
+    if CRS.from_user_input(src_crs).to_epsg() == CRS.from_user_input(dst).to_epsg():
+        return poly
+    transformer = Transformer.from_crs(src_crs, dst, always_xy=True)
+    return shp_transform(transformer.transform, poly)

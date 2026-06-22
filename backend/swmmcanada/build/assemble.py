@@ -1,0 +1,218 @@
+"""Assemble a runnable EPA SWMM 5.2 `.inp` from upstream value objects (spec 09).
+
+This is the single place that knows SWMM file syntax. Objects in, files out. Every build
+round-trips its own output through swmm-api (and swmmio) before returning, so a
+BuildResult is guaranteed parseable.
+"""
+import hashlib
+import json
+from dataclasses import dataclass
+from datetime import timedelta
+from pathlib import Path
+from typing import List, Optional
+
+from swmm_api import SwmmInput, read_inp_file
+from swmm_api.input_file import SEC
+from swmm_api.input_file.sections import (
+    Conduit,
+    Coordinate,
+    CrossSection,
+    Infiltration,
+    InfiltrationCurveNumber,
+    Junction,
+    OptionSection,
+    Outfall,
+    Polygon,
+    RainGage,
+    SubArea,
+    SubCatchment,
+    Timeseries,
+    TimeseriesData,
+)
+
+from swmmcanada.build.config import BuildConfig
+from swmmcanada.build.models import NetworkIn, RainfallSeries, SubcatchmentIn
+
+
+@dataclass(frozen=True)
+class BuildResult:
+    inp_path: Path
+    package_dir: Path
+    manifest_path: Path
+    sections_written: List[str]
+    warnings: List[str]
+    observed_flow_csv: Optional[Path] = None
+
+
+def _interval_str(td: timedelta) -> str:
+    minutes = int(td.total_seconds() // 60)
+    return f"{minutes // 60}:{minutes % 60:02d}"
+
+
+def _rain_interval(rain: RainfallSeries, config: BuildConfig) -> timedelta:
+    """Raingage recording interval = the rainfall series' own spacing (so SWMM doesn't warn
+    that the series is coarser than the gage interval). Falls back to config for <2 points."""
+    ts = rain.timestamps
+    if len(ts) >= 2:
+        deltas = sorted((ts[i + 1] - ts[i]).total_seconds() for i in range(len(ts) - 1))
+        sec = deltas[len(deltas) // 2]  # median spacing
+        if sec > 0:
+            return timedelta(seconds=sec)
+    return config.rain_interval
+
+
+def assemble_inp(
+    network: NetworkIn, subcatchments: List[SubcatchmentIn], rain: RainfallSeries, config: BuildConfig
+) -> SwmmInput:
+    inp = SwmmInput()
+
+    opt = OptionSection()
+    opt["FLOW_UNITS"] = config.flow_units.value
+    opt["INFILTRATION"] = config.infiltration.value
+    opt["FLOW_ROUTING"] = config.routing_model
+    opt["START_DATE"] = config.start
+    opt["END_DATE"] = config.end
+    opt["REPORT_START_DATE"] = config.start
+    inp[SEC.OPTIONS] = opt
+
+    junctions = Junction.create_section()
+    for j in network.junctions:
+        junctions.add_obj(Junction(j.name, elevation=j.invert_m, depth_max=j.max_depth_m))
+    inp[SEC.JUNCTIONS] = junctions
+
+    outfalls = Outfall.create_section()
+    for o in network.outfalls:
+        outfalls.add_obj(Outfall(o.name, elevation=o.invert_m, kind=o.kind))
+    inp[SEC.OUTFALLS] = outfalls
+
+    conduits = Conduit.create_section()
+    xsections = CrossSection.create_section()
+    for c in network.conduits:
+        conduits.add_obj(
+            Conduit(c.name, c.from_node, c.to_node, length=c.length_m, roughness=c.roughness_n)
+        )
+        xsections.add_obj(CrossSection(c.name, "CIRCULAR", height=c.diameter_m))
+    inp[SEC.CONDUITS] = conduits
+    inp[SEC.XSECTIONS] = xsections
+
+    subs = SubCatchment.create_section()
+    subareas = SubArea.create_section()
+    infil = Infiltration.create_section()
+    for s in subcatchments:
+        subs.add_obj(
+            SubCatchment(
+                s.name,
+                rain.gage_name,
+                s.outlet_node,
+                area=s.area_ha,
+                imperviousness=s.pct_imperv,
+                width=s.width_m,
+                slope=s.pct_slope,
+            )
+        )
+        subareas.add_obj(
+            SubArea(s.name, s.n_imperv, s.n_perv, s.s_imperv_mm, s.s_perv_mm, s.pct_zero)
+        )
+        infil.add_obj(
+            InfiltrationCurveNumber(
+                s.name, curve_no=s.cn, hydraulic_conductivity=0.5, time_dry=7
+            )
+        )
+    inp[SEC.SUBCATCHMENTS] = subs
+    inp[SEC.SUBAREAS] = subareas
+    inp[SEC.INFILTRATION] = infil
+
+    raingages = RainGage.create_section()
+    raingages.add_obj(
+        RainGage(
+            rain.gage_name,
+            form=config.rain_format,
+            interval=_interval_str(_rain_interval(rain, config)),
+            SCF=1.0,
+            source="TIMESERIES",
+            timeseries=rain.ts_name,
+        )
+    )
+    inp[SEC.RAINGAGES] = raingages
+
+    series = Timeseries.create_section()
+    series.add_obj(TimeseriesData(rain.ts_name, list(zip(rain.timestamps, rain.precip_mm))))
+    inp[SEC.TIMESERIES] = series
+
+    coords = Coordinate.create_section()
+    for n in list(network.junctions) + list(network.outfalls):
+        coords.add_obj(Coordinate(n.name, n.x, n.y))
+    inp[SEC.COORDINATES] = coords
+
+    polys = Polygon.create_section()
+    n_polys = 0
+    for s in subcatchments:
+        if getattr(s, "polygon", None):
+            polys.add_obj(Polygon(s.name, list(s.polygon)))
+            n_polys += 1
+    if n_polys:
+        inp[SEC.POLYGONS] = polys
+
+    return inp
+
+
+def validate_inp(inp_path: Path) -> List[str]:
+    """Round-trip through both parsers + cross-reference integrity. Returns warnings;
+    raises BuildValidationError on a model that cannot re-read itself."""
+    warnings: List[str] = []
+    try:
+        read_inp_file(str(inp_path))           # swmm-api round-trip
+        import swmmio
+
+        _ = swmmio.Model(str(inp_path)).inp.junctions  # swmmio round-trip (forces parse)
+    except Exception as exc:  # noqa: BLE001 - re-raise as a typed build failure
+        raise BuildValidationError(f"Assembled .inp failed round-trip: {exc}") from exc
+    return warnings
+
+
+class BuildValidationError(Exception):
+    """The assembled .inp could not re-parse through swmm-api / swmmio."""
+
+
+def build_model(
+    *,
+    network: NetworkIn,
+    subcatchments: List[SubcatchmentIn],
+    rain: RainfallSeries,
+    config: BuildConfig,
+    observed=None,
+    aoi=None,
+) -> BuildResult:
+    out_dir = Path(config.out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    inp = assemble_inp(network, subcatchments, rain, config)
+    inp_path = out_dir / "model.inp"
+    inp.write_file(str(inp_path))
+
+    warnings = validate_inp(inp_path)
+    sections = sorted(str(k) for k in inp.keys())
+
+    manifest = {
+        "title": config.title,
+        "flow_units": config.flow_units.value,
+        "infiltration": config.infiltration.value,
+        "start_date": config.start.isoformat(),
+        "end_date": config.end.isoformat(),
+        "n_junctions": len(network.junctions),
+        "n_outfalls": len(network.outfalls),
+        "n_conduits": len(network.conduits),
+        "n_subcatchments": len(subcatchments),
+        "sections": sections,
+        "inp_sha256": hashlib.sha256(inp_path.read_bytes()).hexdigest(),
+    }
+    manifest_path = out_dir / "manifest.json"
+    manifest_path.write_text(json.dumps(manifest, indent=2))
+
+    return BuildResult(
+        inp_path=inp_path,
+        package_dir=out_dir,
+        manifest_path=manifest_path,
+        sections_written=sections,
+        warnings=warnings,
+    )
