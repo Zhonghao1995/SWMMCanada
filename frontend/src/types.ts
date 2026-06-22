@@ -24,5 +24,6 @@ export interface JobProgress {
   stage?: string // VALIDATING | ACQUIRING | DERIVING | NETWORK | BUILDING | PACKAGING
   progressPct?: number // 0–100, monotonic, coarse
   message?: string
+  mode?: string // build pathway: "Real municipal network — …" or "Synthesized from open data"
   resultUrl?: string // download URL for the .inp + forcing package (zip)
 }

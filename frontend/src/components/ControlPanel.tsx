@@ -129,6 +129,18 @@ export default function ControlPanel() {
               {job.stage ? ` · ${job.stage}` : ''}
               {typeof job.progressPct === 'number' ? ` · ${Math.round(job.progressPct)}%` : ''}
             </div>
+            {job.mode && (
+              <div
+                className={`mt-1 inline-block rounded px-1.5 py-0.5 font-medium ${
+                  job.mode.startsWith('Real')
+                    ? 'bg-emerald-100 text-emerald-700'
+                    : 'bg-amber-100 text-amber-700'
+                }`}
+              >
+                {job.mode.startsWith('Real') ? '🏙️ ' : '🧩 '}
+                {job.mode}
+              </div>
+            )}
             {job.message && <div className="mt-1 text-slate-500">{job.message}</div>}
             {job.status === 'succeeded' && job.resultUrl && (
               <a href={job.resultUrl} className="mt-2 flex items-center gap-1 font-medium text-blue-600">

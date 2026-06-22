@@ -43,6 +43,7 @@ interface TaskStatusDto {
   state: string
   progress_pct?: number
   stage?: string
+  mode?: string
   error?: { message?: string }
   message?: string
 }
@@ -57,6 +58,7 @@ export async function pollTask(taskId: string): Promise<JobProgress> {
     stage: j.stage,
     progressPct: j.progress_pct,
     message: j.error?.message ?? j.message,
+    mode: j.mode,
     resultUrl: status === 'succeeded' ? `${API}/tasks/${taskId}/result` : undefined,
   }
 }

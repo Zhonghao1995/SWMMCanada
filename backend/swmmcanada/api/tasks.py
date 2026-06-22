@@ -19,6 +19,7 @@ class Task:
     error: Optional[str] = None
     result_zip: Optional[Path] = None
     preview: Optional[Path] = None
+    mode: Optional[str] = None          # which build pathway (real-network city vs synthesized)
 
 
 class TaskStore:
@@ -44,10 +45,11 @@ class TaskStore:
                     setattr(task, key, value)
 
 
-def run_task(task_id: str, aoi, start: date, end: date, store: TaskStore, workdir: Path, pipeline) -> None:
+def run_task(task_id: str, aoi, start: date, end: date, store: TaskStore, workdir: Path,
+             pipeline, mode: Optional[str] = None) -> None:
     """Run the pipeline for one task, updating the store. Never raises — failures become
     FAILED state. This is the single worker entrypoint (local thread or hosted container)."""
-    store.update(task_id, state="RUNNING", progress_pct=5, stage="VALIDATING")
+    store.update(task_id, state="RUNNING", progress_pct=5, stage="VALIDATING", mode=mode)
     try:
         ws = Path(workdir) / task_id
 

@@ -21,10 +21,10 @@ from fastapi.responses import FileResponse
 from swmmcanada.api.tasks import TaskStore, run_task
 from swmmcanada.geo import aoi_from_geojson, aoi_from_shapefile
 from swmmcanada.geo.errors import AOIOversizeError, GeoError
-from swmmcanada.pipeline import build_from_aoi
+from swmmcanada.pipeline import pipeline_for_aoi
 
 
-def create_app(*, pipeline=build_from_aoi, workdir=None, run_inline: bool = False) -> FastAPI:
+def create_app(*, pipeline=None, workdir=None, run_inline: bool = False) -> FastAPI:
     app = FastAPI(title="SWMMCanada API")
     store = TaskStore()
     work_root = Path(workdir or tempfile.mkdtemp(prefix="swmmcanada_"))
@@ -67,12 +67,16 @@ def create_app(*, pipeline=build_from_aoi, workdir=None, run_inline: bool = Fals
             raise HTTPException(422, "end_date is before start_date.")
 
         task_id = store.create()
-        args = (task_id, aoi, start, end, store, work_root, pipeline)
+        if pipeline is None:                       # auto-select the pathway by AOI location
+            build_fn, mode = pipeline_for_aoi(aoi)
+        else:                                      # explicit pipeline (tests / override)
+            build_fn, mode = pipeline, "injected"
+        args = (task_id, aoi, start, end, store, work_root, build_fn, mode)
         if run_inline:
             run_task(*args)
         else:
             executor.submit(run_task, *args)
-        return {"task_id": task_id, "status": "QUEUED"}
+        return {"task_id": task_id, "status": "QUEUED", "mode": mode}
 
     @app.get("/api/v1/tasks/{task_id}")
     def status(task_id: str):
@@ -83,6 +87,7 @@ def create_app(*, pipeline=build_from_aoi, workdir=None, run_inline: bool = Fals
             "state": task.state,
             "progress_pct": task.progress_pct,
             "stage": task.stage,
+            "mode": task.mode,
             "error": ({"message": task.error} if task.error else None),
         }
 
