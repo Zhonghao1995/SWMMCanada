@@ -39,6 +39,14 @@ from swmmcanada.sources.cities.victoria import (
 )
 
 
+def _utm_crs_for(aoi) -> str:
+    """The UTM zone CRS (metres, northern hemisphere) covering the AOI — used for the .inp's
+    display coordinates so SWMM/PCSWMM render the model undistorted rather than as lon/lat."""
+    min_lon, _, max_lon, _ = aoi.bbox
+    zone = int(((min_lon + max_lon) / 2 + 180) / 6) + 1
+    return f"EPSG:{32600 + zone}"
+
+
 def build_from_aoi(
     aoi,
     start: date,
@@ -88,7 +96,7 @@ def build_from_aoi(
     rain = to_rainfall_series(series)
 
     _r("BUILDING", 90)
-    config = BuildConfig(out_dir=ws, start=start, end=end)
+    config = BuildConfig(out_dir=ws, start=start, end=end, coordinate_crs=_utm_crs_for(aoi))
     result = build_model(
         network=synth.network,
         subcatchments=subcatchments,
@@ -193,7 +201,8 @@ def _build_real_network(
     rain = to_rainfall_series(series)
 
     _r("BUILDING", 90)
-    config = BuildConfig(out_dir=ws, start=start, end=end, title=f"SWMMCanada ({city} real network)")
+    config = BuildConfig(out_dir=ws, start=start, end=end, title=f"SWMMCanada ({city} real network)",
+                         coordinate_crs=sub_crs)
     result = build_model(network=network, subcatchments=subcatchments, rain=rain, config=config, observed=None)
 
     preview_dir = ws / "preview"

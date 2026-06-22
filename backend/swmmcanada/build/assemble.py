@@ -61,6 +61,17 @@ def _rain_interval(rain: RainfallSeries, config: BuildConfig) -> timedelta:
     return config.rain_interval
 
 
+def _coord_projector(crs):
+    """A (lon, lat) -> (x, y) projector for the .inp display coords, or identity if no CRS.
+    Node x/y and polygons are EPSG:4326; projecting to a metric CRS (UTM) makes SWMM/PCSWMM
+    render them undistorted."""
+    if not crs:
+        return lambda x, y: (x, y)
+    from pyproj import Transformer
+    tr = Transformer.from_crs("EPSG:4326", crs, always_xy=True)
+    return lambda x, y: tr.transform(x, y)
+
+
 def assemble_inp(
     network: NetworkIn, subcatchments: List[SubcatchmentIn], rain: RainfallSeries, config: BuildConfig
 ) -> SwmmInput:
@@ -139,16 +150,17 @@ def assemble_inp(
     series.add_obj(TimeseriesData(rain.ts_name, list(zip(rain.timestamps, rain.precip_mm))))
     inp[SEC.TIMESERIES] = series
 
+    project = _coord_projector(config.coordinate_crs)
     coords = Coordinate.create_section()
     for n in list(network.junctions) + list(network.outfalls):
-        coords.add_obj(Coordinate(n.name, n.x, n.y))
+        coords.add_obj(Coordinate(n.name, *project(n.x, n.y)))
     inp[SEC.COORDINATES] = coords
 
     polys = Polygon.create_section()
     n_polys = 0
     for s in subcatchments:
         if getattr(s, "polygon", None):
-            polys.add_obj(Polygon(s.name, list(s.polygon)))
+            polys.add_obj(Polygon(s.name, [project(px, py) for px, py in s.polygon]))
             n_polys += 1
     if n_polys:
         inp[SEC.POLYGONS] = polys

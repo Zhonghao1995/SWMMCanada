@@ -231,6 +231,27 @@ def _sq(a, b):
     return (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2
 
 
+_GEOM_TOL_DEG = 0.0005  # ~40 m: a pipe endpoint must lie near its own polyline
+
+
+def _fix_endpoints(up_xy, dn_xy, line, tol=_GEOM_TOL_DEG):
+    """A node coordinate joined by AssetID can be grossly wrong vs the pipe's own geometry
+    (city data inconsistency / mis-located node), which draws the pipe as a long stray line.
+    If an endpoint is far from BOTH polyline ends, move it onto the polyline (the end the
+    other endpoint isn't at). Returns (up_xy, dn_xy, n_fixed)."""
+    if not line or len(line) < 2:
+        return up_xy, dn_xy, 0
+    p0, p1 = tuple(line[0][:2]), tuple(line[-1][:2])
+    far = lambda xy: min(_sq(xy, p0), _sq(xy, p1)) ** 0.5 > tol
+    if far(up_xy) and not far(dn_xy):
+        return (p1 if _sq(dn_xy, p0) <= _sq(dn_xy, p1) else p0), dn_xy, 1
+    if far(dn_xy) and not far(up_xy):
+        return up_xy, (p1 if _sq(up_xy, p0) <= _sq(up_xy, p1) else p0), 1
+    if far(up_xy) and far(dn_xy):
+        return p0, p1, 1
+    return up_xy, dn_xy, 0
+
+
 def build_victoria_network(
     mains, manholes, fittings, outfalls, *, config: VictoriaNetworkConfig = VictoriaNetworkConfig(),
 ) -> VictoriaNetworkResult:
@@ -252,18 +273,20 @@ def build_victoria_network(
 
     pipes: List[base.RawPipe] = []
     shape_hist: Dict[str, int] = {}
-    n_dangling = 0
+    n_dangling = n_geom_fixed = 0
     for m in mains:
         p = m.get("properties") or {}
         geom = m.get("geometry") or {}
         shape = p.get("CrossSectionShape") or "UNK"
         shape_hist[shape] = shape_hist.get(shape, 0) + 1
+        line = geom.get("coordinates") or []
         up_xy, dn_xy, dangling = resolve_endpoints(
-            p.get("UpstreamNodeID"), p.get("DownstreamNodeID"),
-            geom.get("coordinates") or [], coords, snap_tol=config.snap_tol)
+            p.get("UpstreamNodeID"), p.get("DownstreamNodeID"), line, coords, snap_tol=config.snap_tol)
         if up_xy is None or dn_xy is None:
             continue
+        up_xy, dn_xy, gf = _fix_endpoints(up_xy, dn_xy, line)
         n_dangling += dangling
+        n_geom_fixed += gf
         diameter_mm = _num(p.get("Diameter"))
         pipes.append(base.RawPipe(
             name=_sanitize(p.get("AssetID") or p.get("InfrastructureID") or p.get("OBJECTID")),
@@ -282,7 +305,7 @@ def build_victoria_network(
             outfall_link_len_m=config.outfall_link_len_m),
     )
     diagnostics = {**result.diagnostics, "n_dangling_nodes": n_dangling,
-                   "shape_histogram": shape_hist, "n_mains_in": len(mains)}
+                   "n_geom_fixed": n_geom_fixed, "shape_histogram": shape_hist, "n_mains_in": len(mains)}
     return VictoriaNetworkResult(network=result.network, diagnostics=diagnostics)
 
 
