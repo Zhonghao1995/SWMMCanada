@@ -1,10 +1,13 @@
 # SWMMCanada
 
 <p align="center">
+  <a href="https://github.com/Zhonghao1995/SWMMCanada/actions/workflows/ci.yml"><img src="https://github.com/Zhonghao1995/SWMMCanada/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT license" /></a>
   <img src="https://img.shields.io/badge/status-early%20development-orange" alt="Status: early development" />
   <img src="https://img.shields.io/badge/EPA%20SWMM-5.2-1F6FEB" alt="EPA SWMM 5.2" />
 </p>
+
+<p align="center"><em>🚧 Under construction — this repository serves as the data-preprocessing and upstream model-building module for <strong>Agentic SWMM</strong> and <strong>Agentic MIKE+</strong>.</em></p>
 
 **Draw an area anywhere in Canada and get a ready-to-run EPA SWMM stormwater model.**
 
