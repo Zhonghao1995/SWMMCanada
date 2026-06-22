@@ -2,6 +2,15 @@
 
 > Draw an area in Canada → automatically assemble Canadian open data → a **runnable EPA SWMM model**.
 
+- 🏙️ **Two modes, auto-selected by where you draw** — inside a city that publishes its storm network (Victoria, Ottawa) → ingest the **real** pipes; anywhere else in Canada → **synthesize** a network from open data.
+- 🧩 **Parcel-shaped subcatchments** — where a city publishes parcels, cells follow real lot lines, not a generic grid.
+- 🇨🇦 **100% Canadian open data** — terrain (NRCan), land cover (NALCMS), soil (SoilGrids), rainfall (ECCC), municipal storm networks (city ArcGIS); free / Open Government Licence.
+- ✅ **Runnable EPA SWMM 5.2** — every model round-trips through swmm-api + swmmio and runs with 0 errors.
+- 📦 **Shareable model-ready datastore** — GeoPackage + netCDF/CF + JSON, framework-independent.
+- 🌐 **Web app** — draw or upload a boundary in a React + MapLibre UI, FastAPI backend, download the `.inp`.
+
+## What it does
+
 SWMMCanada turns a map polygon (or an uploaded boundary) into a complete, EPA-SWMM-valid
 stormwater model: it fetches Canadian open data (terrain, land cover, soil, rainfall), derives
 the subcatchment parameters, builds the drainage network, and writes a `model.inp` plus a
@@ -9,9 +18,12 @@ shareable **model-ready datastore**.
 
 > **Status:** early development (WIP). Generated models run clean in EPA SWMM 5.2.
 
-![SWMMCanada — real municipal storm network with parcel-shaped subcatchments, downtown Victoria, BC](results/victoria_demo.png)
+<p align="center">
+  <img src="results/victoria_demo.png" width="560"
+       alt="SWMMCanada — real municipal storm network with parcel-shaped subcatchments, downtown Victoria, BC">
+</p>
 
-*A model built from a downtown Victoria polygon: the city's **real** storm network (pipes, junctions in blue; outfalls in red) with **subcatchments shaped to real parcel lines** (green) — over the same Carto basemap the app uses. Runs clean in EPA SWMM 5.2.*
+<p align="center"><em>A model built from a downtown Victoria polygon: the city's <strong>real</strong> storm network (pipes &amp; junctions in blue, outfalls in red) with <strong>subcatchments shaped to real parcel lines</strong> (green), over the same Carto basemap the app uses.</em></p>
 
 ## Two ways to get a network
 
