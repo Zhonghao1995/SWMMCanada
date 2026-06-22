@@ -53,8 +53,8 @@ A `model.inp` that runs in EPA SWMM 5.2, a `datastore/` package you can share (G
 
 ## More
 
+- **[DATA.md](DATA.md)** — every dataset used, with links, licences, and how each one is used (ECCC rainfall, NRCan terrain & land cover, SoilGrids soil, OpenStreetMap, and the Victoria/Ottawa municipal storm networks). All free / open.
 - **[RESULTS.md](RESULTS.md)** — real-city validation, figures, and the EPA SWMM numbers.
-- **Data** (all free / open): rainfall from ECCC, terrain and land cover from NRCan, soil from SoilGrids, storm pipes from city ArcGIS.
 - **Built with** Python (geopandas, swmm-api, FastAPI) and React + MapLibre. Full dependency lists in `backend/pyproject.toml` and `frontend/package.json`.
 
 ## License
