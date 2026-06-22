@@ -9,6 +9,10 @@ shareable **model-ready datastore**.
 
 > **Status:** early development (WIP). Generated models run clean in EPA SWMM 5.2.
 
+![SWMMCanada — real municipal storm network with parcel-shaped subcatchments, downtown Victoria, BC](results/victoria_demo.png)
+
+*A model built from a downtown Victoria polygon: the city's **real** storm network (pipes, junctions in blue; outfalls in red) with **subcatchments shaped to real parcel lines** (green) — over the same Carto basemap the app uses. Runs clean in EPA SWMM 5.2.*
+
 ## Two ways to get a network
 
 | Mode | How | Where | Fidelity |
