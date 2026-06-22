@@ -248,6 +248,26 @@ def build_from_ottawa(aoi, start: date, end: date, workspace, *, ottawa_client=N
         subcatchment_method=subcatchment_method, report=report, **kwargs)
 
 
+# Cities with a real-network adapter, gated by a coarse coverage bbox
+# (min_lon, min_lat, max_lon, max_lat). Order: first match wins.
+_REAL_NETWORK_CITIES = [
+    ("Victoria, BC", (-123.43, 48.40, -123.33, 48.47), build_from_victoria),
+    ("Ottawa, ON", (-76.05, 45.15, -75.40, 45.55), build_from_ottawa),
+]
+
+
+def pipeline_for_aoi(aoi):
+    """Pick the build pathway for an AOI: a real-municipal-network city adapter when the AOI
+    centre falls inside a supported city's coverage, else synthesize a network from open data.
+    Returns ``(build_fn, mode_label)``."""
+    min_lon, min_lat, max_lon, max_lat = aoi.bbox
+    clon, clat = (min_lon + max_lon) / 2, (min_lat + max_lat) / 2
+    for name, (lo1, la1, lo2, la2), build in _REAL_NETWORK_CITIES:
+        if lo1 <= clon <= lo2 and la1 <= clat <= la2:
+            return build, f"Real municipal network — {name}"
+    return build_from_aoi, "Synthesized from open data"
+
+
 def _acquire_soil_auto(bbox, ws, soil_source):
     """Soil source selection: explicit override > cached HYSOGs250m (real HSG, EPSG:4326)
     when SWMMCANADA_HYSOGS_PATH points at the one-time download > documented HSG-B stand-in."""
