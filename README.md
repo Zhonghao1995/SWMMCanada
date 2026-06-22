@@ -40,9 +40,9 @@ SWMMCanada provides a single path from a drawn area to a runnable model: it know
 - **Web app and library.** Draw or upload a boundary in a React and MapLibre interface backed by a FastAPI service, or call the same pipeline directly from Python.
 
 <p align="center">
-  <img src="results/victoria_demo.png" width="640" alt="SWMMCanada — real municipal storm network with parcel-shaped subcatchments, downtown Victoria, BC" />
+  <img src="results/victoria_app.png" width="820" alt="The SWMMCanada web app after building downtown Victoria: real storm network and parcel-shaped subcatchments on the map, with the build mode and model layers in the side panel" />
 </p>
-<p align="center"><sub>A model built from a downtown Victoria polygon: the city's real storm network (pipes and junctions in blue, outfalls in red) with subcatchments shaped to real parcel lines (green), over the same Carto basemap the app uses.</sub></p>
+<p align="center"><sub>The SWMMCanada web app after building a downtown Victoria area: the city's real storm network (pipes and junctions in blue, outfalls in red) and parcel-shaped subcatchments (green), with the auto-selected build mode, model-layer toggles, and download ready.</sub></p>
 
 ## Two ways to get a network
 
