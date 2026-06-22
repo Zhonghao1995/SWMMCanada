@@ -94,7 +94,7 @@ export default function MapPanel() {
   return (
     <Map
       ref={mapRef}
-      initialViewState={{ longitude: -75.69, latitude: 45.42, zoom: 13 }}
+      initialViewState={{ longitude: -123.363, latitude: 48.424, zoom: 14 }}
       mapStyle={MAP_STYLE}
       style={{ width: '100%', height: '100%' }}
       cursor={drawing ? 'crosshair' : ''}
