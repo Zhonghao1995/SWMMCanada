@@ -253,6 +253,96 @@ class CatchbasinSubcatchmentConfig:
     max_imperv: float = 100.0
 
 
+@dataclass
+class _Cell:
+    """A subcatchment cell: metric area + its EPSG:4326 polygon. Same shape interface the
+    Voronoi delineator returns, so the impervious/outlet loop downstream is identical either way."""
+    area_m2: float
+    polygon_4326: object
+
+    @property
+    def exterior(self):
+        return [(float(x), float(y)) for x, y in self.polygon_4326.exterior.coords]
+
+
+def _largest_polygon(geom):
+    """Keep the main polygon (drop scattered slivers) so each cell is one contiguous shape."""
+    from shapely.geometry import Polygon
+    if geom is None or geom.is_empty:
+        return None
+    if isinstance(geom, Polygon):
+        polys = [geom]
+    elif hasattr(geom, "geoms"):
+        polys = [g for g in geom.geoms if g.geom_type == "Polygon"]
+    else:
+        polys = []
+    return max(polys, key=lambda g: g.area, default=None)
+
+
+def _parcel_cells(seeds, parcels, aoi, crs):
+    """Subcatchment shapes that follow REAL parcel/lot lines: each parcel is assigned whole to
+    its nearest catch basin and dissolved (so cell edges fall on lot lines, not a Voronoi
+    bisector); street right-of-way (AOI minus parcels) is split between catch basins by their
+    Voronoi cells. Returns {cb_id: _Cell}, or {} when no usable parcels — the caller then falls
+    back to Voronoi (e.g. Ottawa, which publishes no parcels)."""
+    import geopandas as gpd
+    import numpy as np
+    from pyproj import Transformer
+    from shapely.geometry import MultiPoint, Point, shape
+    from shapely.ops import transform as shp_transform
+    from shapely.ops import unary_union, voronoi_diagram
+
+    pgeoms = [shape(f["geometry"]) for f in (parcels or []) if f.get("geometry")]
+    if len(pgeoms) < 2:
+        return {}
+    to_m = Transformer.from_crs("EPSG:4326", crs, always_xy=True).transform
+    to_ll = Transformer.from_crs(crs, "EPSG:4326", always_xy=True).transform
+    aoi_m = shp_transform(to_m, aoi.geometry)
+
+    cb_ids = list(seeds)
+    cb_pts = [Point(*to_m(lon, lat)) for (lon, lat) in seeds.values()]
+    cb_xy = np.array([[p.x, p.y] for p in cb_pts])
+
+    par = gpd.GeoSeries(pgeoms, crs="EPSG:4326").to_crs(crs)
+    par = par[par.notna() & ~par.is_empty]
+    par = par[par.intersects(aoi_m)]
+    if len(par) < 2:
+        return {}
+
+    # assign each parcel (whole) to its nearest catch basin by centroid
+    assign = {cb_id: [] for cb_id in cb_ids}
+    for geom in par.geometry:
+        c = geom.centroid
+        i = int(((cb_xy[:, 0] - c.x) ** 2 + (cb_xy[:, 1] - c.y) ** 2).argmin())
+        clipped = geom.intersection(aoi_m)
+        if not clipped.is_empty:
+            assign[cb_ids[i]].append(clipped)
+
+    # street right-of-way = AOI minus parcels, split between catch basins by their Voronoi cells
+    slivers = {cb_id: None for cb_id in cb_ids}
+    streets = aoi_m.difference(unary_union(list(par.geometry)))
+    if not streets.is_empty:
+        for cell in voronoi_diagram(MultiPoint(cb_pts), envelope=aoi_m).geoms:
+            owner = next((cb_ids[i] for i, p in enumerate(cb_pts) if cell.covers(p)), None)
+            if owner is not None:
+                s = streets.intersection(cell)
+                if not s.is_empty:
+                    slivers[owner] = s
+
+    cells = {}
+    for cb_id in cb_ids:
+        parts = list(assign[cb_id])
+        if slivers[cb_id] is not None:
+            parts.append(slivers[cb_id])
+        if not parts:
+            continue
+        poly_m = _largest_polygon(unary_union(parts))
+        if poly_m is None or poly_m.area <= 0:
+            continue
+        cells[cb_id] = _Cell(area_m2=poly_m.area, polygon_4326=shp_transform(to_ll, poly_m))
+    return cells
+
+
 def delineate_catchbasin_subcatchments(
     network: NetworkIn, catchbasins, parcels, buildings, aoi, *, crs: str = "EPSG:32610",
     config: CatchbasinSubcatchmentConfig = CatchbasinSubcatchmentConfig(),
@@ -281,7 +371,10 @@ def delineate_catchbasin_subcatchments(
     if len(seeds) < 2:
         return [], {}, {"reason": "insufficient catch basins", "n_catchbasins": len(seeds)}
 
-    cells = delineate_subcatchments(seeds, aoi.geometry)
+    cells = _parcel_cells(seeds, parcels, aoi, crs)        # shape follows real parcels (Victoria)
+    shape_method = "parcel" if cells else "voronoi"        # fall back to Voronoi where none exist
+    if not cells:
+        cells = delineate_subcatchments(seeds, aoi.geometry)
     jnames = [j.name for j in network.junctions]
     jcoord = np.array([[j.x, j.y] for j in network.junctions])
 
@@ -327,7 +420,7 @@ def delineate_catchbasin_subcatchments(
             name=name, outlet_node=nearest_node(seeds[cb_id]), area_ha=cell.area_m2 / 1e4,
             pct_imperv=imperv, width_m=math.sqrt(cell.area_m2),
             pct_slope=config.default_slope_pct, polygon=cell.exterior))
-    diag = {"method": "catchbasin+parcel/building", "n_catchbasins": len(seeds),
+    diag = {"method": f"catchbasin+parcel/building ({shape_method}-shaped)", "n_catchbasins": len(seeds),
             "n_subcatchments": len(subs), "n_parcel_based_imperv": n_parcel,
             "n_parcels": int(len(par)), "n_buildings": int(len(bld)),
             "mean_imperv": round(sum(imperv_map.values()) / len(imperv_map), 1) if imperv_map else None}

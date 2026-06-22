@@ -35,10 +35,29 @@ def test_delineation_routes_to_nearest_node_and_uses_parcel_imperv():
         assert 1.0 <= s.pct_imperv <= 100.0
         assert s.area_ha > 0 and s.polygon is not None
     assert imperv_map                                  # at least one cell overlapped parcels
-    assert diag["method"] == "catchbasin+parcel/building"
+    assert diag["method"].startswith("catchbasin+parcel/building")  # 1 parcel -> Voronoi-shaped
     assert diag["n_catchbasins"] == 3
 
 
 def test_insufficient_catchbasins_returns_empty():
     subs, imperv_map, diag = delineate_catchbasin_subcatchments(NETWORK, [CATCHBASINS[0]], PARCELS, BUILDINGS, AOI)
     assert subs == [] and imperv_map == {}            # caller falls back to Voronoi
+
+
+# A grid of parcels tiling the AOI -> cells are shaped by lot lines, not a Voronoi bisector.
+_GRID_PARCELS = [
+    _poly([[-123.372, 48.418], [-123.370, 48.418], [-123.370, 48.420], [-123.372, 48.420], [-123.372, 48.418]]),
+    _poly([[-123.370, 48.418], [-123.368, 48.418], [-123.368, 48.420], [-123.370, 48.420], [-123.370, 48.418]]),
+    _poly([[-123.372, 48.420], [-123.370, 48.420], [-123.370, 48.422], [-123.372, 48.422], [-123.372, 48.420]]),
+    _poly([[-123.370, 48.420], [-123.368, 48.420], [-123.368, 48.422], [-123.370, 48.422], [-123.370, 48.420]]),
+]
+
+
+def test_parcel_shaped_cells_when_parcels_available():
+    subs, imperv_map, diag = delineate_catchbasin_subcatchments(
+        NETWORK, CATCHBASINS, _GRID_PARCELS, BUILDINGS, AOI)
+    assert diag["method"] == "catchbasin+parcel/building (parcel-shaped)"  # shape from real parcels
+    assert len(subs) >= 2
+    for s in subs:
+        assert s.outlet_node in {"J1", "J2"}
+        assert s.area_ha > 0 and s.polygon is not None
