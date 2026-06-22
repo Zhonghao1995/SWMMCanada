@@ -24,6 +24,8 @@ datastore. Supported real-network cities:
 | Victoria, BC | explicit node IDs | catch-basin + parcel/building | 0 errors, continuity −0.05% |
 | Ottawa, ON | inferred from geometry | catch-basin + land cover | 0 errors, flow routing −5% |
 
+📊 **[Full validation, figures & EPA SWMM continuity → RESULTS.md](RESULTS.md)**
+
 ## Data sources (Canadian open data, free / Open Government Licence)
 
 | Data | Source | Interface |
