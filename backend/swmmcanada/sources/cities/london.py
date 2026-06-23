@@ -1,11 +1,18 @@
-"""City of Victoria storm-drain adapter: fetch + network assembly + subcatchments.
+"""City of London (Ontario) storm-sewer adapter: fetch + network assembly + subcatchments.
 
-Victoria publishes EXPLICIT pipe topology (Upstream/DownstreamNodeID joined to point layers by
-``AssetID``). This adapter resolves each main's endpoint coordinates (with a polyline fallback
-for ~10% dangling refs) and hands canonical pipes to the shared ``cities.base`` assembler. It
-also fetches catch basins + parcels + buildings for the ADR 0005 subcatchment method (UTM 10N).
-The build target is circular-only, so pipes map to an equivalent circular diameter; the original
-``CrossSectionShape`` is kept in diagnostics. See ``tests/fixtures/victoria/README.md``.
+London publishes EXPLICIT pipe topology: a pipe's ``UpstreamID``/``DownstreamID`` (e.g. ``8G24``)
+match a node's ``GIS_FeatureKey``. A referenced node can live in any of three layers — Manholes(2),
+Sewer Other Nodes(3) or Sewer Outfalls(4) — so this adapter harvests the referenced ids and fetches
+each layer ``GIS_FeatureKey IN (...)`` (mirroring Victoria's AssetID join). Endpoint coordinates are
+resolved from those node points, with a polyline-vertex fallback for the (~1.5%) dangling refs, before
+handing canonical pipes to the shared ``cities.base`` assembler.
+
+Outfalls are detected by membership in the outfall layer (NOT an id prefix). Manhole ``LidElevation``
+gives node ground (for max-depth); outfall ``PipeInvert`` is usually 0/unpopulated, so outfall inverts
+are gap-filled from connected pipe ends by the assembler. The build target is circular-only, so each
+pipe maps to the city's ``Diameter`` (mm) as an equivalent circular diameter; the original ``PipeShape``
+is kept in diagnostics. London land layers (catch basins / parcels / buildings) feed the ADR 0005
+subcatchment method (UTM 17N). See ``tests/fixtures/london/README.md``.
 """
 from __future__ import annotations
 
@@ -19,19 +26,23 @@ from swmmcanada.sources.cities.base import (  # re-exported for callers
 )
 
 Coord = Tuple[float, float]
-_VICTORIA_CRS = "EPSG:32610"
+LONDON_CRS = "EPSG:32617"
 
-# --- ArcGIS layers (see fixtures/victoria/README.md) ----------------------------
-BASE = "https://maps.victoria.ca/server/rest/services/OpenData/OpenData_StormDrain/MapServer"
-MAINS, MANHOLES, FITTINGS, OUTFALLS, CATCHBASINS = 10, 4, 3, 5, 1
-LAND_BASE = "https://maps.victoria.ca/server/rest/services/OpenData/OpenData_Land/MapServer"
-LAND_PARCELS, LAND_BUILDINGS = 5, 1            # Parcels (Folio based), Buildings
-_PREFIX_LAYER = {"DMH": MANHOLES, "DFG": FITTINGS, "DOF": OUTFALLS}
+# --- ArcGIS layers (see fixtures/london/README.md) ------------------------------
+BASE = "https://maps.london.ca/server/rest/services/OpenData/OpenData_Environment/MapServer"
+CATCHBASINS, MANHOLES, OTHER_NODES, OUTFALLS, PIPES = 1, 2, 3, 4, 5
+LAND_BASE = "https://maps.london.ca/server/rest/services/OpenData/OpenData_BaseMaps/MapServer"
+LAND_BUILDINGS, LAND_PARCELS = 3, 53          # Buildings, Parcels
+_NODE_LAYERS = (MANHOLES, OTHER_NODES, OUTFALLS)
 _PAGE_SIZE, _ID_CHUNK = 1000, 80
 
+# London material codes that the shared table keys differently; normalise before lookup so
+# steel/clay/brick get their real Manning's n instead of falling through to the default.
+_MATERIAL_ALIASES = {"VIT": "VITC", "BRCK": "BR", "ST": "STL"}
 
-# The thin GET-as-JSON client now lives in cities.base (Phase 0); keep the name as an alias.
-VicMapClient = base.ArcGISClient
+
+# The thin GET-as-JSON client lives in cities.base (Phase 0); keep a city-named alias.
+LondonMapClient = base.ArcGISClient
 
 
 # --- fetch ----------------------------------------------------------------------
@@ -39,28 +50,31 @@ def _payload_features(payload: dict) -> list:
     return (payload or {}).get("features") or []
 
 
-def fetch_victoria_storm(bbox, *, client=None) -> dict:
+def fetch_london_storm(bbox, *, client=None) -> dict:
     """Storm network intersecting ``bbox`` (EPSG:4326 tuple, or object with ``.bbox``):
-    STM mains by envelope, then referenced nodes BY AssetID. Returns
-    ``{"mains", "manholes", "fittings", "outfalls"}`` (lists of GeoJSON Features)."""
+    STM pipes by envelope, then referenced nodes BY GIS_FeatureKey from the manhole /
+    other-node / outfall layers. Returns
+    ``{"mains", "manholes", "other_nodes", "outfalls"}`` (lists of GeoJSON Features)."""
     if hasattr(bbox, "bbox"):
         bbox = bbox.bbox
-    client = client or VicMapClient()
+    client = client or LondonMapClient()
     mains = _fetch_mains(bbox, client)
-    by_layer = _node_ids_by_layer(mains)
-    result = {"mains": mains, "manholes": [], "fittings": [], "outfalls": []}
-    for layer, key in {MANHOLES: "manholes", FITTINGS: "fittings", OUTFALLS: "outfalls"}.items():
-        result[key] = _fetch_nodes_by_assetid(layer, by_layer.get(layer, []), client)
-    return result
+    node_ids = _referenced_node_ids(mains)
+    return {
+        "mains": mains,
+        "manholes": _fetch_nodes_by_key(MANHOLES, node_ids, client),
+        "other_nodes": _fetch_nodes_by_key(OTHER_NODES, node_ids, client),
+        "outfalls": _fetch_nodes_by_key(OUTFALLS, node_ids, client),
+    }
 
 
 def _fetch_mains(bbox, client) -> list:
     min_lon, min_lat, max_lon, max_lat = bbox
-    url = f"{BASE}/{MAINS}/query"
+    url = f"{BASE}/{PIPES}/query"
     features, offset = [], 0
     while True:
         params = {
-            "where": "WaterType='STM'", "geometry": f"{min_lon},{min_lat},{max_lon},{max_lat}",
+            "where": "FlowType='STM'", "geometry": f"{min_lon},{min_lat},{max_lon},{max_lat}",
             "geometryType": "esriGeometryEnvelope", "inSR": 4326,
             "spatialRel": "esriSpatialRelIntersects", "outFields": "*", "returnGeometry": "true",
             "outSR": 4326, "f": "geojson", "resultOffset": offset, "resultRecordCount": _PAGE_SIZE,
@@ -74,37 +88,32 @@ def _fetch_mains(bbox, client) -> list:
     return features
 
 
-def _node_ids_by_layer(mains) -> dict:
-    by_layer = {MANHOLES: [], FITTINGS: [], OUTFALLS: []}
-    seen = set()
+def _referenced_node_ids(mains) -> List[str]:
+    ids, seen = [], set()
     for feat in mains:
         props = feat.get("properties") or {}
-        for key in ("UpstreamNodeID", "DownstreamNodeID"):
+        for key in ("UpstreamID", "DownstreamID"):
             node_id = props.get(key)
-            if not node_id:
-                continue
-            layer = _PREFIX_LAYER.get(node_id[:3])
-            if layer is None or node_id in seen:
-                continue
-            seen.add(node_id)
-            by_layer[layer].append(node_id)
-    return by_layer
+            if node_id and node_id not in seen:
+                seen.add(node_id)
+                ids.append(node_id)
+    return ids
 
 
-def _fetch_nodes_by_assetid(layer: int, asset_ids, client) -> list:
-    if not asset_ids:
+def _fetch_nodes_by_key(layer: int, node_ids, client) -> list:
+    if not node_ids:
         return []
     url = f"{BASE}/{layer}/query"
     features, seen = [], set()
-    for start in range(0, len(asset_ids), _ID_CHUNK):
-        in_list = ",".join(f"'{a}'" for a in asset_ids[start: start + _ID_CHUNK])
-        params = {"where": f"AssetID IN ({in_list})", "outFields": "*", "returnGeometry": "true",
-                  "outSR": 4326, "f": "geojson"}
+    for start in range(0, len(node_ids), _ID_CHUNK):
+        in_list = ",".join(f"'{a}'" for a in node_ids[start: start + _ID_CHUNK])
+        params = {"where": f"GIS_FeatureKey IN ({in_list})", "outFields": "*",
+                  "returnGeometry": "true", "outSR": 4326, "f": "geojson"}
         for feat in _payload_features(client.get_json(url, params)):
-            asset_id = (feat.get("properties") or {}).get("AssetID")
-            if asset_id in seen:
+            key = (feat.get("properties") or {}).get("GIS_FeatureKey")
+            if key in seen:
                 continue
-            seen.add(asset_id)
+            seen.add(key)
             features.append(feat)
     return features
 
@@ -129,12 +138,12 @@ def _fetch_layer_bbox(base_url, layer, bbox, client, where="1=1") -> list:
     return features
 
 
-def fetch_victoria_land(bbox, *, client=None) -> dict:
-    """Drainage inlets + land units for the parcel/building subcatchment method:
+def fetch_london_land(bbox, *, client=None) -> dict:
+    """Catch basins + land units for the parcel/building subcatchment method:
     ``{"catchbasins", "parcels", "buildings"}`` (lists of GeoJSON Features)."""
     if hasattr(bbox, "bbox"):
         bbox = bbox.bbox
-    client = client or VicMapClient()
+    client = client or LondonMapClient()
     return {
         "catchbasins": _fetch_layer_bbox(BASE, CATCHBASINS, bbox, client),
         "parcels": _fetch_layer_bbox(LAND_BASE, LAND_PARCELS, bbox, client),
@@ -144,7 +153,7 @@ def fetch_victoria_land(bbox, *, client=None) -> dict:
 
 # --- network assembly -----------------------------------------------------------
 @dataclass(frozen=True)
-class VictoriaNetworkConfig:
+class LondonNetworkConfig:
     min_slope: float = 0.001
     default_max_depth_m: float = 2.0
     default_roughness: float = 0.013
@@ -154,13 +163,17 @@ class VictoriaNetworkConfig:
 
 
 @dataclass(frozen=True)
-class VictoriaNetworkResult:
+class LondonNetworkResult:
     network: "base.NetworkIn"
     diagnostics: dict = field(default_factory=dict)
 
 
-def material_roughness(material: Optional[str], config: VictoriaNetworkConfig) -> float:
-    return _material_roughness(material, config.default_roughness)
+def material_roughness(material: Optional[str], config: LondonNetworkConfig) -> float:
+    """Manning's n for a London material code. Normalises London's code spellings
+    (VIT/BRCK/ST) to the shared table's keys, then delegates to cities.base."""
+    code = str(material).strip().upper() if material else material
+    code = _MATERIAL_ALIASES.get(code, code)
+    return _material_roughness(code, config.default_roughness)
 
 
 def _features(layer) -> List[dict]:
@@ -185,8 +198,8 @@ def _num(value) -> Optional[float]:
 
 
 def resolve_endpoints(up_id, dn_id, line, coords, *, snap_tol):
-    """Resolve a main's endpoint coordinates. Known node ids take their point-layer
-    coordinate; a dangling id snaps to the far polyline vertex; both dangling ->
+    """Resolve a pipe's endpoint coordinates from the node layers. A known node id takes its
+    point coordinate; a dangling id snaps to the far polyline vertex; both dangling ->
     line[0]=upstream, line[-1]=downstream. Returns (up_xy, dn_xy, n_dangling)."""
     p0 = tuple(line[0][:2]) if line else None
     p1 = tuple(line[-1][:2]) if line else None
@@ -225,8 +238,8 @@ _GEOM_TOL_DEG = 0.0005  # ~40 m: a pipe endpoint must lie near its own polyline
 
 
 def _fix_endpoints(up_xy, dn_xy, line, tol=_GEOM_TOL_DEG):
-    """A node coordinate joined by AssetID can be grossly wrong vs the pipe's own geometry
-    (city data inconsistency / mis-located node), which draws the pipe as a long stray line.
+    """A node coordinate joined by GIS_FeatureKey can be grossly wrong vs the pipe's own
+    geometry (data inconsistency / mis-located node), drawing the pipe as a long stray line.
     If an endpoint is far from BOTH polyline ends, move it onto the polyline (the end the
     other endpoint isn't at). Returns (up_xy, dn_xy, n_fixed)."""
     if not line or len(line) < 2:
@@ -242,36 +255,51 @@ def _fix_endpoints(up_xy, dn_xy, line, tol=_GEOM_TOL_DEG):
     return up_xy, dn_xy, 0
 
 
-def build_victoria_network(
-    mains, manholes, fittings, outfalls, *, config: VictoriaNetworkConfig = VictoriaNetworkConfig(),
-) -> VictoriaNetworkResult:
+def build_london_network(
+    mains, manholes, other_nodes, outfalls, *,
+    config: LondonNetworkConfig = LondonNetworkConfig(),
+) -> LondonNetworkResult:
     mains = _features(mains)
-    node_feats = _features(manholes) + _features(fittings) + _features(outfalls)
+    manhole_feats = _features(manholes)
+    other_feats = _features(other_nodes)
+    outfall_feats = _features(outfalls)
 
+    # node coordinate index (GIS_FeatureKey -> (lon,lat)) across all three node layers,
+    # plus ground elevations from manhole LidElevation.
     coords: Dict[str, Coord] = {}
     ground: List[Tuple[Coord, float]] = []
-    for f in node_feats:
-        aid = (f.get("properties") or {}).get("AssetID")
+    for f in manhole_feats + other_feats + outfall_feats:
+        key = (f.get("properties") or {}).get("GIS_FeatureKey")
         xy = (f.get("geometry") or {}).get("coordinates")
-        if aid and xy and len(xy) >= 2:
-            coords[aid] = (xy[0], xy[1])
-            elev = _num((f.get("properties") or {}).get("Elevation"))
-            if elev is not None:
+        if key and xy and len(xy) >= 2:
+            coords[key] = (xy[0], xy[1])
+            elev = _num((f.get("properties") or {}).get("LidElevation"))
+            if elev is not None and elev > 0:
                 ground.append(((xy[0], xy[1]), elev))
-    outfall_points = [coords[aid] for aid in coords if str(aid).upper().startswith("DOF")]
-    label_points = [(xy, _sanitize(aid)) for aid, xy in coords.items()]
+
+    # outfalls identified by membership in the outfall LAYER (not by id prefix)
+    outfall_keys = {
+        (f.get("properties") or {}).get("GIS_FeatureKey")
+        for f in outfall_feats if (f.get("properties") or {}).get("GIS_FeatureKey")
+    }
+    outfall_points = [coords[k] for k in outfall_keys if k in coords]
+    label_points = [(xy, _sanitize(key)) for key, xy in coords.items()]
 
     pipes: List[base.RawPipe] = []
     shape_hist: Dict[str, int] = {}
+    inv_type_hist: Dict[str, int] = {}
     n_dangling = n_geom_fixed = 0
     for m in mains:
         p = m.get("properties") or {}
         geom = m.get("geometry") or {}
-        shape = p.get("CrossSectionShape") or "UNK"
+        shape = p.get("PipeShape") or "UNK"
         shape_hist[shape] = shape_hist.get(shape, 0) + 1
+        for k in ("UpstreamInventoryType", "DownstreamInventoryType"):
+            t = p.get(k) or "UNK"
+            inv_type_hist[t] = inv_type_hist.get(t, 0) + 1
         line = geom.get("coordinates") or []
         up_xy, dn_xy, dangling = resolve_endpoints(
-            p.get("UpstreamNodeID"), p.get("DownstreamNodeID"), line, coords, snap_tol=config.snap_tol)
+            p.get("UpstreamID"), p.get("DownstreamID"), line, coords, snap_tol=config.snap_tol)
         if up_xy is None or dn_xy is None:
             continue
         up_xy, dn_xy, gf = _fix_endpoints(up_xy, dn_xy, line)
@@ -279,12 +307,12 @@ def build_victoria_network(
         n_geom_fixed += gf
         diameter_mm = _num(p.get("Diameter"))
         pipes.append(base.RawPipe(
-            name=_sanitize(p.get("AssetID") or p.get("InfrastructureID") or p.get("OBJECTID")),
+            name=_sanitize(p.get("GIS_FeatureKey") or p.get("OBJECTID")),
             end_a=up_xy, end_b=dn_xy,
             inv_a=_num(p.get("UpstreamInvert")), inv_b=_num(p.get("DownstreamInvert")),
             diameter_m=(diameter_mm / 1000.0) if diameter_mm and diameter_mm > 0 else None,
             roughness_n=material_roughness(p.get("Material"), config),
-            length_m=_num(p.get("Length_2D")),
+            length_m=_num(p.get("Length")),
         ))
 
     result = base.assemble_network(
@@ -295,12 +323,13 @@ def build_victoria_network(
             outfall_link_len_m=config.outfall_link_len_m),
     )
     diagnostics = {**result.diagnostics, "n_dangling_nodes": n_dangling,
-                   "n_geom_fixed": n_geom_fixed, "shape_histogram": shape_hist, "n_mains_in": len(mains)}
-    return VictoriaNetworkResult(network=result.network, diagnostics=diagnostics)
+                   "n_geom_fixed": n_geom_fixed, "shape_histogram": shape_hist,
+                   "inventory_type_histogram": inv_type_hist, "n_mains_in": len(mains)}
+    return LondonNetworkResult(network=result.network, diagnostics=diagnostics)
 
 
-# --- subcatchments (catch-basin + parcel/building, ADR 0005; UTM 10N) ------------
+# --- subcatchments (catch-basin + parcel/building, ADR 0005; UTM 17N) ------------
 def delineate_catchbasin_subcatchments(network, catchbasins, parcels, buildings, aoi,
                                        *, config: CatchbasinSubcatchmentConfig = CatchbasinSubcatchmentConfig()):
     return base.delineate_catchbasin_subcatchments(
-        network, catchbasins, parcels, buildings, aoi, crs=_VICTORIA_CRS, config=config)
+        network, catchbasins, parcels, buildings, aoi, crs=LONDON_CRS, config=config)

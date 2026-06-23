@@ -28,6 +28,7 @@ dist/
 # or tests/build dir, which are real source).
 /build/
 frontend/build/
+backend/artifacts/
 
 # Large geo / data artifacts (track sources, not bulk downloads)
 data/raw/

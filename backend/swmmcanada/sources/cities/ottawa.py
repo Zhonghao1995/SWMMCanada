@@ -6,8 +6,6 @@ Ottawa publishes inverts (INVERT_UPSTREAM/DOWNSTREAM), WIDTH, MATERIAL, LENGTHAS
 published, so subcatchments seed on catch basins (Storm Inlets, layer 21) and take
 imperviousness from land cover (no parcel/building override).
 """
-import requests
-
 from swmmcanada.sources.cities import base
 
 ARC = "https://maps.ottawa.ca/arcgis/rest/services/WastewaterInfrastructure/MapServer"
@@ -18,30 +16,8 @@ OTTAWA_CRS = "EPSG:32618"  # UTM 18N (metric ops)
 _PAGE = 1000
 
 
-class OttawaClient:
-    def __init__(self, timeout: float = 60.0):
-        self.timeout = timeout
-
-    def get_json(self, url: str, params: dict) -> dict:
-        resp = requests.get(url, params=params, timeout=self.timeout)
-        resp.raise_for_status()
-        return resp.json()
-
-
-def _esri_to_geojson(feat: dict) -> dict:
-    """Ottawa's MapServer only serves Esri JSON (f=geojson returns empty). Convert a feature's
-    `paths`/`x,y`/`rings` geometry to a GeoJSON Feature so cities.base can consume it."""
-    geom = feat.get("geometry") or {}
-    g = None
-    if "paths" in geom and geom["paths"]:
-        paths = geom["paths"]
-        g = {"type": "MultiLineString", "coordinates": paths} if len(paths) > 1 \
-            else {"type": "LineString", "coordinates": paths[0]}
-    elif "x" in geom and "y" in geom:
-        g = {"type": "Point", "coordinates": [geom["x"], geom["y"]]}
-    elif "rings" in geom and geom["rings"]:
-        g = {"type": "Polygon", "coordinates": geom["rings"]}
-    return {"type": "Feature", "properties": feat.get("attributes") or {}, "geometry": g}
+# Shared ArcGIS client + Esri-JSON->GeoJSON converter now live in cities.base (Phase 0).
+OttawaClient = base.ArcGISClient
 
 
 def _fetch(layer, bbox, client, where="1=1") -> list:
@@ -57,7 +33,7 @@ def _fetch(layer, bbox, client, where="1=1") -> list:
         }
         payload = client.get_json(url, params)
         page = payload.get("features") or []
-        features.extend(_esri_to_geojson(f) for f in page)
+        features.extend(base.esri_to_geojson(f) for f in page)
         if not payload.get("exceededTransferLimit") or not page:
             break
         offset += len(page)
