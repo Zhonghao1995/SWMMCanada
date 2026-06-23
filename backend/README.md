@@ -20,11 +20,27 @@ swmmcanada/
 
 ## Dev
 
+The `.venv` is git-ignored and **per-machine** — create one on *each* computer you work
+from (Mac, Windows, …); it does not sync via git. Use Python **3.11** explicitly: a bare
+`python3` may be too old (e.g. macOS system Python is 3.9, below the 3.10 minimum).
+
+**macOS / Linux**
+
 ```bash
 python3.11 -m venv .venv && .venv/bin/pip install -e ".[dev]"
 .venv/bin/pytest                                   # offline tests (network mocked)
 .venv/bin/uvicorn swmmcanada.api.main:app --port 8000
 ```
 
-Requires **Python 3.11+**. Key dependencies: geopandas, shapely, pyproj, rasterio, networkx,
-swmm-api, swmmio, xarray, netcdf4, fastapi (full list in `pyproject.toml`).
+**Windows** (PowerShell / cmd — note `Scripts\` instead of `bin/`)
+
+```bat
+py -3.11 -m venv .venv
+.venv\Scripts\pip install -e ".[dev]"
+.venv\Scripts\pytest
+.venv\Scripts\uvicorn swmmcanada.api.main:app --port 8000
+```
+
+Requires **Python 3.10+** (CI and the project venvs use 3.11). Key dependencies: geopandas,
+shapely, pyproj, rasterio, networkx, swmm-api, swmmio, xarray, netcdf4, fastapi (full list
+in `pyproject.toml`).
