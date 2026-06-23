@@ -22,8 +22,8 @@ from swmmcanada.acquire.climate import (
 from swmmcanada.acquire.dem import acquire_dem
 from swmmcanada.acquire.landcover import acquire_landcover
 from swmmcanada.acquire.soil import acquire_soil
-from swmmcanada.build import BuildConfig, BuildResult, build_model
-from swmmcanada.datastore import write_datastore
+from swmmcanada.build import BuildConfig, BuildResult
+from swmmcanada.datastore import build_from_datastore, write_datastore
 from swmmcanada.derive.core import derive_parameters
 from swmmcanada.network import synthesise_network
 from swmmcanada.network.synth import NetworkConfig, _build_subcatchments
@@ -135,25 +135,11 @@ def build_from_aoi(
 
     _r("BUILDING", 90)
     config = BuildConfig(out_dir=ws, start=start, end=end, coordinate_crs=_utm_crs_for(aoi))
-    result = build_model(
-        network=synth.network,
-        subcatchments=subcatchments,
-        rain=rain,
-        config=config,
-        evaporation=evaporation,
-        observed=None,
-    )
 
-    # Map preview: GeoJSON of the model geometry for the frontend's layers.
-    preview_dir = ws / "preview"
-    preview_dir.mkdir(exist_ok=True)
-    (preview_dir / "network.geojson").write_text(
-        json.dumps(network_geojson(synth.network, subcatchments))
-    )
-
-    # Model-ready datastore: the framework-independent, citable hand-off artifact
-    # (GeoPackage network + netCDF forcing + JSON config/provenance). Additive — it ships
-    # alongside model.inp inside the result package (ADR 0003 / spec 11).
+    # Model-ready datastore is the PRIMARY build path (ADR 0007): write the framework-
+    # independent, citable artifact (GeoPackage network + netCDF forcing + JSON config/
+    # provenance), then build model.inp by reading it back, so the shipped model is — by
+    # construction — produced from the datastore (ADR 0003 / spec 11).
     write_datastore(
         ws / "datastore",
         network=synth.network,
@@ -176,6 +162,14 @@ def build_from_aoi(
             "physical_basis": method.physical_basis,
             "confidence": method.confidence,
         },
+    )
+    result = build_from_datastore(ws / "datastore", ws)
+
+    # Map preview: GeoJSON of the model geometry for the frontend's layers.
+    preview_dir = ws / "preview"
+    preview_dir.mkdir(exist_ok=True)
+    (preview_dir / "network.geojson").write_text(
+        json.dumps(network_geojson(synth.network, subcatchments))
     )
 
     _r("DONE", 100)
@@ -253,13 +247,8 @@ def _build_real_network(
     _r("BUILDING", 90)
     config = BuildConfig(out_dir=ws, start=start, end=end, title=f"SWMMCanada ({city} real network)",
                          coordinate_crs=sub_crs)
-    result = build_model(network=network, subcatchments=subcatchments, rain=rain, config=config,
-                         evaporation=evaporation, observed=None)
 
-    preview_dir = ws / "preview"
-    preview_dir.mkdir(exist_ok=True)
-    (preview_dir / "network.geojson").write_text(json.dumps(network_geojson(network, subcatchments)))
-
+    # Datastore is the PRIMARY build path (ADR 0007): write it, then build the .inp from it.
     write_datastore(
         ws / "datastore", network=network, subcatchments=subcatchments, rain=rain, config=config,
         evaporation=evaporation, temperature=temperature,
@@ -273,6 +262,12 @@ def _build_real_network(
             "start": start.isoformat(), "end": end.isoformat(),
         },
     )
+    result = build_from_datastore(ws / "datastore", ws)
+
+    preview_dir = ws / "preview"
+    preview_dir.mkdir(exist_ok=True)
+    (preview_dir / "network.geojson").write_text(json.dumps(network_geojson(network, subcatchments)))
+
     _r("DONE", 100)
     return result
 

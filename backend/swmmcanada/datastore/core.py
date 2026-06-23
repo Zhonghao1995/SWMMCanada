@@ -222,6 +222,7 @@ def _write_datastore_json(path: Path, config: BuildConfig, provenance: dict) -> 
             "routing_model": config.routing_model,
             "rain_interval_s": int(config.rain_interval.total_seconds()),
             "rain_format": config.rain_format,
+            "coordinate_crs": config.coordinate_crs,
         },
         "provenance": provenance,
         "files": list(schema.DATA_FILES),
@@ -400,4 +401,5 @@ def _build_config_from_dict(cfg: dict, out_dir) -> BuildConfig:
         routing_model=cfg.get("routing_model", "DYNWAVE"),
         rain_interval=timedelta(seconds=int(cfg.get("rain_interval_s", 3600))),
         rain_format=cfg.get("rain_format", "VOLUME"),
+        coordinate_crs=cfg.get("coordinate_crs"),
     )

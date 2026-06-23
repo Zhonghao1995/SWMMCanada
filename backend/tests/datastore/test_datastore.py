@@ -380,3 +380,51 @@ def test_build_from_datastore_uses_stored_config(tmp_path):
     assert manifest["flow_units"] == "CMS"
     assert manifest["start_date"] == "2022-06-01"
     assert manifest["end_date"] == "2022-06-02"
+
+
+# --------------------------------------------------------------------------- #
+# 4. coordinate_crs round-trips and is honored by the build (ADR 0007)
+# --------------------------------------------------------------------------- #
+def test_coordinate_crs_roundtrips(tmp_path):
+    """coordinate_crs is display-only but must survive write→read, else a model built FROM
+    the datastore renders in lon/lat instead of the city's projected CRS (ADR 0007)."""
+    import json
+    from dataclasses import replace
+
+    out = tmp_path / "ds"
+    config = replace(_config(tmp_path / "build"), coordinate_crs="EPSG:32618")
+    write_datastore(
+        out, network=_network(), subcatchments=_subcatchments(), rain=_rain(),
+        config=config, provenance=_provenance(),
+    )
+    assert json.loads((out / "datastore.json").read_text())["config"]["coordinate_crs"] == "EPSG:32618"
+    assert read_datastore(out).config["coordinate_crs"] == "EPSG:32618"
+
+
+def test_coordinate_crs_absent_roundtrips_to_none(tmp_path):
+    """No coordinate_crs set → reconstructs as None (the .inp keeps lon/lat as-is)."""
+    out = tmp_path / "ds"
+    write_datastore(
+        out, network=_network(), subcatchments=_subcatchments(), rain=_rain(),
+        config=_config(tmp_path / "build"), provenance=_provenance(),
+    )
+    assert read_datastore(out).config.get("coordinate_crs") is None
+
+
+def test_build_from_datastore_applies_coordinate_crs(tmp_path):
+    """The .inp built FROM the datastore honors coordinate_crs (ADR 0007): node display
+    coordinates are projected to the metric CRS, not left as lon/lat (~-75.7)."""
+    from dataclasses import replace
+
+    from swmm_api import read_inp_file
+    from swmm_api.input_file import SEC
+
+    ds_dir = tmp_path / "ds"
+    config = replace(_config(tmp_path / "ignored"), coordinate_crs="EPSG:32618")
+    write_datastore(
+        ds_dir, network=_network(), subcatchments=_subcatchments(), rain=_rain(),
+        config=config, provenance=_provenance(),
+    )
+    result = build_from_datastore(ds_dir, tmp_path / "model")
+    coords = read_inp_file(str(result.inp_path))[SEC.COORDINATES]
+    assert coords["J1"].x > 1000  # projected metres (UTM 18N ≈ 4.5e5), not lon/lat
