@@ -82,7 +82,7 @@ A `model.inp` that runs in EPA SWMM 5.2, a `datastore/` package you can share (G
 
 ## More
 
-- **[ASSUMPTIONS.md](ASSUMPTIONS.md)** — what's real vs derived vs assumed in a model, layer by layer (and why models are uncalibrated). Read this before trusting a result.
+- **[ASSUMPTIONS.md](ASSUMPTIONS.md)** — what's real, derived, or approximated in a model, layer by layer. Most of it is grounded in real data; the approximations (and the uncalibrated caveat) are called out.
 - **[DATA.md](DATA.md)** — every dataset used, with links, licences, and how each one is used (ECCC rainfall, NRCan terrain & land cover, SoilGrids soil, OpenStreetMap, and the seven municipal storm networks). All free / open.
 - **[RESULTS.md](RESULTS.md)** — real-city validation, figures, and the EPA SWMM numbers.
 - **Built with** Python (geopandas, swmm-api, FastAPI) and React + MapLibre. Full dependency lists in `backend/pyproject.toml` and `frontend/package.json`.
