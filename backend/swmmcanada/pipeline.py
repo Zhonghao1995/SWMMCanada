@@ -28,6 +28,12 @@ from swmmcanada.derive.core import derive_parameters
 from swmmcanada.network import synthesise_network
 from swmmcanada.network.synth import NetworkConfig, _build_subcatchments
 from swmmcanada.preview import network_geojson
+from swmmcanada.validate import (
+    MethodDescriptor,
+    SubcatchmentValidationError,
+    validate_model,
+)
+from swmmcanada.validate import schema as vschema
 from swmmcanada.sources.climate_geomet import GeoMetClient
 from swmmcanada.sources.dem_nrcan import NRCanDemSource
 from swmmcanada.sources.landcover_nrcan import NRCanLandcoverSource
@@ -42,6 +48,27 @@ from swmmcanada.sources.cities.victoria import (
     fetch_victoria_land,
     fetch_victoria_storm,
 )
+
+
+def _method_descriptor(sub_diag: Optional[dict]) -> MethodDescriptor:
+    """Map a delineation's diagnostics to the honest controlled-vocabulary method label."""
+    method = (sub_diag or {}).get("method", "")
+    if "parcel-shaped" in method:
+        return MethodDescriptor("catchbasin_parcel", "nearest inlet service area", "medium")
+    if "voronoi-shaped" in method:
+        return MethodDescriptor("catchbasin_voronoi", "nearest inlet service area", "low")
+    return MethodDescriptor("junction_voronoi", "nearest node service area", "low")
+
+
+def _validate_or_raise(network, subcatchments, aoi, method: MethodDescriptor, ws: Path):
+    """Validate the subcatchment model, always write validation.json into the package, and
+    raise (stopping the build) if any error-severity check fails — so no untrusted .inp ships."""
+    report = validate_model(network, subcatchments, aoi, method=method)
+    (Path(ws) / vschema.VALIDATION_JSON).write_text(json.dumps(report.to_dict(), indent=2))
+    if not report.ok:
+        detail = "; ".join(f"{c.id}: {c.message}" for c in report.errors)
+        raise SubcatchmentValidationError(f"Subcatchment validation failed — {detail}")
+    return report
 
 
 def _utm_crs_for(aoi) -> str:
@@ -102,6 +129,10 @@ def build_from_aoi(
     evaporation = to_evaporation_series(series)
     temperature = to_temperature_series(series)
 
+    _r("VALIDATING", 85)
+    method = MethodDescriptor("junction_voronoi", "nearest node service area", "low")
+    _validate_or_raise(synth.network, subcatchments, aoi, method, ws)
+
     _r("BUILDING", 90)
     config = BuildConfig(out_dir=ws, start=start, end=end, coordinate_crs=_utm_crs_for(aoi))
     result = build_model(
@@ -141,6 +172,9 @@ def build_from_aoi(
                 "climate": type(climate_client).__name__,
                 "streets": "OSM",
             },
+            "subcatchment_method": method.method,
+            "physical_basis": method.physical_basis,
+            "confidence": method.confidence,
         },
     )
 
@@ -212,6 +246,10 @@ def _build_real_network(
     evaporation = to_evaporation_series(series)
     temperature = to_temperature_series(series)
 
+    _r("VALIDATING", 85)
+    method = _method_descriptor(sub_diag)
+    _validate_or_raise(network, subcatchments, aoi, method, ws)
+
     _r("BUILDING", 90)
     config = BuildConfig(out_dir=ws, start=start, end=end, title=f"SWMMCanada ({city} real network)",
                          coordinate_crs=sub_crs)
@@ -229,6 +267,9 @@ def _build_real_network(
             "aoi_bbox": list(aoi.bbox), "crs": "EPSG:4326", "city": city,
             "network_source": network_source, "network_diagnostics": netres.diagnostics,
             "subcatchment_diagnostics": sub_diag,
+            "subcatchment_method": method.method,
+            "physical_basis": method.physical_basis,
+            "confidence": method.confidence,
             "start": start.isoformat(), "end": end.isoformat(),
         },
     )

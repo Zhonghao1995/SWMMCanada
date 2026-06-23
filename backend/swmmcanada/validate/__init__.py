@@ -4,6 +4,7 @@ the package (validation.json), the CLI, and the frontend."""
 from swmmcanada.validate.core import (
     CheckResult,
     MethodDescriptor,
+    SubcatchmentValidationError,
     ValidationReport,
     validate_model,
 )
@@ -13,4 +14,5 @@ __all__ = [
     "ValidationReport",
     "CheckResult",
     "MethodDescriptor",
+    "SubcatchmentValidationError",
 ]

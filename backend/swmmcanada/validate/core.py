@@ -17,6 +17,11 @@ from swmmcanada.validate import checks as C
 from swmmcanada.validate import schema
 
 
+class SubcatchmentValidationError(Exception):
+    """Raised when the subcatchment model fails validation (>=1 error-severity check).
+    The pipeline writes validation.json, then raises this so no untrusted .inp is emitted."""
+
+
 @dataclass(frozen=True)
 class CheckResult:
     id: str

@@ -19,6 +19,7 @@ class Task:
     error: Optional[str] = None
     result_zip: Optional[Path] = None
     preview: Optional[Path] = None
+    validation: Optional[Path] = None   # validation.json (set on success AND failure)
     mode: Optional[str] = None          # which build pathway (real-network city vs synthesized)
 
 
@@ -50,9 +51,13 @@ def run_task(task_id: str, aoi, start: date, end: date, store: TaskStore, workdi
     """Run the pipeline for one task, updating the store. Never raises — failures become
     FAILED state. This is the single worker entrypoint (local thread or hosted container)."""
     store.update(task_id, state="RUNNING", progress_pct=5, stage="VALIDATING", mode=mode)
-    try:
-        ws = Path(workdir) / task_id
+    ws = Path(workdir) / task_id
 
+    def _validation() -> Optional[Path]:
+        v = ws / "validation.json"      # written by the pipeline before the build, even on error
+        return v if v.exists() else None
+
+    try:
         def report(stage: str, pct: int) -> None:
             store.update(task_id, stage=stage, progress_pct=int(pct))
 
@@ -62,9 +67,10 @@ def run_task(task_id: str, aoi, start: date, end: date, store: TaskStore, workdi
         store.update(
             task_id, state="SUCCEEDED", progress_pct=100, stage="DONE",
             result_zip=zip_path, preview=(preview if preview.exists() else None),
+            validation=_validation(),
         )
     except Exception as exc:  # noqa: BLE001 — surface any failure as FAILED state
-        store.update(task_id, state="FAILED", error=str(exc))
+        store.update(task_id, state="FAILED", error=str(exc), validation=_validation())
 
 
 def _zip_package(result, ws: Path) -> Path:

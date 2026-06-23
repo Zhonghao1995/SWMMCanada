@@ -27,6 +27,7 @@ def fake_pipeline(aoi, start, end, ws, *, report=None, **kwargs):
     ws.mkdir(parents=True, exist_ok=True)
     (ws / "model.inp").write_text("[TITLE]\nfake model\n")
     (ws / "manifest.json").write_text("{}")
+    (ws / "validation.json").write_text(json.dumps({"ok": True, "subcatchment_method": "junction_voronoi"}))
     if report:
         report("BUILDING", 90)
     return BuildResult(
@@ -95,6 +96,14 @@ def test_unknown_task_404(tmp_path):
     client = _client(tmp_path)
     assert client.get("/api/v1/tasks/nope").status_code == 404
     assert client.get("/api/v1/tasks/nope/result").status_code == 404
+
+
+def test_validation_endpoint_serves_report(tmp_path):
+    client = _client(tmp_path)
+    task_id = _submit(client, OTTAWA).json()["task_id"]
+    r = client.get(f"/api/v1/tasks/{task_id}/validation")
+    assert r.status_code == 200
+    assert r.json()["ok"] is True and r.json()["subcatchment_method"] == "junction_voronoi"
 
 
 def test_healthz(tmp_path):
