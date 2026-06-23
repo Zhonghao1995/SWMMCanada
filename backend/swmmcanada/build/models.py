@@ -63,3 +63,18 @@ class RainfallSeries:
     precip_mm: List[float]
     gage_name: str = "RG1"
     ts_name: str = "rain"
+
+
+@dataclass(frozen=True)
+class EvaporationSeries:
+    """Daily potential evaporation forcing (SWMM `[EVAPORATION] TIMESERIES`)."""
+    timestamps: List[datetime]
+    evap_mm_day: List[float]
+    ts_name: str = "evap"
+
+
+@dataclass(frozen=True)
+class TemperatureSeries:
+    """Daily mean air temperature — the climate-forcing record (and Hargreaves' input)."""
+    timestamps: List[datetime]
+    tmean_c: List[float]

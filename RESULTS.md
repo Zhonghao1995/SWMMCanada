@@ -20,6 +20,24 @@ end-to-end on two Canadian cities with structurally different data.
 Both models were built automatically from open data (real pipes + ECCC rainfall + NRCan
 terrain + land cover + soil) and executed in EPA SWMM 5.2.4 with **zero errors**.
 
+## Climate forcing — rainfall + evaporation
+
+The `.inp` carries the full climate-forcing package, all from the **nearest usable ECCC
+climate station** to the AOI:
+
+- **Rainfall** → SWMM `[TIMESERIES]`/`[RAINGAGES]`. Station selection prefers the nearest
+  station *with usable precipitation*, skipping discontinued / precip-less stations; trace
+  (`'T'`) days and residual gaps resolve to 0 mm so the raingage never goes NaN.
+- **Evaporation** → SWMM `[EVAPORATION] TIMESERIES`. A daily potential-evaporation series
+  derived by **Hargreaves (FAO-56)** from the station's `tmin`/`tmax`/`tmean`. Sub-freezing
+  days clamp to 0; days missing the diurnal range are skipped.
+- **Datastore** — rainfall, temperature, and evaporation are written together to
+  `forcing.nc` (CF-1.8), with the evaporation method recorded in `datastore.json` provenance.
+
+A live central-Ottawa build (1.7 km², 1–7 Jun 2022) runs clean in EPA SWMM 5.2 with
+evaporation active: **0 errors**, runoff/flow-routing continuity −0.024 % / −0.044 %,
+≈4.1 mm/day mean evaporation.
+
 ## Victoria — fidelity to the source data
 
 Victoria publishes storm mains with explicit topology, invert elevations, diameters and

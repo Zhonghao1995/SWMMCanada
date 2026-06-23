@@ -17,6 +17,7 @@ from swmm_api.input_file.sections import (
     Conduit,
     Coordinate,
     CrossSection,
+    EvaporationSection,
     Infiltration,
     InfiltrationCurveNumber,
     Junction,
@@ -31,7 +32,7 @@ from swmm_api.input_file.sections import (
 )
 
 from swmmcanada.build.config import BuildConfig
-from swmmcanada.build.models import NetworkIn, RainfallSeries, SubcatchmentIn
+from swmmcanada.build.models import EvaporationSeries, NetworkIn, RainfallSeries, SubcatchmentIn
 
 
 @dataclass(frozen=True)
@@ -73,7 +74,11 @@ def _coord_projector(crs):
 
 
 def assemble_inp(
-    network: NetworkIn, subcatchments: List[SubcatchmentIn], rain: RainfallSeries, config: BuildConfig
+    network: NetworkIn,
+    subcatchments: List[SubcatchmentIn],
+    rain: RainfallSeries,
+    config: BuildConfig,
+    evaporation: Optional[EvaporationSeries] = None,
 ) -> SwmmInput:
     inp = SwmmInput()
 
@@ -148,6 +153,16 @@ def assemble_inp(
 
     series = Timeseries.create_section()
     series.add_obj(TimeseriesData(rain.ts_name, list(zip(rain.timestamps, rain.precip_mm))))
+
+    # Evaporation forcing (optional): a daily PET timeseries (mm/day) referenced by
+    # [EVAPORATION] TIMESERIES. Absent → SWMM assumes evaporation = 0.
+    if evaporation is not None and evaporation.timestamps:
+        series.add_obj(
+            TimeseriesData(evaporation.ts_name, list(zip(evaporation.timestamps, evaporation.evap_mm_day)))
+        )
+        evap_sec = EvaporationSection()
+        evap_sec["TIMESERIES"] = evaporation.ts_name
+        inp[SEC.EVAPORATION] = evap_sec
     inp[SEC.TIMESERIES] = series
 
     project = _coord_projector(config.coordinate_crs)
@@ -192,13 +207,14 @@ def build_model(
     subcatchments: List[SubcatchmentIn],
     rain: RainfallSeries,
     config: BuildConfig,
+    evaporation: Optional[EvaporationSeries] = None,
     observed=None,
     aoi=None,
 ) -> BuildResult:
     out_dir = Path(config.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    inp = assemble_inp(network, subcatchments, rain, config)
+    inp = assemble_inp(network, subcatchments, rain, config, evaporation=evaporation)
     inp_path = out_dir / "model.inp"
     inp.write_file(str(inp_path))
 
@@ -215,6 +231,7 @@ def build_model(
         "n_outfalls": len(network.outfalls),
         "n_conduits": len(network.conduits),
         "n_subcatchments": len(subcatchments),
+        "has_evaporation": str(SEC.EVAPORATION) in sections,
         "sections": sections,
         "inp_sha256": hashlib.sha256(inp_path.read_bytes()).hexdigest(),
     }

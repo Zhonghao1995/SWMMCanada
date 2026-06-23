@@ -13,7 +13,7 @@ from typing import List, Optional, Protocol, Tuple
 import pandas as pd
 from shapely.geometry import Point
 
-from swmmcanada.build.models import RainfallSeries
+from swmmcanada.build.models import EvaporationSeries, RainfallSeries, TemperatureSeries
 
 BASE = "https://api.weather.gc.ca"
 
@@ -155,6 +155,91 @@ def to_rainfall_series(series: ClimateSeries, *, gage_name: str = "RG1", ts_name
         gage_name=gage_name,
         ts_name=ts_name,
     )
+
+
+def to_temperature_series(series: ClimateSeries) -> Optional[TemperatureSeries]:
+    """Daily mean air temperature from the station frame (the forcing-record temperature).
+
+    Missing tmean falls back to (tmin+tmax)/2. Days with no usable temperature are dropped;
+    returns None if the station has no usable temperature at all."""
+    df = series.frame
+    times: List = []
+    tmean: List[float] = []
+    for t, tmn, tmx, tme in zip(df["timestamp_local"], df["tmin_c"], df["tmax_c"], df["tmean_c"]):
+        m = _tmean_or_midpoint(_f(tmn), _f(tmx), _f(tme))
+        if m is None:
+            continue
+        times.append(t.to_pydatetime())
+        tmean.append(m)
+    if not times:
+        return None
+    return TemperatureSeries(timestamps=times, tmean_c=tmean)
+
+
+def to_evaporation_series(
+    series: ClimateSeries, *, lat: Optional[float] = None, ts_name: str = "evap"
+) -> Optional[EvaporationSeries]:
+    """Derive a daily potential-evaporation series (Hargreaves) from the station's
+    tmin/tmax/tmean, for the SWMM `[EVAPORATION]` forcing (CONTEXT glossary).
+
+    `lat` defaults to the station latitude (the temperatures' own location). Days missing
+    tmin or tmax are skipped (Hargreaves needs the diurnal range); returns None if no day is
+    usable or no latitude is available — the caller then omits `[EVAPORATION]` (evap = 0)."""
+    if lat is None:
+        lat = series.station.lat if series.station is not None else float("nan")
+    if math.isnan(lat):
+        return None
+
+    df = series.frame
+    times: List = []
+    evap: List[float] = []
+    for t, tmn, tmx, tme in zip(df["timestamp_local"], df["tmin_c"], df["tmax_c"], df["tmean_c"]):
+        tmin, tmax = _f(tmn), _f(tmx)
+        if math.isnan(tmin) or math.isnan(tmax):
+            continue  # Hargreaves needs the diurnal range; SWMM holds the prior day's rate
+        tmean = _tmean_or_midpoint(tmin, tmax, _f(tme))
+        ts = t.to_pydatetime()
+        times.append(ts)
+        evap.append(hargreaves_pet(tmin, tmax, tmean, lat, ts.timetuple().tm_yday))
+    if not times:
+        return None
+    return EvaporationSeries(timestamps=times, evap_mm_day=evap, ts_name=ts_name)
+
+
+# --- Hargreaves potential evaporation (FAO-56) -------------------------------
+
+_SOLAR_CONSTANT = 0.0820  # Gsc, MJ m-2 min-1
+_MJ_TO_MM = 0.408         # 1 MJ m-2 day-1 of radiation ≈ 0.408 mm/day of evaporation
+
+
+def extraterrestrial_radiation(lat_deg: float, doy: int) -> float:
+    """Daily extraterrestrial radiation Ra (MJ m-2 day-1), FAO-56 eq. 21. `doy` = day of year."""
+    phi = math.radians(lat_deg)
+    dr = 1.0 + 0.033 * math.cos(2.0 * math.pi * doy / 365.0)            # inverse Earth–Sun distance
+    decl = 0.409 * math.sin(2.0 * math.pi * doy / 365.0 - 1.39)         # solar declination
+    # Sunset hour angle; clamp the argument for polar day/night (|tan φ · tan δ| > 1).
+    ws = math.acos(max(-1.0, min(1.0, -math.tan(phi) * math.tan(decl))))
+    return (24.0 * 60.0 / math.pi) * _SOLAR_CONSTANT * dr * (
+        ws * math.sin(phi) * math.sin(decl) + math.cos(phi) * math.cos(decl) * math.sin(ws)
+    )
+
+
+def hargreaves_pet(tmin: float, tmax: float, tmean: float, lat_deg: float, doy: int) -> float:
+    """Hargreaves potential evaporation (mm/day): 0.0023·Ra·(Tmean+17.8)·√(Tmax−Tmin),
+    with Ra expressed in mm/day. Clamped to ≥ 0 (a sub-freezing Tmean would otherwise go
+    negative); the diurnal range is clamped to ≥ 0 against bad tmax<tmin records."""
+    ra_mm = _MJ_TO_MM * extraterrestrial_radiation(lat_deg, doy)
+    pet = 0.0023 * ra_mm * (tmean + 17.8) * math.sqrt(max(0.0, tmax - tmin))
+    return max(0.0, pet)
+
+
+def _tmean_or_midpoint(tmin: float, tmax: float, tmean: float) -> Optional[float]:
+    """Mean temperature, falling back to the tmin/tmax midpoint; None if unavailable."""
+    if not math.isnan(tmean):
+        return tmean
+    if not math.isnan(tmin) and not math.isnan(tmax):
+        return (tmin + tmax) / 2.0
+    return None
 
 
 # --- internals ---------------------------------------------------------------

@@ -7,6 +7,7 @@ import pytest
 from swmmcanada.build import (
     BuildConfig,
     ConduitIn,
+    EvaporationSeries,
     JunctionIn,
     NetworkIn,
     OutfallIn,
@@ -73,6 +74,34 @@ def test_referential_integrity(tmp_path):
         assert s.rain_gage in inp[SEC.RAINGAGES].keys()  # raingage exists
     for g in inp[SEC.RAINGAGES].values():
         assert g.timeseries in inp[SEC.TIMESERIES].keys()  # raingage series exists
+
+
+def _tiny_evap():
+    return EvaporationSeries(
+        timestamps=[datetime(2020, 6, 1), datetime(2020, 6, 2)], evap_mm_day=[3.7, 3.9]
+    )
+
+
+def test_evaporation_section_written_and_references_series(tmp_path):
+    from swmm_api import read_inp_file
+    from swmm_api.input_file import SEC
+
+    res = build_model(
+        network=_tiny_network(), subcatchments=_tiny_subs(), rain=_tiny_rain(),
+        config=_config(tmp_path), evaporation=_tiny_evap(),
+    )
+    assert "EVAPORATION" in res.sections_written
+    inp = read_inp_file(str(res.inp_path))
+    assert inp[SEC.EVAPORATION]["TIMESERIES"] == "evap"        # references the evap series
+    assert "evap" in inp[SEC.TIMESERIES].keys()                 # which exists alongside rain
+    assert "rain" in inp[SEC.TIMESERIES].keys()
+
+
+def test_evaporation_absent_by_default(tmp_path):
+    res = build_model(
+        network=_tiny_network(), subcatchments=_tiny_subs(), rain=_tiny_rain(), config=_config(tmp_path)
+    )
+    assert "EVAPORATION" not in res.sections_written            # omitted → SWMM evap = 0
 
 
 def test_oversized_is_not_this_modules_concern(tmp_path):

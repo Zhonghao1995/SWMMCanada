@@ -28,6 +28,7 @@ from swmmcanada.build import (
     BuildConfig,
     BuildResult,
     ConduitIn,
+    EvaporationSeries,
     FlowUnits,
     InfiltrationModel,
     JunctionIn,
@@ -35,6 +36,7 @@ from swmmcanada.build import (
     OutfallIn,
     RainfallSeries,
     SubcatchmentIn,
+    TemperatureSeries,
     build_model,
 )
 from swmmcanada.datastore import schema
@@ -49,6 +51,7 @@ class ModelReadyDatastore:
     rain: RainfallSeries
     config: dict
     provenance: dict
+    evaporation: Optional[EvaporationSeries] = None
 
 
 # --------------------------------------------------------------------------- #
@@ -62,20 +65,43 @@ def write_datastore(
     rain: RainfallSeries,
     config: BuildConfig,
     provenance: Optional[dict] = None,
+    evaporation: Optional[EvaporationSeries] = None,
+    temperature: Optional[TemperatureSeries] = None,
 ) -> Path:
     """Write the three carrier files into ``out_dir`` and return ``out_dir``.
 
     ``config.out_dir`` is deliberately NOT persisted: it is a runtime build target, not
-    part of the shareable/citable artifact.
+    part of the shareable/citable artifact. ``evaporation``/``temperature`` are optional
+    forcing series stored alongside rainfall in ``forcing.nc``.
     """
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
 
     _write_network_gpkg(out / schema.NETWORK_GPKG, network, subcatchments)
-    _write_forcing_nc(out / schema.FORCING_NC, rain)
-    _write_datastore_json(out / schema.DATASTORE_JSON, config, provenance or {})
+    _write_forcing_nc(out / schema.FORCING_NC, rain, evaporation, temperature)
+    _write_datastore_json(
+        out / schema.DATASTORE_JSON, config, _with_forcing_provenance(provenance or {}, evaporation, temperature)
+    )
 
     return out
+
+
+def _with_forcing_provenance(
+    provenance: dict, evaporation: Optional[EvaporationSeries], temperature: Optional[TemperatureSeries]
+) -> dict:
+    """Record which forcing variables forcing.nc carries, and how evaporation was derived,
+    so the datastore self-describes its forcing regardless of the caller."""
+    variables = [schema.PRECIP_VAR]
+    if temperature is not None and temperature.timestamps:
+        variables.append(schema.TEMP_VAR)
+    if evaporation is not None and evaporation.timestamps:
+        variables.append(schema.EVAP_VAR)
+    if len(variables) == 1:  # rainfall only — nothing new to describe
+        return provenance
+    forcing = {"variables": variables}
+    if schema.EVAP_VAR in variables:
+        forcing["evaporation_method"] = "Hargreaves (FAO-56) from daily tmin/tmax/tmean"
+    return {**provenance, "forcing": forcing}
 
 
 def _node_coords(network: NetworkIn) -> dict:
@@ -149,7 +175,12 @@ def _write_network_gpkg(
     subs.to_file(path, layer=schema.LAYER_SUBCATCHMENTS, driver="GPKG")
 
 
-def _write_forcing_nc(path: Path, rain: RainfallSeries) -> None:
+def _write_forcing_nc(
+    path: Path,
+    rain: RainfallSeries,
+    evaporation: Optional[EvaporationSeries] = None,
+    temperature: Optional[TemperatureSeries] = None,
+) -> None:
     ds = xr.Dataset(
         {schema.PRECIP_VAR: (schema.TIME_DIM, [float(p) for p in rain.precip_mm])},
         coords={schema.TIME_DIM: pd.to_datetime(list(rain.timestamps))},
@@ -158,6 +189,20 @@ def _write_forcing_nc(path: Path, rain: RainfallSeries) -> None:
     ds[schema.PRECIP_VAR].attrs["long_name"] = "precipitation depth per interval"
     ds[schema.PRECIP_VAR].attrs["gage_name"] = rain.gage_name
     ds[schema.PRECIP_VAR].attrs["ts_name"] = rain.ts_name
+
+    if temperature is not None and temperature.timestamps:
+        ds[schema.TEMP_VAR] = (schema.TEMP_TIME_DIM, [float(t) for t in temperature.tmean_c])
+        ds = ds.assign_coords({schema.TEMP_TIME_DIM: pd.to_datetime(list(temperature.timestamps))})
+        ds[schema.TEMP_VAR].attrs["units"] = schema.TEMP_UNITS
+        ds[schema.TEMP_VAR].attrs["long_name"] = "daily mean air temperature"
+
+    if evaporation is not None and evaporation.timestamps:
+        ds[schema.EVAP_VAR] = (schema.EVAP_TIME_DIM, [float(e) for e in evaporation.evap_mm_day])
+        ds = ds.assign_coords({schema.EVAP_TIME_DIM: pd.to_datetime(list(evaporation.timestamps))})
+        ds[schema.EVAP_VAR].attrs["units"] = schema.EVAP_UNITS
+        ds[schema.EVAP_VAR].attrs["long_name"] = "potential evaporation (Hargreaves)"
+        ds[schema.EVAP_VAR].attrs["ts_name"] = evaporation.ts_name
+
     ds.attrs["Conventions"] = schema.CF_CONVENTIONS
     ds.to_netcdf(path)
     ds.close()
@@ -193,6 +238,7 @@ def read_datastore(path) -> ModelReadyDatastore:
     network = _read_network(base / schema.NETWORK_GPKG)
     subcatchments = _read_subcatchments(base / schema.NETWORK_GPKG)
     rain = _read_forcing(base / schema.FORCING_NC)
+    evaporation = _read_evaporation(base / schema.FORCING_NC)
     config, provenance = _read_datastore_json(base / schema.DATASTORE_JSON)
     return ModelReadyDatastore(
         network=network,
@@ -200,6 +246,7 @@ def read_datastore(path) -> ModelReadyDatastore:
         rain=rain,
         config=config,
         provenance=provenance,
+        evaporation=evaporation,
     )
 
 
@@ -299,6 +346,22 @@ def _read_forcing(nc: Path) -> RainfallSeries:
     )
 
 
+def _read_evaporation(nc: Path) -> Optional[EvaporationSeries]:
+    """Reconstruct the evaporation forcing if forcing.nc carries it, else None. (Temperature
+    is written for the record but not reconstructed — nothing in build consumes it yet.)"""
+    ds = xr.open_dataset(nc)
+    try:
+        if schema.EVAP_VAR not in ds:
+            return None
+        times = pd.to_datetime(ds[schema.EVAP_TIME_DIM].values)
+        timestamps = [pd.Timestamp(t).to_pydatetime() for t in times]
+        evap = [float(v) for v in ds[schema.EVAP_VAR].values]
+        ts_name = str(ds[schema.EVAP_VAR].attrs.get("ts_name", "evap"))
+    finally:
+        ds.close()
+    return EvaporationSeries(timestamps=timestamps, evap_mm_day=evap, ts_name=ts_name)
+
+
 def _read_datastore_json(path: Path):
     import json
 
@@ -320,6 +383,7 @@ def build_from_datastore(datastore_dir, out_dir) -> BuildResult:
         subcatchments=ds.subcatchments,
         rain=ds.rain,
         config=config,
+        evaporation=ds.evaporation,
     )
 
 
