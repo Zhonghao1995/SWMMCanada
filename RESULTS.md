@@ -38,6 +38,31 @@ A live central-Ottawa build (1.7 km², 1–7 Jun 2022) runs clean in EPA SWMM 5.
 evaporation active: **0 errors**, runoff/flow-routing continuity −0.024 % / −0.044 %,
 ≈4.1 mm/day mean evaporation.
 
+## Model validation
+
+Every generated model ships a `validation.json` (beside `model.inp`) and is checked before
+the `.inp` is emitted. Checks are two-tier: an **Error** means the subcatchment model is
+structurally untrustworthy and the build is **stopped**; a **Warning** means it runs but is
+approximate. "Correct" means the subcatchments tile the AOI with valid geometry and route to
+real outlets:
+
+| Check | Tier (default) | What it catches |
+|---|---|---|
+| outlet present / exists | Error | a subcatchment with no outlet, or one not in the network |
+| positive area / valid geometry | Error | zero-area or self-intersecting cells |
+| AOI coverage | Warning >2%, Error >10% | **blank holes** the AOI that no subcatchment covers |
+| overlap | Warning >0.5%, Error >5% | double-counted runoff area |
+| AOI containment | Warning >2%, Error (cell >50% out) | cells spilling outside the drawn AOI |
+| area conservation | Warning >5% | Σ cell area drifting from the AOI area |
+| node coverage | Warning | network nodes in no subcatchment |
+| outlet distance | Warning (>20 m / >50 m tiers) | inlets routed to an implausibly far manhole |
+| shape plausibility | Warning | extreme-size or very elongated cells |
+
+The report also records an honest delineation **method** (`catchbasin_parcel` /
+`catchbasin_voronoi` / `junction_voronoi`), its physical basis (a *nearest-inlet / -node
+service area*, **not** a DEM-derived watershed), and a confidence level — so an approximate
+service area is never mistaken for a true hydrological catchment.
+
 ## Victoria — fidelity to the source data
 
 Victoria publishes storm mains with explicit topology, invert elevations, diameters and
