@@ -63,6 +63,40 @@ def test_parcel_shaped_cells_when_parcels_available():
         assert s.area_ha > 0 and s.polygon is not None
 
 
+# --- coverage fix (PRD #3): a catch basin assigned diagonal (disconnected) parcels --------
+# 4 quadrant parcels tile the AOI; the 3 catch basins are placed so the centre one wins both
+# diagonal corners (bl + tr), which share only a point -> its union is two pieces. The old
+# "keep largest polygon" rule dropped one piece, leaving a blank hole. The fix keeps both.
+_QUAD = [
+    _poly([[-123.372, 48.418], [-123.370, 48.418], [-123.370, 48.420], [-123.372, 48.420], [-123.372, 48.418]]),
+    _poly([[-123.370, 48.418], [-123.368, 48.418], [-123.368, 48.420], [-123.370, 48.420], [-123.370, 48.418]]),
+    _poly([[-123.372, 48.420], [-123.370, 48.420], [-123.370, 48.422], [-123.372, 48.422], [-123.372, 48.420]]),
+    _poly([[-123.370, 48.420], [-123.368, 48.420], [-123.368, 48.422], [-123.370, 48.422], [-123.370, 48.420]]),
+]
+_CBS_DIAG = [_pt("A", -123.370, 48.420), _pt("B", -123.3688, 48.4188), _pt("C", -123.3712, 48.4212)]
+
+
+def _coverage(subs):
+    from shapely.geometry import Polygon
+    from shapely.ops import unary_union
+    union = unary_union([Polygon(s.polygon) for s in subs if s.polygon])
+    return union.intersection(AOI.geometry).area / AOI.geometry.area
+
+
+def test_disconnected_catchbasin_pieces_are_kept_no_blank():
+    from swmmcanada.validate import MethodDescriptor, validate_model
+
+    subs, _, _ = delineate_catchbasin_subcatchments(NETWORK, _CBS_DIAG, _QUAD, [], AOI)
+    assert _coverage(subs) > 0.98                       # no blank holes (the Victoria symptom)
+    assert len(subs) >= 4                               # the diagonal basin split into 2 pieces
+    for s in subs:
+        assert s.outlet_node in {"J1", "J2"} and s.area_ha > 0
+    # ...and the validation layer's blank-holes check now passes on this model (the acceptance proof)
+    report = validate_model(NETWORK, subs, AOI,
+                            method=MethodDescriptor("catchbasin_parcel", "nearest inlet service area", "medium"))
+    assert next(c for c in report.checks if c.id == "aoi_coverage").passed
+
+
 def test_real_network_delineation_is_deterministic():
     """Same inputs delineated twice -> identical subcatchments (reproducible builds; PRD #2)."""
     a, _, _ = delineate_catchbasin_subcatchments(NETWORK, CATCHBASINS, _GRID_PARCELS, BUILDINGS, AOI)

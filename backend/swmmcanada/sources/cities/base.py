@@ -265,26 +265,28 @@ class _Cell:
         return [(float(x), float(y)) for x, y in self.polygon_4326.exterior.coords]
 
 
-def _largest_polygon(geom):
-    """Keep the main polygon (drop scattered slivers) so each cell is one contiguous shape."""
+def _all_polygons(geom):
+    """All polygon pieces of a geometry (PRD #3). A catch basin's service area can come out
+    disconnected (diagonal parcels, an island parcel); keeping every piece — instead of only
+    the largest — means the dropped land no longer becomes a blank hole. Each piece becomes
+    its own subcatchment draining to the same inlet."""
     from shapely.geometry import Polygon
     if geom is None or geom.is_empty:
-        return None
+        return []
     if isinstance(geom, Polygon):
-        polys = [geom]
-    elif hasattr(geom, "geoms"):
-        polys = [g for g in geom.geoms if g.geom_type == "Polygon"]
-    else:
-        polys = []
-    return max(polys, key=lambda g: g.area, default=None)
+        return [geom]
+    if hasattr(geom, "geoms"):
+        return [g for g in geom.geoms if g.geom_type == "Polygon" and not g.is_empty]
+    return []
 
 
 def _parcel_cells(seeds, parcels, aoi, crs):
     """Subcatchment shapes that follow REAL parcel/lot lines: each parcel is assigned whole to
     its nearest catch basin and dissolved (so cell edges fall on lot lines, not a Voronoi
     bisector); street right-of-way (AOI minus parcels) is split between catch basins by their
-    Voronoi cells. Returns {cb_id: _Cell}, or {} when no usable parcels — the caller then falls
-    back to Voronoi (e.g. Ottawa, which publishes no parcels)."""
+    Voronoi cells. Returns {cb_id: [_Cell, ...]} (contiguous pieces per basin — disconnected
+    land is kept, not dropped), or {} when no usable parcels — the caller then falls back to
+    Voronoi (e.g. Ottawa, which publishes no parcels)."""
     import geopandas as gpd
     import numpy as np
     from pyproj import Transformer
@@ -336,10 +338,9 @@ def _parcel_cells(seeds, parcels, aoi, crs):
             parts.append(slivers[cb_id])
         if not parts:
             continue
-        poly_m = _largest_polygon(unary_union(parts))
-        if poly_m is None or poly_m.area <= 0:
-            continue
-        cells[cb_id] = _Cell(area_m2=poly_m.area, polygon_4326=shp_transform(to_ll, poly_m))
+        pieces = [p for p in _all_polygons(unary_union(parts)) if p.area > 0]
+        if pieces:
+            cells[cb_id] = [_Cell(area_m2=p.area, polygon_4326=shp_transform(to_ll, p)) for p in pieces]
     return cells
 
 
@@ -371,10 +372,10 @@ def delineate_catchbasin_subcatchments(
     if len(seeds) < 2:
         return [], {}, {"reason": "insufficient catch basins", "n_catchbasins": len(seeds)}
 
-    cells = _parcel_cells(seeds, parcels, aoi, crs)        # shape follows real parcels (Victoria)
+    cells = _parcel_cells(seeds, parcels, aoi, crs)        # {cb_id: [pieces]} along real parcels
     shape_method = "parcel" if cells else "voronoi"        # fall back to Voronoi where none exist
-    if not cells:
-        cells = delineate_subcatchments(seeds, aoi.geometry)
+    if not cells:                                          # Voronoi gives one cell per seed
+        cells = {cb_id: [c] for cb_id, c in delineate_subcatchments(seeds, aoi.geometry).items()}
     jnames = [j.name for j in network.junctions]
     jcoord = np.array([[j.x, j.y] for j in network.junctions])
 
@@ -399,29 +400,32 @@ def delineate_catchbasin_subcatchments(
         idx = sidx.query(poly, predicate="intersects")
         return unary_union(g.geometry.iloc[idx].tolist()) if len(idx) else None
 
-    subs, imperv_map, n_parcel = [], {}, 0
-    for cb_id, cell in cells.items():
-        if cell.area_m2 <= 0:
-            continue
-        poly_m = shp_transform(to_m, cell.polygon_4326)
-        name = f"S_{cb_id}"
-        imperv = config.max_imperv
-        par_local = query_union(par, par_sidx, poly_m)
-        if par_local is not None and not par_local.is_empty:
-            roofs = query_union(bld, bld_sidx, poly_m)
-            roofs = roofs.intersection(poly_m) if roofs is not None else None
-            roads = poly_m.difference(par_local)
-            parts = [g for g in (roofs, roads) if g is not None and not g.is_empty]
-            area = unary_union(parts).area if parts else 0.0
-            imperv = max(config.min_imperv, min(config.max_imperv, 100.0 * area / cell.area_m2))
-            imperv_map[name] = imperv
-            n_parcel += 1
-        subs.append(SubcatchmentIn(
-            name=name, outlet_node=nearest_node(seeds[cb_id]), area_ha=cell.area_m2 / 1e4,
-            pct_imperv=imperv, width_m=math.sqrt(cell.area_m2),
-            pct_slope=config.default_slope_pct, polygon=cell.exterior))
+    subs, imperv_map, n_parcel, n_split = [], {}, 0, 0
+    for cb_id, piece_list in cells.items():
+        for i, cell in enumerate(piece_list):
+            if cell.area_m2 <= 0:
+                continue
+            poly_m = shp_transform(to_m, cell.polygon_4326)
+            name = f"S_{cb_id}" if i == 0 else f"S_{cb_id}__{i + 1}"   # split pieces -> same outlet
+            if i > 0:
+                n_split += 1
+            imperv = config.max_imperv
+            par_local = query_union(par, par_sidx, poly_m)
+            if par_local is not None and not par_local.is_empty:
+                roofs = query_union(bld, bld_sidx, poly_m)
+                roofs = roofs.intersection(poly_m) if roofs is not None else None
+                roads = poly_m.difference(par_local)
+                parts = [g for g in (roofs, roads) if g is not None and not g.is_empty]
+                area = unary_union(parts).area if parts else 0.0
+                imperv = max(config.min_imperv, min(config.max_imperv, 100.0 * area / cell.area_m2))
+                imperv_map[name] = imperv
+                n_parcel += 1
+            subs.append(SubcatchmentIn(
+                name=name, outlet_node=nearest_node(seeds[cb_id]), area_ha=cell.area_m2 / 1e4,
+                pct_imperv=imperv, width_m=math.sqrt(cell.area_m2),
+                pct_slope=config.default_slope_pct, polygon=cell.exterior))
     diag = {"method": f"catchbasin+parcel/building ({shape_method}-shaped)", "n_catchbasins": len(seeds),
-            "n_subcatchments": len(subs), "n_parcel_based_imperv": n_parcel,
+            "n_subcatchments": len(subs), "n_split_pieces": n_split, "n_parcel_based_imperv": n_parcel,
             "n_parcels": int(len(par)), "n_buildings": int(len(bld)),
             "mean_imperv": round(sum(imperv_map.values()) / len(imperv_map), 1) if imperv_map else None}
     return subs, imperv_map, diag
