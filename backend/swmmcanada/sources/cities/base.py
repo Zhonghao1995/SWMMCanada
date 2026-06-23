@@ -18,9 +18,43 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
+import requests
+
 from swmmcanada.build.models import ConduitIn, JunctionIn, NetworkIn, OutfallIn
 
 Coord = Tuple[float, float]
+
+
+# --- shared ArcGIS fetch helpers (lifted so every city adapter reuses one copy) ----------
+class ArcGISClient:
+    """Thin ArcGIS REST client: GET a query URL with params, return parsed JSON. Shared by
+    every city adapter (Victoria/Ottawa keep their old client names as aliases)."""
+
+    def __init__(self, timeout: float = 60.0):
+        self.timeout = timeout
+
+    def get_json(self, url: str, params: dict) -> dict:
+        resp = requests.get(url, params=params, timeout=self.timeout)
+        resp.raise_for_status()
+        return resp.json()
+
+
+def esri_to_geojson(feat: dict) -> dict:
+    """Convert an Esri-JSON feature's geometry to a GeoJSON Feature. Some ArcGIS MapServers
+    only serve Esri JSON (``f=geojson`` returns empty); geometry-inferred adapters that hit
+    those services convert with this. ``paths``->Line/MultiLineString, ``x,y``->Point,
+    ``rings``->Polygon; empty geometry -> None."""
+    geom = feat.get("geometry") or {}
+    g = None
+    if geom.get("paths"):
+        paths = geom["paths"]
+        g = ({"type": "MultiLineString", "coordinates": paths} if len(paths) > 1
+             else {"type": "LineString", "coordinates": paths[0]})
+    elif "x" in geom and "y" in geom:
+        g = {"type": "Point", "coordinates": [geom["x"], geom["y"]]}
+    elif geom.get("rings"):
+        g = {"type": "Polygon", "coordinates": geom["rings"]}
+    return {"type": "Feature", "properties": feat.get("attributes") or {}, "geometry": g}
 
 
 # --- material -> Manning's n (uppercase code match; default when unknown) ----------------

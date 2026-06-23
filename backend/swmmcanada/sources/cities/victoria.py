@@ -12,8 +12,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
-import requests
-
 from swmmcanada.sources.cities import base
 from swmmcanada.sources.cities.base import (  # re-exported for callers
     CatchbasinSubcatchmentConfig,
@@ -32,16 +30,8 @@ _PREFIX_LAYER = {"DMH": MANHOLES, "DFG": FITTINGS, "DOF": OUTFALLS}
 _PAGE_SIZE, _ID_CHUNK = 1000, 80
 
 
-class VicMapClient:
-    """Live ArcGIS client: thin GET-as-JSON wrapper (mirrors GeoMetClient)."""
-
-    def __init__(self, timeout: float = 60.0):
-        self.timeout = timeout
-
-    def get_json(self, url: str, params: dict) -> dict:
-        resp = requests.get(url, params=params, timeout=self.timeout)
-        resp.raise_for_status()
-        return resp.json()
+# The thin GET-as-JSON client now lives in cities.base (Phase 0); keep the name as an alias.
+VicMapClient = base.ArcGISClient
 
 
 # --- fetch ----------------------------------------------------------------------
