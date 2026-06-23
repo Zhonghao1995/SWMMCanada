@@ -26,3 +26,5 @@ def test_end_to_end_real_aoi(tmp_path):
     assert res.inp_path.exists()                       # build already round-tripped it
     for sec in ("JUNCTIONS", "OUTFALLS", "CONDUITS", "SUBCATCHMENTS", "RAINGAGES", "TIMESERIES"):
         assert sec in res.sections_written
+    # Real ECCC stations carry temperature → evaporation is derived (Hargreaves) and written.
+    assert "EVAPORATION" in res.sections_written

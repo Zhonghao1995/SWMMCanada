@@ -19,6 +19,7 @@ import pytest
 from swmmcanada.build import (
     BuildConfig,
     ConduitIn,
+    EvaporationSeries,
     FlowUnits,
     InfiltrationModel,
     JunctionIn,
@@ -26,6 +27,7 @@ from swmmcanada.build import (
     OutfallIn,
     RainfallSeries,
     SubcatchmentIn,
+    TemperatureSeries,
 )
 from swmmcanada.datastore import (
     ModelReadyDatastore,
@@ -95,6 +97,18 @@ def _config(out_dir) -> BuildConfig:
         routing_model="DYNWAVE",
         rain_interval=timedelta(hours=1),
         rain_format="VOLUME",
+    )
+
+
+def _evaporation() -> EvaporationSeries:
+    return EvaporationSeries(
+        timestamps=[datetime(2022, 6, 1), datetime(2022, 6, 2)], evap_mm_day=[3.7, 3.9]
+    )
+
+
+def _temperature() -> TemperatureSeries:
+    return TemperatureSeries(
+        timestamps=[datetime(2022, 6, 1), datetime(2022, 6, 2)], tmean_c=[13.0, 14.5]
     )
 
 
@@ -267,6 +281,55 @@ def test_roundtrip_config_and_provenance(tmp_path):
     assert ds.config["rain_interval_s"] == 3600
     assert ds.provenance["crs"] == "EPSG:4326"
     assert ds.provenance["sources"]["streets"] == "OSM"
+
+
+# --------------------------------------------------------------------------- #
+# 2b. Evaporation forcing round-trips through forcing.nc (issue #7)
+# --------------------------------------------------------------------------- #
+def test_evaporation_roundtrips_and_records_provenance(tmp_path):
+    import json
+
+    out = tmp_path / "ds"
+    write_datastore(
+        out, network=_network(), subcatchments=_subcatchments(), rain=_rain(),
+        config=_config(tmp_path / "build"), provenance=_provenance(),
+        evaporation=_evaporation(), temperature=_temperature(),
+    )
+    # No new carrier file — evaporation lives inside forcing.nc.
+    meta = json.loads((out / "datastore.json").read_text())
+    assert set(meta["files"]) == {"network.gpkg", "forcing.nc"}
+    assert schema_evap_in(meta)                                  # provenance self-describes forcing
+
+    ds = read_datastore(out)
+    assert ds.evaporation is not None
+    assert ds.evaporation.timestamps == _evaporation().timestamps
+    for g, e in zip(ds.evaporation.evap_mm_day, _evaporation().evap_mm_day):
+        assert g == pytest.approx(e, abs=1e-6)
+
+
+def schema_evap_in(meta: dict) -> bool:
+    forcing = meta["provenance"].get("forcing", {})
+    return "evaporation" in forcing.get("variables", []) and "evaporation_method" in forcing
+
+
+def test_no_evaporation_by_default_roundtrips_to_none(tmp_path):
+    out = tmp_path / "ds"
+    write_datastore(
+        out, network=_network(), subcatchments=_subcatchments(), rain=_rain(),
+        config=_config(tmp_path / "build"), provenance=_provenance(),
+    )
+    assert read_datastore(out).evaporation is None              # rain-only datastore
+
+
+def test_build_from_datastore_includes_evaporation(tmp_path):
+    ds_dir = tmp_path / "ds"
+    write_datastore(
+        ds_dir, network=_network(), subcatchments=_subcatchments(), rain=_rain(),
+        config=_config(tmp_path / "ignored"), provenance=_provenance(),
+        evaporation=_evaporation(), temperature=_temperature(),
+    )
+    result = build_from_datastore(ds_dir, tmp_path / "model")
+    assert "EVAPORATION" in result.sections_written            # datastore evap → SWMM model
 
 
 # --------------------------------------------------------------------------- #

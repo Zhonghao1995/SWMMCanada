@@ -8,11 +8,13 @@ from swmmcanada.build.assemble import (
 from swmmcanada.build.config import BuildConfig, FlowUnits, InfiltrationModel
 from swmmcanada.build.models import (
     ConduitIn,
+    EvaporationSeries,
     JunctionIn,
     NetworkIn,
     OutfallIn,
     RainfallSeries,
     SubcatchmentIn,
+    TemperatureSeries,
 )
 
 __all__ = [
@@ -30,4 +32,6 @@ __all__ = [
     "ConduitIn",
     "SubcatchmentIn",
     "RainfallSeries",
+    "EvaporationSeries",
+    "TemperatureSeries",
 ]

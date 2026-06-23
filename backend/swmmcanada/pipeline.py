@@ -13,7 +13,12 @@ from datetime import date
 from pathlib import Path
 from typing import Optional
 
-from swmmcanada.acquire.climate import fetch_climate, to_rainfall_series
+from swmmcanada.acquire.climate import (
+    fetch_climate,
+    to_evaporation_series,
+    to_rainfall_series,
+    to_temperature_series,
+)
 from swmmcanada.acquire.dem import acquire_dem
 from swmmcanada.acquire.landcover import acquire_landcover
 from swmmcanada.acquire.soil import acquire_soil
@@ -94,6 +99,8 @@ def build_from_aoi(
     if series is None:
         raise RuntimeError("No climate data available for this AOI/period.")
     rain = to_rainfall_series(series)
+    evaporation = to_evaporation_series(series)
+    temperature = to_temperature_series(series)
 
     _r("BUILDING", 90)
     config = BuildConfig(out_dir=ws, start=start, end=end, coordinate_crs=_utm_crs_for(aoi))
@@ -102,6 +109,7 @@ def build_from_aoi(
         subcatchments=subcatchments,
         rain=rain,
         config=config,
+        evaporation=evaporation,
         observed=None,
     )
 
@@ -121,6 +129,8 @@ def build_from_aoi(
         subcatchments=subcatchments,
         rain=rain,
         config=config,
+        evaporation=evaporation,
+        temperature=temperature,
         provenance={
             "aoi_bbox": list(aoi.bbox),
             "crs": "EPSG:4326",
@@ -199,11 +209,14 @@ def _build_real_network(
     if series is None:
         raise RuntimeError("No climate data available for this AOI/period.")
     rain = to_rainfall_series(series)
+    evaporation = to_evaporation_series(series)
+    temperature = to_temperature_series(series)
 
     _r("BUILDING", 90)
     config = BuildConfig(out_dir=ws, start=start, end=end, title=f"SWMMCanada ({city} real network)",
                          coordinate_crs=sub_crs)
-    result = build_model(network=network, subcatchments=subcatchments, rain=rain, config=config, observed=None)
+    result = build_model(network=network, subcatchments=subcatchments, rain=rain, config=config,
+                         evaporation=evaporation, observed=None)
 
     preview_dir = ws / "preview"
     preview_dir.mkdir(exist_ok=True)
@@ -211,6 +224,7 @@ def _build_real_network(
 
     write_datastore(
         ws / "datastore", network=network, subcatchments=subcatchments, rain=rain, config=config,
+        evaporation=evaporation, temperature=temperature,
         provenance={
             "aoi_bbox": list(aoi.bbox), "crs": "EPSG:4326", "city": city,
             "network_source": network_source, "network_diagnostics": netres.diagnostics,

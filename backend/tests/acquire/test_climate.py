@@ -1,12 +1,18 @@
 """TDD for acquire.climate (spec 02 §6): offline parse of recorded GeoMet fixtures."""
+import math
 from datetime import date, datetime
 
 from swmmcanada.acquire.climate import (
     ClimateResult,
     ClimateSeries,
+    ClimateStation,
+    extraterrestrial_radiation,
     fetch_climate,
+    hargreaves_pet,
     parse_daily,
+    to_evaporation_series,
     to_rainfall_series,
+    to_temperature_series,
 )
 from swmmcanada.geo import aoi_from_geojson
 
@@ -156,6 +162,28 @@ def test_fetch_climate_skips_precipless_station():
     assert res.series and bool(res.series[0].frame["precip_mm"].notna().any())
 
 
+# Two usable stations, both outside the AOI: the NEARER one must win (nearest-with-usable-precip).
+NEAREST_STATIONS_FC = {
+    "type": "FeatureCollection",
+    "features": [_station("NEAR", -114.05, 51.05), _station("FAR", -114.30, 51.05)],
+}
+
+
+class NearestClient:
+    def get_json(self, url, params):
+        if "climate-stations" in url:
+            return NEAREST_STATIONS_FC
+        if "climate-daily" in url:
+            return DAILY_FC                                            # both stations have data
+        return {"features": []}
+
+
+def test_fetch_climate_picks_nearest_usable_station():
+    aoi = aoi_from_geojson(BOX)
+    res = fetch_climate(aoi, date(2022, 6, 1), date(2022, 6, 3), client=NearestClient())
+    assert [s.climate_id for s in res.stations] == ["NEAR"]            # nearer of two usable stations
+
+
 def test_to_rainfall_series_coerces_nan_to_zero():
     fc = {"type": "FeatureCollection", "features": [
         {"properties": {"LOCAL_DATE": "2022-06-01 00:00:00", "TOTAL_PRECIPITATION": 3.0,
@@ -165,3 +193,55 @@ def test_to_rainfall_series_coerces_nan_to_zero():
     ]}
     rain = to_rainfall_series(ClimateSeries(station=None, frame=parse_daily(fc)))
     assert rain.precip_mm == [3.0, 0.0]                                # NaN gap -> 0 mm, not NaN
+
+
+# --- evaporation forcing (Hargreaves) ----------------------------------------
+
+
+def test_extraterrestrial_radiation_matches_fao56():
+    # FAO-56 Example 8: lat -20°, 3 Sep (doy 246) → Ra ≈ 32.2 MJ m-2 day-1.
+    assert math.isclose(extraterrestrial_radiation(-20.0, 246), 32.2, abs_tol=0.3)
+
+
+def test_hargreaves_summer_is_physical_and_cold_clamps_to_zero():
+    summer = hargreaves_pet(8.0, 18.0, 13.0, 51.05, 152)   # Calgary, ~Jun 1
+    assert 2.0 < summer < 6.0                                # a few mm/day in summer
+    winter = hargreaves_pet(-20.0, -8.0, -14.0, 51.05, 1)   # sub-freezing → non-negative
+    assert winter >= 0.0
+
+
+def test_to_evaporation_series_uses_station_lat_and_skips_missing_temps():
+    fc = {"type": "FeatureCollection", "features": [
+        {"properties": {"LOCAL_DATE": "2022-06-01 00:00:00", "TOTAL_PRECIPITATION": 0.0,
+                        "MIN_TEMPERATURE": 8.0, "MAX_TEMPERATURE": 18.0, "MEAN_TEMPERATURE": 13.0,
+                        "CLIMATE_IDENTIFIER": "X"}},
+        {"properties": {"LOCAL_DATE": "2022-06-02 00:00:00", "TOTAL_PRECIPITATION": 0.0,
+                        "MIN_TEMPERATURE": None, "MAX_TEMPERATURE": 20.0, "MEAN_TEMPERATURE": 15.0,
+                        "CLIMATE_IDENTIFIER": "X"}},  # missing tmin → skipped
+    ]}
+    station = ClimateStation(climate_id="X", name="X", lon=-114.01, lat=51.05)
+    evap = to_evaporation_series(ClimateSeries(station=station, frame=parse_daily(fc)))
+    assert evap is not None
+    assert len(evap.timestamps) == 1 and evap.timestamps[0] == datetime(2022, 6, 1)
+    assert 2.0 < evap.evap_mm_day[0] < 6.0
+    assert evap.ts_name == "evap"
+
+
+def test_to_evaporation_series_none_without_latitude():
+    fc = {"type": "FeatureCollection", "features": [
+        {"properties": {"LOCAL_DATE": "2022-06-01 00:00:00", "TOTAL_PRECIPITATION": 0.0,
+                        "MIN_TEMPERATURE": 8.0, "MAX_TEMPERATURE": 18.0, "MEAN_TEMPERATURE": 13.0,
+                        "CLIMATE_IDENTIFIER": "X"}},
+    ]}
+    assert to_evaporation_series(ClimateSeries(station=None, frame=parse_daily(fc))) is None
+
+
+def test_to_temperature_series_falls_back_to_midpoint():
+    fc = {"type": "FeatureCollection", "features": [
+        {"properties": {"LOCAL_DATE": "2022-06-01 00:00:00", "TOTAL_PRECIPITATION": 0.0,
+                        "MIN_TEMPERATURE": 8.0, "MAX_TEMPERATURE": 18.0, "MEAN_TEMPERATURE": None,
+                        "CLIMATE_IDENTIFIER": "X"}},
+    ]}
+    temp = to_temperature_series(ClimateSeries(station=None, frame=parse_daily(fc)))
+    assert temp is not None
+    assert temp.tmean_c == [13.0]                                       # (8 + 18) / 2

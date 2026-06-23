@@ -38,8 +38,17 @@ SUBCATCHMENT_FIELDS = [
     "n_imperv", "n_perv", "s_imperv_mm", "s_perv_mm", "pct_zero",
 ]
 
-# netCDF (CF) names.
+# netCDF (CF) names. Rainfall, temperature, and evaporation are the climate-forcing triad
+# (CONTEXT glossary). Each carries its own time coordinate: evaporation/temperature are
+# derived per-day and may drop days the raingage keeps (missing temps), so they are not
+# assumed to share the rain axis.
 CF_CONVENTIONS = "CF-1.8"
 TIME_DIM = "time"
 PRECIP_VAR = "precipitation"
 PRECIP_UNITS = "mm"
+EVAP_VAR = "evaporation"
+EVAP_UNITS = "mm day-1"
+EVAP_TIME_DIM = "evap_time"
+TEMP_VAR = "temperature"
+TEMP_UNITS = "degC"
+TEMP_TIME_DIM = "temp_time"
