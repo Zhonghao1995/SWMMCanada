@@ -109,4 +109,15 @@ def create_app(*, pipeline=None, workdir=None, run_inline: bool = False) -> Fast
             raise HTTPException(409, "Preview not ready.")
         return FileResponse(str(task.preview), media_type="application/geo+json")
 
+    @app.get("/api/v1/tasks/{task_id}/validation")
+    def validation(task_id: str):
+        # Available whenever the model reached validation — including FAILED tasks, so the
+        # user can see WHY a model was rejected (the subcatchment acceptance report).
+        task = store.get(task_id)
+        if task is None:
+            raise HTTPException(404, "Unknown task.")
+        if not task.validation:
+            raise HTTPException(409, "Validation not ready.")
+        return FileResponse(str(task.validation), media_type="application/json", filename="validation.json")
+
     return app

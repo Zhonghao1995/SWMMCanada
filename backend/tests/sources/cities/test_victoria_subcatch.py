@@ -61,3 +61,14 @@ def test_parcel_shaped_cells_when_parcels_available():
     for s in subs:
         assert s.outlet_node in {"J1", "J2"}
         assert s.area_ha > 0 and s.polygon is not None
+
+
+def test_real_network_delineation_is_deterministic():
+    """Same inputs delineated twice -> identical subcatchments (reproducible builds; PRD #2)."""
+    a, _, _ = delineate_catchbasin_subcatchments(NETWORK, CATCHBASINS, _GRID_PARCELS, BUILDINGS, AOI)
+    b, _, _ = delineate_catchbasin_subcatchments(NETWORK, CATCHBASINS, _GRID_PARCELS, BUILDINGS, AOI)
+    assert [s.name for s in a] == [s.name for s in b]
+    for sa, sb in zip(a, b):
+        assert sa.outlet_node == sb.outlet_node
+        assert sa.area_ha == sb.area_ha
+        assert sa.polygon == sb.polygon

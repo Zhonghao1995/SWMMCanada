@@ -44,3 +44,16 @@ def test_voronoi_partitions_aoi_among_nodes():
 def test_too_few_points_returns_empty():
     aoi = aoi_from_geojson(BOX_GEOJSON)
     assert delineate_subcatchments({"only": (-75.69, 45.415)}, aoi.geometry) == {}
+
+
+def test_delineation_is_deterministic():
+    """Same input delineated twice -> identical cells (reproducible builds; PRD #2)."""
+    aoi = aoi_from_geojson(BOX_GEOJSON)
+    points = {"A": (-75.695, 45.4125), "B": (-75.685, 45.4125),
+              "C": (-75.695, 45.4175), "D": (-75.685, 45.4175)}
+    a = delineate_subcatchments(points, aoi.geometry)
+    b = delineate_subcatchments(points, aoi.geometry)
+    assert set(a) == set(b)
+    for k in a:
+        assert math.isclose(a[k].area_m2, b[k].area_m2, rel_tol=1e-12)
+        assert a[k].exterior == b[k].exterior
