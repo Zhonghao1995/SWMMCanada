@@ -28,7 +28,7 @@ SWMMCanada chooses how to build the network from **where you draw** — you don'
 
 | Mode | What it does | Where it kicks in |
 |---|---|---|
-| **Real network** | uses the city's published storm pipes — real inverts, diameters, manholes, and outfalls | cities that publish a storm network (now **Victoria** and **Ottawa**) |
+| **Real network** | uses the city's published storm pipes — real inverts, diameters, manholes, and outfalls | **7 cities** that publish a storm network: Victoria, Ottawa, Calgary, Surrey, London, Kitchener–Waterloo, Kelowna |
 | **Synthesize** | builds a realistic network from the street map + open data | anywhere else in Canada |
 
 Either mode then gives you the same things: subcatchments, rainfall, and a shareable data package. Where a city also publishes parcels (like Victoria), the subcatchments follow real lot lines.
@@ -62,13 +62,13 @@ backend/swmmcanada/      # Python pipeline: open data -> SWMM model
   geo/         AOI parsing, station selection, CRS
   acquire/     ECCC climate · NRCan DEM · NALCMS land cover · SoilGrids soil · HYDAT flow
   sources/     live data adapters (climate, DEM, land cover, soil, OSM streets)
-    cities/    base.py (shared assembler) + victoria.py + ottawa.py  (real-network cities)
+    cities/    base.py (shared assembler) + 7 real-network adapters (victoria · ottawa · calgary · surrey · london · kitchener · kelowna)
   network/     street-graph synthesis + Voronoi subcatchments (synthesize mode)
   derive/      clip + zonal stats -> subcatchment parameters
   build/       assemble + validate the SWMM .inp
   datastore/   model-ready datastore (GeoPackage + netCDF + JSON)
   api/         FastAPI async tasks API
-  pipeline.py  build_from_aoi · build_from_victoria · build_from_ottawa
+  pipeline.py  build_from_aoi · build_from_<city> (7 real-network cities)
 
 frontend/src/            # React + Vite + MapLibre web app
   components/   MapPanel.tsx (map + draw AOI) · ControlPanel.tsx (build, layers, download)
@@ -82,7 +82,8 @@ A `model.inp` that runs in EPA SWMM 5.2, a `datastore/` package you can share (G
 
 ## More
 
-- **[DATA.md](DATA.md)** — every dataset used, with links, licences, and how each one is used (ECCC rainfall, NRCan terrain & land cover, SoilGrids soil, OpenStreetMap, and the Victoria/Ottawa municipal storm networks). All free / open.
+- **[ASSUMPTIONS.md](ASSUMPTIONS.md)** — what's real vs derived vs assumed in a model, layer by layer (and why models are uncalibrated). Read this before trusting a result.
+- **[DATA.md](DATA.md)** — every dataset used, with links, licences, and how each one is used (ECCC rainfall, NRCan terrain & land cover, SoilGrids soil, OpenStreetMap, and the seven municipal storm networks). All free / open.
 - **[RESULTS.md](RESULTS.md)** — real-city validation, figures, and the EPA SWMM numbers.
 - **Built with** Python (geopandas, swmm-api, FastAPI) and React + MapLibre. Full dependency lists in `backend/pyproject.toml` and `frontend/package.json`.
 
