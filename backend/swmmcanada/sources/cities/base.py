@@ -314,6 +314,19 @@ def _all_polygons(geom):
     return []
 
 
+def _largest_valid(geom):
+    """Largest valid, non-empty Polygon of a geometry, repairing self-intersections with
+    ``buffer(0)``; returns None when nothing usable remains. Set ops (union/difference) and
+    reprojection can leave a cell polygon self-intersecting or empty — the build's geometry
+    validator rejects those outright, so every emitted cell is cleaned through this."""
+    if geom is None or geom.is_empty:
+        return None
+    if not geom.is_valid:
+        geom = geom.buffer(0)
+    polys = [p for p in _all_polygons(geom) if not p.is_empty and p.area > 0]
+    return max(polys, key=lambda p: p.area) if polys else None
+
+
 def _parcel_cells(seeds, parcels, aoi, crs):
     """Subcatchment shapes that follow REAL parcel/lot lines: each parcel is assigned whole to
     its nearest catch basin and dissolved (so cell edges fall on lot lines, not a Voronoi
@@ -388,7 +401,7 @@ def delineate_catchbasin_subcatchments(
     import geopandas as gpd
     import numpy as np
     from pyproj import Transformer
-    from shapely.geometry import shape
+    from shapely.geometry import Polygon, shape
     from shapely.ops import transform as shp_transform
     from shapely.ops import unary_union
 
@@ -418,6 +431,7 @@ def delineate_catchbasin_subcatchments(
         return jnames[int(d.argmin())]
 
     to_m = Transformer.from_crs("EPSG:4326", crs, always_xy=True).transform
+    to_ll = Transformer.from_crs(crs, "EPSG:4326", always_xy=True).transform
 
     def gdf(geoms):
         s = gpd.GeoSeries(geoms, crs="EPSG:4326") if geoms else gpd.GeoSeries([], crs="EPSG:4326")
@@ -434,12 +448,26 @@ def delineate_catchbasin_subcatchments(
         idx = sidx.query(poly, predicate="intersects")
         return unary_union(g.geometry.iloc[idx].tolist()) if len(idx) else None
 
-    subs, imperv_map, n_parcel, n_split = [], {}, 0, 0
+    subs, imperv_map, n_parcel, n_split, n_dropped = [], {}, 0, 0, 0
     for cb_id, piece_list in cells.items():
         for i, cell in enumerate(piece_list):
             if cell.area_m2 <= 0:
                 continue
-            poly_m = shp_transform(to_m, cell.polygon_4326)
+            # Repair the cell polygon (set ops + reprojection can leave it self-intersecting or
+            # empty) so the emitted geometry is always valid; drop empties and sub-1m² slivers.
+            poly_m = _largest_valid(shp_transform(to_m, cell.polygon_4326))
+            if poly_m is None or poly_m.area < 1.0:
+                n_dropped += 1
+                continue
+            exterior = [(float(x), float(y)) for x, y in shp_transform(to_ll, poly_m).exterior.coords]
+            # Guard the validator's exact check: the stored EPSG:4326 ring must reproject back to a
+            # valid, non-empty metric polygon. A rare sliver is valid in metric yet flips invalid
+            # through the 4326 round-trip (float precision) — drop it rather than ship it.
+            check_m = shp_transform(to_m, Polygon(exterior))
+            if check_m.is_empty or not check_m.is_valid:
+                n_dropped += 1
+                continue
+            area_m2 = poly_m.area
             name = f"S_{cb_id}" if i == 0 else f"S_{cb_id}__{i + 1}"   # split pieces -> same outlet
             if i > 0:
                 n_split += 1
@@ -451,15 +479,16 @@ def delineate_catchbasin_subcatchments(
                 roads = poly_m.difference(par_local)
                 parts = [g for g in (roofs, roads) if g is not None and not g.is_empty]
                 area = unary_union(parts).area if parts else 0.0
-                imperv = max(config.min_imperv, min(config.max_imperv, 100.0 * area / cell.area_m2))
+                imperv = max(config.min_imperv, min(config.max_imperv, 100.0 * area / area_m2))
                 imperv_map[name] = imperv
                 n_parcel += 1
             subs.append(SubcatchmentIn(
-                name=name, outlet_node=nearest_node(seeds[cb_id]), area_ha=cell.area_m2 / 1e4,
-                pct_imperv=imperv, width_m=math.sqrt(cell.area_m2),
-                pct_slope=config.default_slope_pct, polygon=cell.exterior))
+                name=name, outlet_node=nearest_node(seeds[cb_id]), area_ha=area_m2 / 1e4,
+                pct_imperv=imperv, width_m=math.sqrt(area_m2),
+                pct_slope=config.default_slope_pct, polygon=exterior))
     diag = {"method": f"catchbasin+parcel/building ({shape_method}-shaped)", "n_catchbasins": len(seeds),
-            "n_subcatchments": len(subs), "n_split_pieces": n_split, "n_parcel_based_imperv": n_parcel,
+            "n_subcatchments": len(subs), "n_split_pieces": n_split, "n_dropped_invalid": n_dropped,
+            "n_parcel_based_imperv": n_parcel,
             "n_parcels": int(len(par)), "n_buildings": int(len(bld)),
             "mean_imperv": round(sum(imperv_map.values()) / len(imperv_map), 1) if imperv_map else None}
     return subs, imperv_map, diag
