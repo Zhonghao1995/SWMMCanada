@@ -1,4 +1,6 @@
-# SWMMCanada
+<p align="center">
+  <img src="assets/logo-lockup.png" width="520" alt="SWMM Canada — anywhere in Canada, draw and run" />
+</p>
 
 <p align="center">
   <a href="https://github.com/Zhonghao1995/SWMMCanada/actions/workflows/ci.yml"><img src="https://github.com/Zhonghao1995/SWMMCanada/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>

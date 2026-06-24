@@ -1,6 +1,7 @@
 import { useMemo, useRef } from 'react'
 import { Download, Loader2, MapPin, Play, Trash2, Upload } from 'lucide-react'
 import { useStore } from '../store'
+import logoMark from '../assets/logo-mark.png'
 
 export default function ControlPanel() {
   const fileRef = useRef<HTMLInputElement>(null)
@@ -35,8 +36,11 @@ export default function ControlPanel() {
   return (
     <aside className="flex h-full w-80 shrink-0 flex-col gap-5 overflow-y-auto border-r border-slate-200 bg-white p-4">
       <header>
-        <h1 className="text-lg font-semibold text-slate-800">SWMMCanada</h1>
-        <p className="text-xs text-slate-500">
+        <div className="flex items-center gap-2">
+          <img src={logoMark} alt="" className="h-8 w-8" />
+          <h1 className="text-lg font-semibold text-slate-800">SWMMCanada</h1>
+        </div>
+        <p className="mt-1 text-xs text-slate-500">
           Draw or upload an area → build a SWMM model from Canadian open data.
         </p>
       </header>
