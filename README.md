@@ -8,6 +8,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT license" /></a>
   <img src="https://img.shields.io/badge/status-early%20development-orange" alt="Status: early development" />
   <img src="https://img.shields.io/badge/EPA%20SWMM-5.2-1F6FEB" alt="EPA SWMM 5.2" />
+  <a href="https://github.com/Zhonghao1995/SWMMCanada/pkgs/container/swmmcanada"><img src="https://img.shields.io/badge/ghcr.io-swmmcanada-2496ED?logo=docker&logoColor=white" alt="Container image on GHCR" /></a>
 </p>
 
 <p align="center"><em>🚧 Under construction — this repository serves as the data-preprocessing and upstream model-building module for <strong>Agentic SWMM</strong> and <strong>Agentic MIKE+</strong>.</em></p>
@@ -37,6 +38,15 @@ Either mode then gives you the same things: subcatchments, rainfall, and a share
 
 ## Try it
 
+**Quickest — pull the prebuilt backend image** ([all tags](https://github.com/Zhonghao1995/SWMMCanada/pkgs/container/swmmcanada)):
+
+```bash
+docker run --rm -p 8000:8000 ghcr.io/zhonghao1995/swmmcanada:latest
+# API on http://localhost:8000  ·  health: /api/v1/healthz
+```
+
+**From source** (for development):
+
 ```bash
 # backend (Python 3.11)
 cd backend && python3.11 -m venv .venv && .venv/bin/pip install -e ".[dev]"
@@ -45,6 +55,8 @@ cd backend && python3.11 -m venv .venv && .venv/bin/pip install -e ".[dev]"
 # frontend (another terminal)
 cd frontend && npm install && npm run dev
 ```
+
+Running the whole thing in production (GHCR image + GitHub Pages) is documented in **[DEPLOY.md](DEPLOY.md)**.
 
 Open the app, draw a box over Victoria, pick dates, and click **Build SWMM model**. Or from Python:
 
