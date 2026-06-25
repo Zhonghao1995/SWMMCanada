@@ -1,6 +1,8 @@
 # Secrets / credentials — NEVER commit (this repo will go public)
 .env
 .env.*
+# .env.example is committed — it documents required vars and holds no secrets:
+!.env.example
 *.key
 *.pem
 secrets.*

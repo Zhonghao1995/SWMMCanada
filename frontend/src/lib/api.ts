@@ -16,7 +16,7 @@ export interface SubmitParams {
   endDate: string
 }
 
-const API = '/api/v1'
+const API = `${import.meta.env.VITE_API_URL ?? ''}/api/v1`
 
 const STATE_MAP: Record<string, JobStatus> = {
   QUEUED: 'queued',
