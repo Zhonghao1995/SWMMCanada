@@ -9,6 +9,7 @@ Inline pre-checks (AOI parse, max-AOI cap, date sanity) fail fast as 4xx before 
 created. The pipeline is injected (default = the live build_from_aoi) so the contract is
 testable against a fast fake pipeline.
 """
+import os
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date
@@ -16,6 +17,7 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
 from swmmcanada.api.tasks import TaskStore, run_task
@@ -26,6 +28,9 @@ from swmmcanada.pipeline import pipeline_for_aoi
 
 def create_app(*, pipeline=None, workdir=None, run_inline: bool = False) -> FastAPI:
     app = FastAPI(title="SWMMCanada API")
+    # CORS origins come from $ALLOWED_ORIGINS (comma-separated); default "*" (no credentials used).
+    _origins = [o.strip() for o in os.environ.get("ALLOWED_ORIGINS", "*").split(",") if o.strip()]
+    app.add_middleware(CORSMiddleware, allow_origins=_origins, allow_methods=["*"], allow_headers=["*"])
     store = TaskStore()
     work_root = Path(workdir or tempfile.mkdtemp(prefix="swmmcanada_"))
     executor = ThreadPoolExecutor(max_workers=2)

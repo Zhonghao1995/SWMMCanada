@@ -7,7 +7,7 @@ import tailwindcss from '@tailwindcss/vite'
 // async task API — submit AOI, poll progress, download the model package.
 // https://vite.dev/config/
 export default defineConfig({
-  base: '/',
+  base: process.env.VITE_BASE || '/',
   plugins: [react(), tailwindcss()],
   server: {
     port: 5175,
