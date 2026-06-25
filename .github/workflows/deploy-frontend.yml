@@ -1,9 +1,13 @@
 name: deploy-frontend
 
 on:
-  push:
-    branches: [main]
-    paths: ["frontend/**", ".github/workflows/deploy-frontend.yml"]
+  # Manual-only for now — the frontend is not deployed yet. Before running this,
+  # enable Pages (Settings → Pages → Source = GitHub Actions) and set the
+  # VITE_API_URL Actions variable to the backend URL. To auto-deploy on every
+  # push to main, restore the push trigger:
+  #   push:
+  #     branches: [main]
+  #     paths: ["frontend/**", ".github/workflows/deploy-frontend.yml"]
   workflow_dispatch:
 
 permissions:
