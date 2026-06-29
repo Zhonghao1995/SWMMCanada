@@ -3,10 +3,11 @@
 </p>
 
 <p align="center">
+  <a href="https://swmm.h2ox.me/"><img src="https://img.shields.io/badge/%F0%9F%8C%90%20live%20demo-swmm.h2ox.me-1F6FEB" alt="Live demo" /></a>
   <a href="https://github.com/Zhonghao1995/SWMMCanada/actions/workflows/ci.yml"><img src="https://github.com/Zhonghao1995/SWMMCanada/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <a href="https://github.com/Zhonghao1995/SWMMCanada/releases/latest"><img src="https://img.shields.io/github/v/release/Zhonghao1995/SWMMCanada?label=release&color=1F6FEB" alt="latest release" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT license" /></a>
-  <img src="https://img.shields.io/badge/status-early%20development-orange" alt="Status: early development" />
+  <img src="https://img.shields.io/badge/status-public%20beta-blue" alt="Status: public beta" />
   <img src="https://img.shields.io/badge/EPA%20SWMM-5.2-1F6FEB" alt="EPA SWMM 5.2" />
   <a href="https://github.com/Zhonghao1995/SWMMCanada/pkgs/container/swmmcanada"><img src="https://img.shields.io/badge/ghcr.io-swmmcanada-2496ED?logo=docker&logoColor=white" alt="Container image on GHCR" /></a>
 </p>
@@ -16,6 +17,11 @@
 **Draw an area anywhere in Canada and get a ready-to-run EPA SWMM stormwater model.**
 
 You draw (or upload) a boundary on the map. SWMMCanada pulls the Canadian open data for that spot — rainfall, terrain, land cover, soil, and the city's storm pipes — and assembles a complete `model.inp` you can open and run in EPA SWMM. No hunting across data portals, no manual setup.
+
+> [!TIP]
+> **🌐 Try it now — no install, no deployment.** A hosted **beta** is live at **[swmm.h2ox.me](https://swmm.h2ox.me/)** — draw an area and build a SWMM model right in your browser.
+>
+> The demo runs on a small server (**~2 GB RAM**), so it's best for **small areas**; large regions can exceed its memory and fail. For large-scale modeling, self-host the frontend **and** backend on a bigger machine or an **HPC** cluster — both run well as shipped in this repo (see **[DEPLOY.md](DEPLOY.md)**).
 
 > [!WARNING]
 > **Models are not calibrated.** SWMMCanada gets you a complete, runnable model fast — but the parameters (rainfall losses, roughness, curve numbers) are first-pass estimates. Calibrate against observations before using any results for design or decisions.
@@ -38,7 +44,9 @@ Either mode then gives you the same things: subcatchments, rainfall, and a share
 
 ## Try it
 
-**Quickest — pull the prebuilt backend image** ([all tags](https://github.com/Zhonghao1995/SWMMCanada/pkgs/container/swmmcanada)):
+**Easiest — the hosted beta (nothing to install):** open **[swmm.h2ox.me](https://swmm.h2ox.me/)**, draw a *small* area, pick dates, and click **Build SWMM model**. Keep the area small (the demo server has ~2 GB RAM); for anything large, self-host as below.
+
+**Quickest local — pull the prebuilt backend image** ([all tags](https://github.com/Zhonghao1995/SWMMCanada/pkgs/container/swmmcanada)):
 
 ```bash
 docker run --rm -p 8000:8000 ghcr.io/zhonghao1995/swmmcanada:latest

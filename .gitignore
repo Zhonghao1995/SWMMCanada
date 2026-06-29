@@ -54,3 +54,8 @@ Thumbs.db
 docs/
 /CONTEXT.md
 /DESIGN.md
+
+# Root agent config (setup-matt-pocock-skills) — kept local, like docs/ above.
+# (docs/agents/ is already covered by the docs/ rule above.)
+/AGENTS.md
+/CLAUDE.md

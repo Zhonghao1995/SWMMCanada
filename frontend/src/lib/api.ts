@@ -73,3 +73,150 @@ export async function fetchPreview(taskId: string): Promise<FeatureCollection | 
     return null
   }
 }
+
+// --- Rainfall (forcing) availability check -----------------------------------
+// Same data source the build uses for the [RAINGAGES] forcing: the MSC GeoMet OGC
+// API (ECCC climate-stations + climate-daily, see acquire/climate.py). Queried
+// directly from the browser — GeoMet is a public, CORS-enabled open API — so the
+// check needs no backend and works on the static deployment. We answer "does the
+// nearest ECCC gauge have daily rain records for this period?" and, when it does
+// not, suggest the most recent window of the same length that does.
+
+const GEOMET = 'https://api.weather.gc.ca'
+
+export type Bbox = [number, number, number, number] // [minLng, minLat, maxLng, maxLat]
+
+export interface RainfallCheck {
+  available: boolean
+  spanDays: number // length of the requested window, in days (inclusive)
+  station?: string // name of the nearest / chosen ECCC gauge
+  daysWithData?: number // days in the window with a precip record
+  dataStart?: string // station's earliest daily record (ISO)
+  dataEnd?: string // station's latest daily record (ISO)
+  suggestStart?: string // suggested replacement window (ISO), when unavailable
+  suggestEnd?: string
+  message: string
+}
+
+interface GeoMetProps {
+  TOTAL_PRECIPITATION?: number | null
+  CLIMATE_IDENTIFIER?: string
+  STATION_NAME?: string
+  LOCAL_DATE?: string
+}
+interface GeoMetFeature {
+  geometry?: { coordinates?: [number, number] }
+  properties?: GeoMetProps
+}
+interface GeoMetFC {
+  features?: GeoMetFeature[]
+}
+
+async function geomet(url: string): Promise<GeoMetFC> {
+  const r = await fetch(url)
+  if (!r.ok) throw new Error(`GeoMet HTTP ${r.status}`)
+  return (await r.json()) as GeoMetFC
+}
+
+function isoAddDays(iso: string, days: number): string {
+  const d = new Date(`${iso}T00:00:00Z`)
+  d.setUTCDate(d.getUTCDate() + days)
+  return d.toISOString().slice(0, 10)
+}
+
+function isoDayDiff(a: string, b: string): number {
+  return Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86_400_000)
+}
+
+const bboxStr = (b: number[]) => b.map((v) => v.toFixed(5)).join(',')
+
+export async function checkRainfall(bbox: Bbox, startDate: string, endDate: string): Promise<RainfallCheck> {
+  const spanDays = Math.max(1, isoDayDiff(startDate, endDate) + 1)
+  const buf = 0.5 // ~50 km — ECCC climate gauges are sparse, so look beyond the AOI itself
+  const qbbox = [bbox[0] - buf, bbox[1] - buf, bbox[2] + buf, bbox[3] + buf]
+
+  // 1) Any daily precip records anywhere in the buffered bbox for the period?
+  const daily = await geomet(
+    `${GEOMET}/collections/climate-daily/items?bbox=${bboxStr(qbbox)}` +
+      `&datetime=${startDate}/${endDate}&limit=10000&sortby=LOCAL_DATE&f=json`,
+  )
+  const byStation = new Map<string, { name: string; days: number }>()
+  for (const f of daily.features ?? []) {
+    const p = f.properties ?? {}
+    if (p.TOTAL_PRECIPITATION == null) continue
+    const id = p.CLIMATE_IDENTIFIER ?? '?'
+    const e = byStation.get(id) ?? { name: p.STATION_NAME ?? id, days: 0 }
+    e.days += 1
+    byStation.set(id, e)
+  }
+  let best: { name: string; days: number } | undefined
+  for (const e of byStation.values()) if (!best || e.days > best.days) best = e
+  if (best) {
+    return {
+      available: true,
+      spanDays,
+      station: best.name,
+      daysWithData: best.days,
+      message: `${best.days} of ${spanDays} day(s) have ECCC rain records — gauge: ${best.name}.`,
+    }
+  }
+
+  // 2) No records in the period — find a nearby gauge and suggest a window from its record.
+  const station = await nearestStation(qbbox, bbox)
+  if (!station) {
+    return {
+      available: false,
+      spanDays,
+      message: 'No ECCC climate gauge within ~50 km. The build will fall back to synthesized rainfall.',
+    }
+  }
+  const range = await stationRange(station.id)
+  if (!range) {
+    return {
+      available: false,
+      spanDays,
+      station: station.name,
+      message: `Nearest gauge (${station.name}) has no daily rain records. Try a different area.`,
+    }
+  }
+  let suggestEnd = range.end
+  let suggestStart = isoAddDays(suggestEnd, -(spanDays - 1))
+  if (isoDayDiff(range.start, suggestStart) < 0) suggestStart = range.start // clamp to record start
+  return {
+    available: false,
+    spanDays,
+    station: station.name,
+    dataStart: range.start,
+    dataEnd: range.end,
+    suggestStart,
+    suggestEnd,
+    message:
+      `No rain records for this period at the nearest gauge (${station.name}); ` +
+      `it has data ${range.start} → ${range.end}.`,
+  }
+}
+
+async function nearestStation(qbbox: number[], aoiBbox: Bbox): Promise<{ id: string; name: string } | null> {
+  const fc = await geomet(
+    `${GEOMET}/collections/climate-stations/items?bbox=${bboxStr(qbbox)}&f=json&limit=500`,
+  )
+  const cx = (aoiBbox[0] + aoiBbox[2]) / 2
+  const cy = (aoiBbox[1] + aoiBbox[3]) / 2
+  let best: { id: string; name: string; d2: number } | null = null
+  for (const f of fc.features ?? []) {
+    const c = f.geometry?.coordinates
+    const id = f.properties?.CLIMATE_IDENTIFIER
+    if (!c || !id) continue
+    const d2 = (c[0] - cx) ** 2 + (c[1] - cy) ** 2
+    if (!best || d2 < best.d2) best = { id, name: f.properties?.STATION_NAME ?? id, d2 }
+  }
+  return best ? { id: best.id, name: best.name } : null
+}
+
+async function stationRange(climateId: string): Promise<{ start: string; end: string } | null> {
+  const base = `${GEOMET}/collections/climate-daily/items?CLIMATE_IDENTIFIER=${encodeURIComponent(climateId)}&limit=1&f=json`
+  const [first, last] = await Promise.all([geomet(`${base}&sortby=LOCAL_DATE`), geomet(`${base}&sortby=-LOCAL_DATE`)])
+  const fd = first.features?.[0]?.properties?.LOCAL_DATE
+  const ld = last.features?.[0]?.properties?.LOCAL_DATE
+  return fd && ld ? { start: String(fd).slice(0, 10), end: String(ld).slice(0, 10) } : null
+}
