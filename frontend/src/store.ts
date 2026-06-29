@@ -1,9 +1,16 @@
 import { create } from 'zustand'
 import type { Feature, FeatureCollection, Polygon, Position } from 'geojson'
 import type { Aoi, JobProgress } from './types'
-import { fetchPreview, pollTask, submitTask } from './lib/api'
+import { checkRainfall as apiCheckRainfall, fetchPreview, pollTask, submitTask } from './lib/api'
+import type { Bbox, RainfallCheck } from './lib/api'
 
 export type LayerKey = 'subcatchments' | 'conduits' | 'junctions'
+
+export interface RainfallState {
+  status: 'idle' | 'checking' | 'done' | 'error'
+  result?: RainfallCheck
+  error?: string
+}
 
 interface AppState {
   aoi: Aoi | null
@@ -14,6 +21,7 @@ interface AppState {
   job: JobProgress
   preview: FeatureCollection | null // model geometry (network + subcatchments)
   layers: Record<LayerKey, boolean>
+  rainfall: RainfallState // ECCC rain-data availability for the chosen AOI + period
 
   startDraw: () => void
   addVertex: (lng: number, lat: number) => void
@@ -23,6 +31,7 @@ interface AppState {
   setUpload: (file: File) => void
   setDates: (start: string, end: string) => void
   toggleLayer: (key: LayerKey) => void
+  checkRainfall: () => Promise<void>
   submit: () => Promise<void>
 }
 
@@ -31,32 +40,112 @@ function polygonFromDraft(draft: Position[]): Feature<Polygon> {
   return { type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [ring] } }
 }
 
+// Bbox of any nested GeoJSON coordinate array, into acc = [minX, minY, maxX, maxY].
+function walkBbox(coords: unknown, acc: number[]): void {
+  const a = coords as number[]
+  if (typeof a[0] === 'number') {
+    acc[0] = Math.min(acc[0], a[0])
+    acc[1] = Math.min(acc[1], a[1])
+    acc[2] = Math.max(acc[2], a[0])
+    acc[3] = Math.max(acc[3], a[1])
+  } else {
+    ;(coords as unknown[]).forEach((c) => walkBbox(c, acc))
+  }
+}
+
+// AOI → lon/lat bbox for the rainfall check. Drawn polygons and .geojson uploads
+// carry geometry the browser can read; .zip shapefiles are parsed server-side only.
+async function aoiBbox(aoi: Aoi): Promise<Bbox | null> {
+  const acc = [Infinity, Infinity, -Infinity, -Infinity]
+  if (aoi.source === 'draw') {
+    walkBbox(aoi.polygon.geometry.coordinates, acc)
+  } else if (/\.(geo)?json$/i.test(aoi.name)) {
+    try {
+      const gj = JSON.parse(await aoi.file.text())
+      const geoms =
+        gj.type === 'FeatureCollection'
+          ? gj.features.map((f: Feature) => f.geometry)
+          : gj.type === 'Feature'
+            ? [gj.geometry]
+            : [gj]
+      for (const g of geoms) if (g?.coordinates) walkBbox(g.coordinates, acc)
+    } catch {
+      return null
+    }
+  } else {
+    return null // .zip shapefile — geometry only available to the backend at build time
+  }
+  return acc[0] === Infinity ? null : (acc as Bbox)
+}
+
 const TERMINAL = new Set(['succeeded', 'failed', 'cancelled'])
 const DEFAULT_LAYERS: Record<LayerKey, boolean> = { subcatchments: true, conduits: true, junctions: true }
+const IDLE_RAIN: RainfallState = { status: 'idle' }
 
 export const useStore = create<AppState>((set, get) => ({
   aoi: null,
   drawing: false,
   draft: [],
   startDate: '2020-01-01',
-  endDate: '2020-12-31',
+  endDate: '2020-01-07', // default to a 1-week window
   job: { status: 'idle' },
   preview: null,
   layers: DEFAULT_LAYERS,
+  rainfall: IDLE_RAIN,
 
-  startDraw: () => set({ drawing: true, draft: [], aoi: null, job: { status: 'idle' }, preview: null }),
+  startDraw: () =>
+    set({ drawing: true, draft: [], aoi: null, job: { status: 'idle' }, preview: null, rainfall: IDLE_RAIN }),
   addVertex: (lng, lat) => set((s) => (s.drawing ? { draft: [...s.draft, [lng, lat]] } : {})),
   finishDraw: () => {
     const { draft } = get()
     if (draft.length < 3) return
-    set({ drawing: false, aoi: { source: 'draw', polygon: polygonFromDraft(draft) }, draft: [] })
+    set({ drawing: false, aoi: { source: 'draw', polygon: polygonFromDraft(draft) }, draft: [], rainfall: IDLE_RAIN })
   },
   cancelDraw: () => set({ drawing: false, draft: [] }),
-  clearAoi: () => set({ aoi: null, draft: [], drawing: false, job: { status: 'idle' }, preview: null }),
+  clearAoi: () =>
+    set({ aoi: null, draft: [], drawing: false, job: { status: 'idle' }, preview: null, rainfall: IDLE_RAIN }),
   setUpload: (file) =>
-    set({ aoi: { source: 'upload', file, name: file.name }, drawing: false, draft: [], job: { status: 'idle' }, preview: null }),
-  setDates: (startDate, endDate) => set({ startDate, endDate }),
+    set({
+      aoi: { source: 'upload', file, name: file.name },
+      drawing: false,
+      draft: [],
+      job: { status: 'idle' },
+      preview: null,
+      rainfall: IDLE_RAIN,
+    }),
+  setDates: (startDate, endDate) => set({ startDate, endDate, rainfall: IDLE_RAIN }),
   toggleLayer: (key) => set((s) => ({ layers: { ...s.layers, [key]: !s.layers[key] } })),
+
+  checkRainfall: async () => {
+    const { aoi, startDate, endDate } = get()
+    if (!aoi) return
+    if (endDate < startDate) {
+      set({ rainfall: { status: 'error', error: 'End date is before start date.' } })
+      return
+    }
+    set({ rainfall: { status: 'checking' } })
+    try {
+      const bbox = await aoiBbox(aoi)
+      if (!bbox) {
+        set({
+          rainfall: {
+            status: 'done',
+            result: {
+              available: false,
+              spanDays: 0,
+              message:
+                'Rainfall check needs a drawn polygon or a .geojson boundary. Uploaded .zip shapefiles are checked at build time.',
+            },
+          },
+        })
+        return
+      }
+      const result = await apiCheckRainfall(bbox, startDate, endDate)
+      set({ rainfall: { status: 'done', result } })
+    } catch (err) {
+      set({ rainfall: { status: 'error', error: `${err}` } })
+    }
+  },
 
   submit: async () => {
     const { aoi, startDate, endDate } = get()

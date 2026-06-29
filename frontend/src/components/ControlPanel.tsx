@@ -1,5 +1,5 @@
 import { useMemo, useRef } from 'react'
-import { Download, Loader2, MapPin, Play, Trash2, Upload } from 'lucide-react'
+import { AlertTriangle, Check, CloudRain, Download, Loader2, MapPin, Play, Trash2, Upload } from 'lucide-react'
 import { useStore } from '../store'
 import logoMark from '../assets/logo-mark.png'
 
@@ -17,6 +17,8 @@ export default function ControlPanel() {
   const clearAoi = useStore((s) => s.clearAoi)
   const setUpload = useStore((s) => s.setUpload)
   const setDates = useStore((s) => s.setDates)
+  const rainfall = useStore((s) => s.rainfall)
+  const checkRainfall = useStore((s) => s.checkRainfall)
   const submit = useStore((s) => s.submit)
   const preview = useStore((s) => s.preview)
   const layers = useStore((s) => s.layers)
@@ -34,7 +36,7 @@ export default function ControlPanel() {
   const busy = job.status === 'queued' || job.status === 'running'
 
   return (
-    <aside className="flex h-full w-80 shrink-0 flex-col gap-5 overflow-y-auto border-r border-slate-200 bg-white p-4">
+    <aside className="flex h-full w-full flex-col gap-5 overflow-y-auto bg-white p-4">
       <header>
         <div className="flex items-center gap-2">
           <img src={logoMark} alt="" className="h-8 w-8" />
@@ -104,16 +106,52 @@ export default function ControlPanel() {
             type="date"
             value={startDate}
             onChange={(e) => setDates(e.target.value, endDate)}
-            className="w-full rounded-md border border-slate-300 px-2 py-1"
+            className="w-full min-w-0 rounded-md border border-slate-300 px-2 py-1"
           />
-          <span className="text-slate-400">→</span>
+          <span className="shrink-0 text-slate-400">→</span>
           <input
             type="date"
             value={endDate}
             onChange={(e) => setDates(startDate, e.target.value)}
-            className="w-full rounded-md border border-slate-300 px-2 py-1"
+            className="w-full min-w-0 rounded-md border border-slate-300 px-2 py-1"
           />
         </div>
+
+        <button
+          onClick={checkRainfall}
+          disabled={!aoi || rainfall.status === 'checking'}
+          className="flex w-full items-center justify-center gap-2 rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+        >
+          {rainfall.status === 'checking' ? (
+            <Loader2 size={14} className="animate-spin" />
+          ) : (
+            <CloudRain size={14} />
+          )}
+          Check rainfall data availability
+        </button>
+        {!aoi && <p className="text-[11px] text-slate-400">Draw or upload an area first to check rainfall.</p>}
+        {rainfall.status === 'error' && <p className="text-[11px] text-red-500">{rainfall.error}</p>}
+        {rainfall.status === 'done' && rainfall.result && (
+          <div
+            className={`rounded-md px-3 py-2 text-[11px] leading-relaxed ${
+              rainfall.result.available ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
+            }`}
+          >
+            <div className="flex items-center gap-1 font-medium">
+              {rainfall.result.available ? <Check size={13} /> : <AlertTriangle size={13} />}
+              {rainfall.result.available ? 'Rainfall data available' : 'No rainfall data for this period'}
+            </div>
+            <p className="mt-1">{rainfall.result.message}</p>
+            {rainfall.result.suggestStart && rainfall.result.suggestEnd && (
+              <button
+                onClick={() => setDates(rainfall.result!.suggestStart!, rainfall.result!.suggestEnd!)}
+                className="mt-2 rounded border border-amber-300 bg-white px-2 py-1 font-medium text-amber-700 hover:bg-amber-100"
+              >
+                Use {rainfall.result.suggestStart} → {rainfall.result.suggestEnd}
+              </button>
+            )}
+          </div>
+        )}
       </section>
 
       <section className="space-y-2">
@@ -179,7 +217,26 @@ export default function ControlPanel() {
       )}
 
       <footer className="mt-auto text-[10px] leading-relaxed text-slate-400">
-        SWMMCanada · React · MapLibre · Tailwind. Basemap © OpenStreetMap © CARTO.
+        SWMMCanada — the data-prep & serving layer for{' '}
+        <a
+          href="https://github.com/Zhonghao1995/agentic-swmm-workflow"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="font-medium text-slate-500 underline hover:text-blue-600"
+        >
+          Agentic SWMM
+        </a>
+        .
+        <br />© 2026{' '}
+        <a
+          href="https://zhonghaoz.ca"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="font-medium text-slate-500 underline hover:text-blue-600"
+        >
+          Zhonghao Zhang
+        </a>
+        .
       </footer>
     </aside>
   )
