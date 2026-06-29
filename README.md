@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/logo-lockup.png" width="520" alt="SWMM Canada — anywhere in Canada, draw and run" />
+  <img src="assets/logo-lockup.png" width="520" alt="SWMM Canada: anywhere in Canada, draw and run" />
 </p>
 
 <p align="center">
@@ -12,16 +12,16 @@
   <a href="https://github.com/Zhonghao1995/SWMMCanada/pkgs/container/swmmcanada"><img src="https://img.shields.io/badge/ghcr.io-swmmcanada-2496ED?logo=docker&logoColor=white" alt="Container image on GHCR" /></a>
 </p>
 
-<p align="center"><em>🚧 Under construction — this repository serves as the data-preprocessing and upstream model-building module for <a href="https://github.com/Zhonghao1995/agentic-swmm-workflow"><strong>Agentic SWMM</strong></a> and <strong>Agentic MIKE+</strong>.</em></p>
+<p align="center"><em>🚧 Under construction. This repository is the data-preprocessing and upstream model-building module for <a href="https://github.com/Zhonghao1995/agentic-swmm-workflow"><strong>Agentic SWMM</strong></a> and <strong>Agentic MIKE+</strong>.</em></p>
 
 **Draw an area anywhere in Canada and get a ready-to-run EPA SWMM stormwater model.**
 
-You draw (or upload) a boundary on the map. SWMMCanada pulls the Canadian open data for that spot — rainfall, terrain, land cover, soil, and the city's storm pipes — and assembles a complete `model.inp` you can open and run in EPA SWMM. No hunting across data portals, no manual setup.
+You draw (or upload) a boundary on the map. SWMMCanada pulls the Canadian open data for that spot (rainfall, terrain, land cover, soil, and the city's storm pipes) and assembles a complete `model.inp` you can open and run in EPA SWMM. No hunting across data portals, no manual setup.
 
 > [!TIP]
-> **🌐 Try it now — no install, no deployment.** A hosted **beta** is live at **[swmm.h2ox.me](https://swmm.h2ox.me/)** — draw an area and build a SWMM model right in your browser.
+> **🌐 Try it now. No install, no deployment.** A hosted **beta** is live at **[swmm.h2ox.me](https://swmm.h2ox.me/)**. Draw an area and build a SWMM model right in your browser.
 >
-> The demo runs on a small server (**~2 GB RAM**), so it's best for **small areas**; large regions can exceed its memory and fail. For large-scale modeling, self-host the frontend **and** backend on a bigger machine or an **HPC** cluster — both run well as shipped in this repo (see **[DEPLOY.md](DEPLOY.md)**).
+> The demo runs on a small server (**~2 GB RAM**), so it works best for **small areas**; large regions can run out of memory and fail. For large-scale modeling, self-host the frontend **and** backend on a bigger machine or an **HPC** cluster. Both run well as shipped in this repo (see **[DEPLOY.md](DEPLOY.md)**).
 
 <p align="center">
   <img src="results/victoria_app.png" width="820" alt="The SWMMCanada web app after building downtown Victoria: real storm network and parcel-shaped subcatchments on the map, with the build mode and model layers in the side panel" />
@@ -30,20 +30,20 @@ You draw (or upload) a boundary on the map. SWMMCanada pulls the Canadian open d
 
 ## Two modes (picked automatically)
 
-SWMMCanada chooses how to build the network from **where you draw** — you don't set anything:
+SWMMCanada chooses how to build the network from **where you draw**. You don't set anything:
 
 | Mode | What it does | Where it kicks in |
 |---|---|---|
-| **Real network** | uses the city's published storm pipes — real inverts, diameters, manholes, and outfalls | **7 cities** that publish a storm network: Victoria, Ottawa, Calgary, Surrey, London, Kitchener–Waterloo, Kelowna |
+| **Real network** | uses the city's published storm pipes (real inverts, diameters, manholes, and outfalls) | **7 cities** that publish a storm network: Victoria, Ottawa, Calgary, Surrey, London, Kitchener–Waterloo, Kelowna |
 | **Synthesize** | builds a realistic network from the street map + open data | anywhere else in Canada |
 
 Either mode then gives you the same things: subcatchments, rainfall, and a shareable data package. Where a city also publishes parcels (like Victoria), the subcatchments follow real lot lines.
 
 ## Try it
 
-**Easiest — the hosted beta (nothing to install):** open **[swmm.h2ox.me](https://swmm.h2ox.me/)**, draw a *small* area, pick dates, and click **Build SWMM model**. Keep the area small (the demo server has ~2 GB RAM); for anything large, self-host as below.
+**Easiest: the hosted beta (nothing to install).** Open **[swmm.h2ox.me](https://swmm.h2ox.me/)**, draw a *small* area, pick dates, and click **Build SWMM model**. Keep the area small (the demo server has ~2 GB RAM); for anything large, self-host as below.
 
-**Quickest local — pull the prebuilt backend image** ([all tags](https://github.com/Zhonghao1995/SWMMCanada/pkgs/container/swmmcanada)):
+**Quickest local: pull the prebuilt backend image** ([all tags](https://github.com/Zhonghao1995/SWMMCanada/pkgs/container/swmmcanada)):
 
 ```bash
 docker run --rm -p 8000:8000 ghcr.io/zhonghao1995/swmmcanada:latest
@@ -99,19 +99,19 @@ frontend/src/            # React + Vite + MapLibre web app
 
 A `model.inp` that runs in EPA SWMM 5.2, a `datastore/` package you can share (GeoPackage + netCDF + JSON), and map layers.
 
-## Run, calibrate & quantify uncertainty — Agentic SWMM
+## Run, calibrate & quantify uncertainty with Agentic SWMM
 
-SWMMCanada is the **upstream half** of a closed loop: it turns an area into a complete, runnable model. The **downstream half**, **[Agentic SWMM](https://github.com/Zhonghao1995/agentic-swmm-workflow)**, takes that model the rest of the way — fully automated EPA SWMM runs, calibration against observations, post-processing, and uncertainty analysis. Hand a SWMMCanada package to Agentic SWMM and the loop closes: **open data → model → calibrated results with uncertainty.**
+SWMMCanada is the **first half** of a closed loop: it turns an area into a complete, runnable model. The **second half**, **[Agentic SWMM](https://github.com/Zhonghao1995/agentic-swmm-workflow)**, takes that model the rest of the way: it runs EPA SWMM for you, calibrates against observations, post-processes, and does uncertainty analysis. Hand a SWMMCanada package to Agentic SWMM and the loop closes: **open data → model → calibrated results with uncertainty.**
 
 > [!WARNING]
-> **Models are not calibrated.** SWMMCanada gets you a complete, runnable model fast — but the parameters (rainfall losses, roughness, curve numbers) are first-pass estimates. Calibrate against observations before using any results for design or decisions — which is exactly what **[Agentic SWMM](https://github.com/Zhonghao1995/agentic-swmm-workflow)** automates.
+> **Models are not calibrated.** SWMMCanada gets you a complete, runnable model fast, but the parameters (rainfall losses, roughness, curve numbers) are first-pass estimates. Calibrate against observations before using any results for design or decisions, which is exactly what **[Agentic SWMM](https://github.com/Zhonghao1995/agentic-swmm-workflow)** automates. Tired of tweaking parameters and plotting results by hand? Try Agentic SWMM: it does all the downstream work through plain natural-language chat, and every step stays auditable and transparent.
 
 ## More
 
-- **[ASSUMPTIONS.md](ASSUMPTIONS.md)** — what's real, derived, or approximated in a model, layer by layer. Most of it is grounded in real data; the approximations (and the uncalibrated caveat) are called out.
-- **[DATA.md](DATA.md)** — every dataset used, with links, licences, and how each one is used (ECCC rainfall, NRCan terrain & land cover, SoilGrids soil, OpenStreetMap, and the seven municipal storm networks). All free / open.
-- **[RESULTS.md](RESULTS.md)** — real-city validation, figures, and the EPA SWMM numbers.
-- **[DEPLOY.md](DEPLOY.md)** — run the backend as a container (GHCR image) and the frontend as a static site (GitHub Pages), and how the two are wired.
+- **[ASSUMPTIONS.md](ASSUMPTIONS.md)**: what's real, derived, or approximated in a model, layer by layer. Most of it is grounded in real data; the approximations (and the uncalibrated caveat) are called out.
+- **[DATA.md](DATA.md)**: every dataset used, with links, licences, and how each one is used (ECCC rainfall, NRCan terrain & land cover, SoilGrids soil, OpenStreetMap, and the seven municipal storm networks). All free / open.
+- **[RESULTS.md](RESULTS.md)**: real-city validation, figures, and the EPA SWMM numbers.
+- **[DEPLOY.md](DEPLOY.md)**: run the backend as a container (GHCR image) and the frontend as a static site (GitHub Pages), and how the two are wired.
 - **Built with** Python (geopandas, swmm-api, FastAPI) and React + MapLibre. Full dependency lists in `backend/pyproject.toml` and `frontend/package.json`.
 
 ## License
