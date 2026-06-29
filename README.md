@@ -104,7 +104,7 @@ A `model.inp` that runs in EPA SWMM 5.2, a `datastore/` package you can share (G
 SWMMCanada is the **first half** of a closed loop: it turns an area into a complete, runnable model. The **second half**, **[Agentic SWMM](https://github.com/Zhonghao1995/agentic-swmm-workflow)**, takes that model the rest of the way: it runs EPA SWMM for you, calibrates against observations, post-processes, and does uncertainty analysis. Hand a SWMMCanada package to Agentic SWMM and the loop closes: **open data → model → calibrated results with uncertainty.**
 
 > [!WARNING]
-> **Models are not calibrated.** SWMMCanada gets you a complete, runnable model fast, but the parameters (rainfall losses, roughness, curve numbers) are first-pass estimates. Calibrate against observations before using any results for design or decisions, which is exactly what **[Agentic SWMM](https://github.com/Zhonghao1995/agentic-swmm-workflow)** automates. Tired of tweaking parameters and plotting results by hand? Try Agentic SWMM: it does all the downstream work through plain natural-language chat, and every step stays auditable and transparent.
+> **Models are not calibrated.** SWMMCanada gets you a complete, runnable model fast, but the parameters (rainfall losses, roughness, curve numbers) are first-pass estimates. Calibrate against observations before using any results for design or decisions, which is exactly what **[Agentic SWMM](https://github.com/Zhonghao1995/agentic-swmm-workflow)** automates. Tired of tweaking parameters and plotting results by hand? Try Agentic SWMM: it does all the downstream work through plain natural-language chat (https://aiswmm.com/demo/), and every step stays auditable and transparent (https://doi.org/10.3390/aieng1010005).
 
 ## More
 
