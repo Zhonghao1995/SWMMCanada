@@ -12,7 +12,7 @@
   <a href="https://github.com/Zhonghao1995/SWMMCanada/pkgs/container/swmmcanada"><img src="https://img.shields.io/badge/ghcr.io-swmmcanada-2496ED?logo=docker&logoColor=white" alt="Container image on GHCR" /></a>
 </p>
 
-<p align="center"><em>🚧 Under construction — this repository serves as the data-preprocessing and upstream model-building module for <strong>Agentic SWMM</strong> and <strong>Agentic MIKE+</strong>.</em></p>
+<p align="center"><em>🚧 Under construction — this repository serves as the data-preprocessing and upstream model-building module for <a href="https://github.com/Zhonghao1995/agentic-swmm-workflow"><strong>Agentic SWMM</strong></a> and <strong>Agentic MIKE+</strong>.</em></p>
 
 **Draw an area anywhere in Canada and get a ready-to-run EPA SWMM stormwater model.**
 
@@ -22,9 +22,6 @@ You draw (or upload) a boundary on the map. SWMMCanada pulls the Canadian open d
 > **🌐 Try it now — no install, no deployment.** A hosted **beta** is live at **[swmm.h2ox.me](https://swmm.h2ox.me/)** — draw an area and build a SWMM model right in your browser.
 >
 > The demo runs on a small server (**~2 GB RAM**), so it's best for **small areas**; large regions can exceed its memory and fail. For large-scale modeling, self-host the frontend **and** backend on a bigger machine or an **HPC** cluster — both run well as shipped in this repo (see **[DEPLOY.md](DEPLOY.md)**).
-
-> [!WARNING]
-> **Models are not calibrated.** SWMMCanada gets you a complete, runnable model fast — but the parameters (rainfall losses, roughness, curve numbers) are first-pass estimates. Calibrate against observations before using any results for design or decisions.
 
 <p align="center">
   <img src="results/victoria_app.png" width="820" alt="The SWMMCanada web app after building downtown Victoria: real storm network and parcel-shaped subcatchments on the map, with the build mode and model layers in the side panel" />
@@ -101,6 +98,13 @@ frontend/src/            # React + Vite + MapLibre web app
 ## What you get
 
 A `model.inp` that runs in EPA SWMM 5.2, a `datastore/` package you can share (GeoPackage + netCDF + JSON), and map layers.
+
+## Run, calibrate & quantify uncertainty — Agentic SWMM
+
+SWMMCanada is the **upstream half** of a closed loop: it turns an area into a complete, runnable model. The **downstream half**, **[Agentic SWMM](https://github.com/Zhonghao1995/agentic-swmm-workflow)**, takes that model the rest of the way — fully automated EPA SWMM runs, calibration against observations, post-processing, and uncertainty analysis. Hand a SWMMCanada package to Agentic SWMM and the loop closes: **open data → model → calibrated results with uncertainty.**
+
+> [!WARNING]
+> **Models are not calibrated.** SWMMCanada gets you a complete, runnable model fast — but the parameters (rainfall losses, roughness, curve numbers) are first-pass estimates. Calibrate against observations before using any results for design or decisions — which is exactly what **[Agentic SWMM](https://github.com/Zhonghao1995/agentic-swmm-workflow)** automates.
 
 ## More
 
