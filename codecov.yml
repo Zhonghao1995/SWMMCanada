@@ -1,0 +1,35 @@
+# Codecov config — backend coverage only for now.
+# Start in "informational" mode: report the coverage delta on PRs but never
+# fail the check. Tighten to a real target once we've watched a few weeks of
+# numbers (note: integration tests are excluded by default, so the measured
+# number undercounts code exercised only by live-network runs).
+coverage:
+  status:
+    project:
+      default:
+        informational: true
+    patch:
+      default:
+        informational: true
+
+# Per-area coverage. Frontend has no tests yet, so only the backend flag exists.
+flags:
+  backend:
+    paths:
+      - backend/swmmcanada/
+    carryforward: true
+
+# pytest runs from backend/, so report paths are swmmcanada/... — remap them
+# onto the repo layout (backend/swmmcanada/...) so Codecov finds the files.
+fixes:
+  - "swmmcanada/::backend/swmmcanada/"
+
+ignore:
+  - "backend/tests"
+  - "frontend"
+  - "docs"
+  - "assets"
+
+comment:
+  layout: "reach, diff, flags, files"
+  require_changes: false
