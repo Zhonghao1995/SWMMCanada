@@ -114,6 +114,14 @@ SWMMCanada is the **first half** of a closed loop: it turns an area into a compl
 - **[DEPLOY.md](DEPLOY.md)**: run the backend as a container (GHCR image) and the frontend as a static site (GitHub Pages), and how the two are wired.
 - **Built with** Python (geopandas, swmm-api, FastAPI) and React + MapLibre. Full dependency lists in `backend/pyproject.toml` and `frontend/package.json`.
 
+## Citation
+
+If you use SWMMCanada in your work, please cite it (APA):
+
+> Zhang, Z. (2026). *SWMMCanada: ready-to-run EPA SWMM models anywhere in Canada from open data* (Version 0.1.1) [Computer software]. Zenodo. https://doi.org/10.5281/zenodo.21058544
+
+BibTeX and other formats are available via **Cite this repository** in the GitHub sidebar (generated from [`CITATION.cff`](CITATION.cff)). The DOI above is the *concept DOI* — it always resolves to the latest version.
+
 ## License
 
 MIT © 2026 Zhonghao Zhang
