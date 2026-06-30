@@ -16,9 +16,14 @@ authors:
     affiliation: "University of Victoria"
 repository-code: "https://github.com/Zhonghao1995/SWMMCanada"
 url: "https://swmm.h2ox.me/"
+doi: "10.5281/zenodo.21058544"
 license: MIT
-version: 0.1.0
-date-released: "2026-06-22"
+version: 0.1.1
+date-released: "2026-06-29"
+identifiers:
+  - type: doi
+    value: "10.5281/zenodo.21058544"
+    description: "Concept DOI — always resolves to the latest version"
 keywords:
   - SWMM
   - stormwater
