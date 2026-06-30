@@ -23,7 +23,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=7", "httpx>=0.27"]
+dev = ["pytest>=7", "pytest-cov>=4", "httpx>=0.27"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
@@ -33,6 +33,11 @@ norecursedirs = [".*", "_darcs", "CVS", "dist", "node_modules", "venv", ".venv",
 # Live-network end-to-end tests are opt-in: the default run excludes them.
 addopts = "-m 'not integration'"
 markers = ["integration: live-network end-to-end test (run with -m integration)"]
+
+[tool.coverage.run]
+# relative_files keeps filenames relative to backend/ (e.g. swmmcanada/geo/aoi.py)
+# instead of absolute paths, so Codecov can map them onto backend/swmmcanada/.
+relative_files = true
 
 [build-system]
 requires = ["setuptools>=64"]

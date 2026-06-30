@@ -8,7 +8,7 @@
   <a href="https://github.com/Zhonghao1995/SWMMCanada/releases/latest"><img src="https://img.shields.io/github/v/release/Zhonghao1995/SWMMCanada?label=release&color=1F6FEB" alt="latest release" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT license" /></a>
   <img src="https://img.shields.io/badge/status-public%20beta-blue" alt="Status: public beta" />
-  <img src="https://img.shields.io/badge/EPA%20SWMM-5.2-1F6FEB" alt="EPA SWMM 5.2" />
+  <a href="https://codecov.io/gh/Zhonghao1995/SWMMCanada"><img src="https://codecov.io/gh/Zhonghao1995/SWMMCanada/branch/main/graph/badge.svg" alt="codecov" /></a>
   <a href="https://github.com/Zhonghao1995/SWMMCanada/pkgs/container/swmmcanada"><img src="https://img.shields.io/badge/ghcr.io-swmmcanada-2496ED?logo=docker&logoColor=white" alt="Container image on GHCR" /></a>
 </p>
 
