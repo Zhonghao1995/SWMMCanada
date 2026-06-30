@@ -5,11 +5,10 @@
 <p align="center">
   <a href="https://swmm.h2ox.me/"><img src="https://img.shields.io/badge/%F0%9F%8C%90%20live%20demo-swmm.h2ox.me-1F6FEB" alt="Live demo" /></a>
   <a href="https://github.com/Zhonghao1995/SWMMCanada/actions/workflows/ci.yml"><img src="https://github.com/Zhonghao1995/SWMMCanada/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
-  <a href="https://github.com/Zhonghao1995/SWMMCanada/releases/latest"><img src="https://img.shields.io/github/v/release/Zhonghao1995/SWMMCanada?label=release&color=1F6FEB" alt="latest release" /></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT license" /></a>
-  <img src="https://img.shields.io/badge/status-public%20beta-blue" alt="Status: public beta" />
   <a href="https://codecov.io/gh/Zhonghao1995/SWMMCanada"><img src="https://codecov.io/gh/Zhonghao1995/SWMMCanada/branch/main/graph/badge.svg" alt="codecov" /></a>
+  <a href="https://github.com/Zhonghao1995/SWMMCanada/releases/latest"><img src="https://img.shields.io/github/v/release/Zhonghao1995/SWMMCanada?label=release&color=1F6FEB" alt="latest release" /></a>
   <a href="https://github.com/Zhonghao1995/SWMMCanada/pkgs/container/swmmcanada"><img src="https://img.shields.io/badge/ghcr.io-swmmcanada-2496ED?logo=docker&logoColor=white" alt="Container image on GHCR" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT license" /></a>
 </p>
 
 <p align="center"><em>🚧 Under construction. This repository is the data-preprocessing and upstream model-building module for <a href="https://github.com/Zhonghao1995/agentic-swmm-workflow"><strong>Agentic SWMM</strong></a> and <strong>Agentic MIKE+</strong>.</em></p>
