@@ -1,0 +1,31 @@
+{
+  "upload_type": "software",
+  "title": "SWMMCanada: ready-to-run EPA SWMM models anywhere in Canada from open data",
+  "description": "SWMMCanada turns a boundary drawn (or uploaded) anywhere in Canada into a complete, ready-to-run EPA SWMM stormwater model. It pulls Canadian open data for the area (rainfall, terrain, land cover, soil, and municipal storm networks) and assembles a model.inp together with a shareable datastore package (GeoPackage + netCDF + JSON). It is the upstream model-building service for the Agentic SWMM workflow.",
+  "creators": [
+    {
+      "name": "Zhang, Zhonghao",
+      "orcid": "0009-0002-6253-6380",
+      "affiliation": "University of Victoria"
+    }
+  ],
+  "license": "MIT",
+  "access_right": "open",
+  "keywords": [
+    "SWMM",
+    "stormwater",
+    "hydrology",
+    "Canada",
+    "open data",
+    "GIS",
+    "urban drainage"
+  ],
+  "related_identifiers": [
+    {
+      "relation": "isSupplementTo",
+      "identifier": "10.3390/aieng1010005",
+      "resource_type": "publication-article",
+      "scheme": "doi"
+    }
+  ]
+}
