@@ -1,0 +1,51 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "SWMMCanada: ready-to-run EPA SWMM models anywhere in Canada from open data"
+abstract: >-
+  SWMMCanada turns a boundary drawn (or uploaded) anywhere in Canada into a
+  complete, ready-to-run EPA SWMM stormwater model. It pulls Canadian open data
+  for the area — rainfall, terrain, land cover, soil, and municipal storm
+  networks — and assembles a model.inp together with a shareable datastore
+  package (GeoPackage + netCDF + JSON). It is the upstream model-building
+  service for the Agentic SWMM workflow.
+type: software
+authors:
+  - family-names: Zhang
+    given-names: Zhonghao
+    orcid: "https://orcid.org/0009-0002-6253-6380"
+    affiliation: "University of Victoria"
+repository-code: "https://github.com/Zhonghao1995/SWMMCanada"
+url: "https://swmm.h2ox.me/"
+license: MIT
+version: 0.1.0
+date-released: "2026-06-22"
+keywords:
+  - SWMM
+  - stormwater
+  - hydrology
+  - Canada
+  - open data
+  - GIS
+  - urban drainage
+references:
+  - type: article
+    title: "Agentic SWMM: Auditable and Reproducible Stormwater Modelling Workflow with Agent Skills and Model Context Protocol"
+    authors:
+      - family-names: Zhang
+        given-names: Zhonghao
+        orcid: "https://orcid.org/0009-0002-6253-6380"
+        affiliation: "University of Victoria"
+      - family-names: Valeo
+        given-names: Caterina
+        orcid: "https://orcid.org/0000-0002-4056-8632"
+    journal: "AI for Engineering"
+    publisher:
+      name: "MDPI AG"
+    year: 2026
+    month: 6
+    volume: 1
+    issue: 1
+    start: 5
+    doi: "10.3390/aieng1010005"
+    url: "https://doi.org/10.3390/aieng1010005"
+    notes: "Describes Agentic SWMM, the downstream workflow that SWMMCanada feeds into."
