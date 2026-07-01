@@ -104,6 +104,22 @@ def _utm_crs_for(aoi) -> str:
     return f"EPSG:{32600 + zone}"
 
 
+def _export_mikeplus_safe(ws: Path) -> None:
+    """Emit the MIKE+ CS import package into ``ws/mikeplus`` alongside the .inp (ADR 0008).
+
+    Additive and produced on every build, but never load-bearing: a failure is caught and
+    noted into the folder so the primary SWMM .inp / datastore are never blocked by a
+    secondary exporter's bug (ADR 0008 §5, graceful degradation)."""
+    try:
+        from swmmcanada.export import export_mikeplus
+
+        export_mikeplus(ws / "datastore", ws / "mikeplus")
+    except Exception as exc:  # noqa: BLE001 — MIKE+ export must never break the build
+        target = ws / "mikeplus"
+        target.mkdir(parents=True, exist_ok=True)
+        (target / "EXPORT_FAILED.txt").write_text(f"MIKE+ export failed: {exc!r}\n")
+
+
 def build_from_aoi(
     aoi,
     start: date,
@@ -189,6 +205,7 @@ def build_from_aoi(
         },
     )
     result = build_from_datastore(ws / "datastore", ws)
+    _export_mikeplus_safe(ws)  # ADR 0008: MIKE+ CS package — every build, graceful
 
     # Map preview: GeoJSON of the model geometry for the frontend's layers.
     preview_dir = ws / "preview"
@@ -288,6 +305,7 @@ def _build_real_network(
         },
     )
     result = build_from_datastore(ws / "datastore", ws)
+    _export_mikeplus_safe(ws)  # ADR 0008: MIKE+ CS package — every build, graceful
 
     preview_dir = ws / "preview"
     preview_dir.mkdir(exist_ok=True)
