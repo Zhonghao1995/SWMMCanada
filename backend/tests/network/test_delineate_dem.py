@@ -85,11 +85,23 @@ def test_valley_dem_delineates_basins(tmp_path):
     assert diag["method"] == "junction_dem"
     assert diag["gate"]["decision"] == "dem"
     assert diag["gate"]["median_slope_pct"] > 3.0        # the valley walls dominate
+    assert diag["width_method"] == "area_over_flow_length"
     assert {s.name for s in subs} == {"S_JW", "S_JE"}
     for s in subs:
         assert s.outlet_node in ("JW", "JE")
         assert s.area_ha > 0 and s.polygon               # real polygons, real areas
-        assert s.width_m == pytest.approx((s.area_ha * 1e4) ** 0.5)  # voronoi-path contract
+        # SWMM width = area / longest DEM flow path — narrower than √area for these
+        # elongated valley basins, and never the √area fallback.
+        assert 0 < s.width_m < (s.area_ha * 1e4) ** 0.5
+
+
+def test_dem_width_uses_flow_length_voronoi_keeps_sqrt(tmp_path):
+    dem = _write_dem(tmp_path, _valley_dem())
+    dem_subs, _ = delineate_junction_subcatchments(_valley_junctions(), AOI, dem_path=dem, config=CFG)
+    vor_subs, _ = delineate_junction_subcatchments(_valley_junctions(), AOI, dem_path=None, config=CFG)
+    for s in vor_subs:
+        assert s.width_m == pytest.approx((s.area_ha * 1e4) ** 0.5)   # voronoi contract intact
+    assert all(s.width_m != pytest.approx((s.area_ha * 1e4) ** 0.5) for s in dem_subs)
 
 
 def test_dem_cells_cover_aoi_without_gross_overlap(tmp_path):

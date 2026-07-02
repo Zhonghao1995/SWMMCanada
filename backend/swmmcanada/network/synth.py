@@ -143,10 +143,13 @@ def synthesise_network(
     )
 
 
-def _build_subcatchments(junction_xy, aoi, config: NetworkConfig, cells=None) -> List[SubcatchmentIn]:
+def _build_subcatchments(junction_xy, aoi, config: NetworkConfig, cells=None,
+                         widths=None) -> List[SubcatchmentIn]:
     """Cells → one SubcatchmentIn per junction (missing cell → nominal placeholder; %imperv
     stays a placeholder, derive overwrites). ``cells`` defaults to Voronoi delineation when
-    an AOI polygon is given; the DEM delineator (delineate_dem, ADR 0010) passes its own."""
+    an AOI polygon is given; the DEM delineator (delineate_dem, ADR 0010) passes its own,
+    plus optional per-junction ``widths`` (area / DEM flow length) that beat the √area
+    default (SWMM width is a time-of-concentration input, not a shape statistic)."""
     if cells is None:
         cells = {}
         if aoi is not None and len(junction_xy) >= 2:
@@ -157,7 +160,7 @@ def _build_subcatchments(junction_xy, aoi, config: NetworkConfig, cells=None) ->
         cell = cells.get(jname)
         if cell is not None and cell.area_m2 > 0:
             area_ha = cell.area_m2 / 10_000.0
-            width = math.sqrt(cell.area_m2)
+            width = (widths or {}).get(jname) or math.sqrt(cell.area_m2)
             polygon = cell.exterior
         else:
             area_ha = config.sub_area_ha

@@ -81,7 +81,7 @@ def delineate_junction_subcatchments(
     burned, n_burned = _burn_streets(dem, transform, dem_crs, streets, config)
     gate["streets_burned_cells"] = n_burned
 
-    cells, dem_diag = _dem_basins(
+    cells, widths, dem_diag = _dem_basins(
         burned, transform, dem_crs, aoi_mask, junction_xy, aoi, config
     )
     if cells is None:  # degenerate (e.g. every junction outside the DEM window)
@@ -89,7 +89,7 @@ def delineate_junction_subcatchments(
         gate.update(dem_diag)
         return _voronoi(junction_xy, aoi, network_config, gate)
 
-    subs = _build_subcatchments(junction_xy, aoi, network_config, cells=cells)
+    subs = _build_subcatchments(junction_xy, aoi, network_config, cells=cells, widths=widths)
 
     # Posterior gate: the DEM result must satisfy the validation layer's *errors*; a
     # result with blank holes or gross overlap is worse than an honest Voronoi.
@@ -104,6 +104,7 @@ def delineate_junction_subcatchments(
         "method": METHOD_DEM,
         "n_subcatchments": len(subs),
         "gate": gate,
+        "width_method": "area_over_flow_length",
         **dem_diag,
     }
     return subs, diag
@@ -261,10 +262,26 @@ def _dem_basins(dem, transform, dem_crs, aoi_mask, junction_xy, aoi, config):
             py.append(y)
     diag = {"n_junctions_outside_dem": len(names) - len(inside)}
     if len(inside) < 2:
-        return None, diag
+        return None, None, diag
 
     flw = pyflwdir.from_dem(dem, nodata=config.nodata, transform=transform, latlon=False)
     labels = flw.basins(xy=(np.asarray(px), np.asarray(py))).astype("int32")
+
+    # Per-basin longest flow path to its pour point (SWMM width = area / flow length):
+    # distnc is along-flow distance to the terminal outlet, so within a basin the length
+    # to the pour point is max(distnc) − distnc(pour cell).
+    distnc = flw.distnc
+    cols_r = np.clip(((np.asarray(px) - transform.c) / transform.a).astype(int), 0, w - 1)
+    rows_r = np.clip(((np.asarray(py) - transform.f) / transform.e).astype(int), 0, h - 1)
+    flow_len: Dict[str, float] = {}
+    cell_size = abs(transform.a)
+    for i, name in enumerate(inside, start=1):
+        sel = labels == i
+        if not sel.any():
+            continue
+        L = float(np.nanmax(distnc[sel]) - distnc[rows_r[i - 1], cols_r[i - 1]])
+        if np.isfinite(L) and L > cell_size:
+            flow_len[name] = L
 
     # Absorb AOI cells no basin claimed (ground that drains PAST every pour point) by
     # region-growing the existing basins outward — growth from a basin keeps each label's
@@ -308,7 +325,7 @@ def _dem_basins(dem, transform, dem_crs, aoi_mask, junction_xy, aoi, config):
         main[name] = poly
     diag["n_multipart_cells"] = n_multi
     if not main:
-        return None, diag
+        return None, None, diag
 
     # Vector-side leftover absorption: keeping each label's largest polygon drops the
     # point-touching fragments raster→vector splits off (the "keep-largest" blank-hole
@@ -336,8 +353,9 @@ def _dem_basins(dem, transform, dem_crs, aoi_mask, junction_xy, aoi, config):
             exterior=[(float(x), float(y)) for x, y in shell.exterior.coords],
         )
     if not cells:
-        return None, diag
-    return cells, diag
+        return None, None, diag
+    widths = {n: cells[n].area_m2 / flow_len[n] for n in cells if n in flow_len}
+    return cells, widths, diag
 
 
 def _clean_polygon(poly):
