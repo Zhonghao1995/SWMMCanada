@@ -28,7 +28,7 @@ from swmmcanada import result_package
 from swmmcanada.derive.core import derive_parameters
 from swmmcanada.geo.crs import utm_crs_for
 from swmmcanada.network import synthesise_network
-from swmmcanada.network.synth import NetworkConfig, _build_subcatchments
+from swmmcanada.network.delineate_dem import delineate_junction_subcatchments
 from swmmcanada.preview import network_geojson
 from swmmcanada.validate import (
     MethodDescriptor,
@@ -84,13 +84,16 @@ def _method_descriptor(sub_diag: Optional[dict]) -> MethodDescriptor:
         return MethodDescriptor("catchbasin_parcel", "nearest inlet service area", "medium")
     if "voronoi-shaped" in method:
         return MethodDescriptor("catchbasin_voronoi", "nearest inlet service area", "low")
+    if method == "junction_dem":
+        return MethodDescriptor("junction_dem", "DEM D8 basins to manholes", "medium")
     return MethodDescriptor("junction_voronoi", "nearest node service area", "low")
 
 
-def _validate_or_raise(network, subcatchments, aoi, method: MethodDescriptor, ws: Path):
+def _validate_or_raise(network, subcatchments, aoi, method: MethodDescriptor, ws: Path,
+                       delineation: Optional[dict] = None):
     """Validate the subcatchment model, always write validation.json into the package, and
     raise (stopping the build) if any error-severity check fails — so no untrusted .inp ships."""
-    report = validate_model(network, subcatchments, aoi, method=method)
+    report = validate_model(network, subcatchments, aoi, method=method, delineation=delineation)
     (Path(ws) / vschema.VALIDATION_JSON).write_text(json.dumps(report.to_dict(), indent=2))
     if not report.ok:
         detail = "; ".join(f"{c.id}: {c.message}" for c in report.errors)
@@ -117,7 +120,7 @@ def _export_mikeplus_safe(ws: Path) -> None:
 def _finish_build(
     ws: Path, aoi, network, subcatchments, *, start: date, end: date, method,
     config: BuildConfig, extra_provenance: dict, climate_client, climate_buffer_deg: float,
-    report=None,
+    report=None, sub_diag: Optional[dict] = None,
 ) -> BuildResult:
     """The build spine (CONTEXT "Build spine") — the single shared tail of every build path.
 
@@ -139,7 +142,7 @@ def _finish_build(
     temperature = to_temperature_series(series)
 
     _r("VALIDATING", 85)
-    _validate_or_raise(network, subcatchments, aoi, method, ws)
+    _validate_or_raise(network, subcatchments, aoi, method, ws, delineation=sub_diag)
 
     _r("BUILDING", 90)
     # Datastore is the PRIMARY build path (ADR 0007): write it, then build the .inp from it.
@@ -199,7 +202,11 @@ def build_from_aoi(
 
     _r("NETWORK", 55)
     synth = synthesise_network(streets, aoi=aoi)
-    subcatchments = synth.subcatchments
+    # Delineation v2 (ADR 0010): DEM D8 basins (street-burned) behind the terrain honesty
+    # gate; flat/noisy terrain falls back to junction-Voronoi with the reading recorded.
+    junction_xy = {j.name: (j.x, j.y) for j in synth.network.junctions}
+    subcatchments, sub_diag = delineate_junction_subcatchments(
+        junction_xy, aoi, dem_path=dem.path, streets=streets)
 
     if derive:
         _r("LANDCOVER_SOIL", 62)
@@ -209,17 +216,21 @@ def build_from_aoi(
         subcatchments = derive_parameters(subcatchments, dem.path, landcover, soil)
 
     # Head done (network producer = OSM synthesis); the shared build spine does the rest.
-    method = MethodDescriptor("junction_voronoi", "nearest node service area", "low")
+    method = _method_descriptor(sub_diag)
     config = BuildConfig(out_dir=ws, start=start, end=end, coordinate_crs=utm_crs_for(aoi))
     return _finish_build(
         ws, aoi, synth.network, subcatchments,
         start=start, end=end, method=method, config=config,
-        extra_provenance={"sources": {
-            "dem": type(dem_source).__name__,
-            "climate": type(climate_client).__name__,
-            "streets": "OSM",
-        }},
+        extra_provenance={
+            "sources": {
+                "dem": type(dem_source).__name__,
+                "climate": type(climate_client).__name__,
+                "streets": "OSM",
+            },
+            "subcatchment_diagnostics": sub_diag,
+        },
         climate_client=climate_client, climate_buffer_deg=climate_buffer_deg, report=report,
+        sub_diag=sub_diag,
     )
 
 
@@ -258,15 +269,20 @@ def _build_real_network(
         )
     else:
         subcatchments = []
-    if not subcatchments:  # no catch-basin data -> Voronoi around the network nodes
+    dem = None
+    if not subcatchments:  # no catch-basin data -> junction delineation (DEM-gated, ADR 0010)
         junction_xy = {j.name: (j.x, j.y) for j in network.junctions}
-        subcatchments = _build_subcatchments(junction_xy, aoi, NetworkConfig())
+        if derive:  # the DEM is needed for derive anyway; without derive there is none → "no_dem"
+            _r("ACQUIRING_DEM", 40)
+            dem = acquire_dem(tuple(aoi.bbox), ws, source=dem_source)
+        subcatchments, sub_diag = delineate_junction_subcatchments(
+            junction_xy, aoi, dem_path=(dem.path if dem else None))
         imperv_map = {}
-        sub_diag = {"method": "voronoi-of-nodes", "n_subcatchments": len(subcatchments)}
 
     if derive:
-        _r("ACQUIRING_DEM", 45)
-        dem = acquire_dem(tuple(aoi.bbox), ws, source=dem_source)
+        if dem is None:
+            _r("ACQUIRING_DEM", 45)
+            dem = acquire_dem(tuple(aoi.bbox), ws, source=dem_source)
         _r("LANDCOVER_SOIL", 60)
         landcover = acquire_landcover(tuple(aoi.bbox), ws, source=landcover_source or NRCanLandcoverSource())
         soil = _acquire_soil_auto(tuple(aoi.bbox), ws, soil_source)
@@ -291,6 +307,7 @@ def _build_real_network(
             "subcatchment_diagnostics": sub_diag,
         },
         climate_client=climate_client, climate_buffer_deg=climate_buffer_deg, report=report,
+        sub_diag=sub_diag,
     )
 
 

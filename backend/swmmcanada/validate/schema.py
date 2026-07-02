@@ -17,13 +17,14 @@ WARNING = "warning"    # runs, but the user should know it's approximate
 METHOD_CATCHBASIN_PARCEL = "catchbasin_parcel"      # real inlets, parcel-shaped (Victoria)
 METHOD_CATCHBASIN_VORONOI = "catchbasin_voronoi"    # real inlets, Voronoi (Ottawa)
 METHOD_JUNCTION_VORONOI = "junction_voronoi"        # synthesized / fallback
+METHOD_JUNCTION_DEM = "junction_dem"                # DEM D8 basins to manholes (ADR 0010)
 # Reserved for future methods (not produced yet):
 METHOD_MUNICIPAL_POLYGON = "municipal_polygon"      # city-published catchment polygons
 METHOD_CATCHBASIN_DEM = "catchbasin_dem"            # DEM-refined inlet service area
 
 METHODS = frozenset({
     METHOD_CATCHBASIN_PARCEL, METHOD_CATCHBASIN_VORONOI, METHOD_JUNCTION_VORONOI,
-    METHOD_MUNICIPAL_POLYGON, METHOD_CATCHBASIN_DEM,
+    METHOD_JUNCTION_DEM, METHOD_MUNICIPAL_POLYGON, METHOD_CATCHBASIN_DEM,
 })
 
 CONFIDENCE_LEVELS = frozenset({"low", "medium", "high"})

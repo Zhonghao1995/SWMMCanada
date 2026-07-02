@@ -10,7 +10,7 @@ pipeline should stop before emitting the `.inp`); a **warning** means it runs bu
 approximate. `ValidationReport.ok` is true iff there are zero failing error-severity checks.
 """
 from dataclasses import dataclass, field
-from typing import List
+from typing import List, Optional
 
 from swmmcanada.build.models import NetworkIn, SubcatchmentIn
 from swmmcanada.validate import checks as C
@@ -44,6 +44,7 @@ class ValidationReport:
     method: MethodDescriptor
     n_subcatchments: int
     checks: List[CheckResult]
+    delineation: Optional[dict] = None   # gate readings / fallback reason (ADR 0010)
 
     @property
     def errors(self) -> List[CheckResult]:
@@ -59,7 +60,7 @@ class ValidationReport:
         return not self.errors
 
     def to_dict(self) -> dict:
-        return {
+        out = {
             "validation_version": schema.VALIDATION_VERSION,
             "subcatchment_method": self.method.method,
             "physical_basis": self.method.physical_basis,
@@ -78,6 +79,9 @@ class ValidationReport:
                 for c in self.checks
             ],
         }
+        if self.delineation:
+            out["delineation"] = self.delineation
+        return out
 
 
 def validate_model(
@@ -86,6 +90,7 @@ def validate_model(
     aoi,
     *,
     method: MethodDescriptor,
+    delineation: Optional[dict] = None,
 ) -> ValidationReport:
     """Run every check against the assembled model and return a structured report."""
     node_names = {n.name for n in list(network.junctions) + list(network.outfalls)}
@@ -110,4 +115,7 @@ def validate_model(
     results.append(C.check_outlet_distance(geo, node_coords))
     results.append(C.check_shape_plausibility(geo))
 
-    return ValidationReport(method=method, n_subcatchments=len(subcatchments), checks=results)
+    return ValidationReport(
+        method=method, n_subcatchments=len(subcatchments), checks=results,
+        delineation=delineation,
+    )
