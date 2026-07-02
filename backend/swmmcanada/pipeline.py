@@ -101,6 +101,20 @@ def _validate_or_raise(network, subcatchments, aoi, method: MethodDescriptor, ws
     return report
 
 
+def _dem_source_auto(dem_source):
+    """DEM source selection: explicit override > SWMMCANADA_DEM_SOURCE=auto (HRDEM LiDAR
+    where a sampled read proves coverage, else MRDEM) > MRDEM-30 default. The default stays
+    MRDEM deliberately: the delineation gate's 4.0 % threshold is calibrated on MRDEM-30
+    (ADR 0010) — flipping the default is a decision, not a drop-in."""
+    if dem_source is not None:
+        return dem_source
+    if os.environ.get("SWMMCANADA_DEM_SOURCE") == "auto":
+        from swmmcanada.sources.dem_hrdem import AutoDemSource
+
+        return AutoDemSource()
+    return NRCanDemSource()
+
+
 def _export_mikeplus_safe(ws: Path) -> None:
     """Emit the MIKE+ CS import package into ``ws/mikeplus`` alongside the .inp (ADR 0008).
 
@@ -188,7 +202,7 @@ def build_from_aoi(
         if report:
             report(stage, pct)
 
-    dem_source = dem_source or NRCanDemSource()
+    dem_source = _dem_source_auto(dem_source)
     climate_client = climate_client or GeoMetClient()
     ws = Path(workspace)
     ws.mkdir(parents=True, exist_ok=True)
@@ -249,7 +263,7 @@ def _build_real_network(
         if report:
             report(stage, pct)
 
-    dem_source = dem_source or NRCanDemSource()
+    dem_source = _dem_source_auto(dem_source)
     climate_client = climate_client or GeoMetClient()
     ws = Path(workspace)
     ws.mkdir(parents=True, exist_ok=True)
