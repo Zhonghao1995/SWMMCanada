@@ -27,6 +27,7 @@ class SwmmExporter:
             rain=ds.rain,
             config=config,
             evaporation=ds.evaporation,
+            temperature=ds.temperature,
         )
         return ExportResult(
             target="swmm",

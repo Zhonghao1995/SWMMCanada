@@ -52,6 +52,7 @@ class ModelReadyDatastore:
     config: dict
     provenance: dict
     evaporation: Optional[EvaporationSeries] = None
+    temperature: Optional[TemperatureSeries] = None
 
 
 # --------------------------------------------------------------------------- #
@@ -240,6 +241,7 @@ def read_datastore(path) -> ModelReadyDatastore:
     subcatchments = _read_subcatchments(base / schema.NETWORK_GPKG)
     rain = _read_forcing(base / schema.FORCING_NC)
     evaporation = _read_evaporation(base / schema.FORCING_NC)
+    temperature = _read_temperature(base / schema.FORCING_NC)
     config, provenance = _read_datastore_json(base / schema.DATASTORE_JSON)
     return ModelReadyDatastore(
         network=network,
@@ -248,6 +250,7 @@ def read_datastore(path) -> ModelReadyDatastore:
         config=config,
         provenance=provenance,
         evaporation=evaporation,
+        temperature=temperature,
     )
 
 
@@ -348,8 +351,7 @@ def _read_forcing(nc: Path) -> RainfallSeries:
 
 
 def _read_evaporation(nc: Path) -> Optional[EvaporationSeries]:
-    """Reconstruct the evaporation forcing if forcing.nc carries it, else None. (Temperature
-    is written for the record but not reconstructed — nothing in build consumes it yet.)"""
+    """Reconstruct the evaporation forcing if forcing.nc carries it, else None."""
     ds = xr.open_dataset(nc)
     try:
         if schema.EVAP_VAR not in ds:
@@ -361,6 +363,21 @@ def _read_evaporation(nc: Path) -> Optional[EvaporationSeries]:
     finally:
         ds.close()
     return EvaporationSeries(timestamps=timestamps, evap_mm_day=evap, ts_name=ts_name)
+
+
+def _read_temperature(nc: Path) -> Optional[TemperatureSeries]:
+    """Reconstruct the temperature forcing if forcing.nc carries it, else None — build now
+    consumes it (snowmelt, #55), so the ADR 0007 parity invariant applies to it too."""
+    ds = xr.open_dataset(nc)
+    try:
+        if schema.TEMP_VAR not in ds:
+            return None
+        times = pd.to_datetime(ds[schema.TEMP_TIME_DIM].values)
+        timestamps = [pd.Timestamp(t).to_pydatetime() for t in times]
+        tmean = [float(v) for v in ds[schema.TEMP_VAR].values]
+    finally:
+        ds.close()
+    return TemperatureSeries(timestamps=timestamps, tmean_c=tmean)
 
 
 def _read_datastore_json(path: Path):
@@ -385,6 +402,7 @@ def build_from_datastore(datastore_dir, out_dir) -> BuildResult:
         rain=ds.rain,
         config=config,
         evaporation=ds.evaporation,
+        temperature=ds.temperature,
     )
 
 
