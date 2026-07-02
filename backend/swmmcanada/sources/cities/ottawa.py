@@ -21,23 +21,10 @@ OttawaClient = base.ArcGISClient
 
 
 def _fetch(layer, bbox, client, where="1=1") -> list:
-    min_lon, min_lat, max_lon, max_lat = bbox
-    url = f"{ARC}/{layer}/query"
-    features, offset = [], 0
-    while True:
-        params = {
-            "where": where, "geometry": f"{min_lon},{min_lat},{max_lon},{max_lat}",
-            "geometryType": "esriGeometryEnvelope", "inSR": 4326,
-            "spatialRel": "esriSpatialRelIntersects", "outFields": "*", "returnGeometry": "true",
-            "outSR": 4326, "f": "json", "resultOffset": offset, "resultRecordCount": _PAGE,
-        }
-        payload = client.get_json(url, params)
-        page = payload.get("features") or []
-        features.extend(base.esri_to_geojson(f) for f in page)
-        if not payload.get("exceededTransferLimit") or not page:
-            break
-        offset += len(page)
-    return features
+    """Paginated bbox query. Ottawa's MapServer only serves Esri JSON (``f=geojson`` comes
+    back empty), so fetch ``f=json`` and convert every feature."""
+    return base.fetch_paged(client, f"{ARC}/{layer}/query", bbox, where=where,
+                            fmt="json", page_size=_PAGE, transform=base.esri_to_geojson)
 
 
 def fetch_ottawa_storm(bbox, *, client=None) -> dict:

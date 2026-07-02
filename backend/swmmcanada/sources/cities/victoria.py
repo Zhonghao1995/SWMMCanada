@@ -39,6 +39,12 @@ def _payload_features(payload: dict) -> list:
     return (payload or {}).get("features") or []
 
 
+def _fetch_layer_bbox(base_url, layer, bbox, client, where="1=1") -> list:
+    """Paginated envelope-intersect query against one layer (the shared base loop)."""
+    return base.fetch_paged(client, f"{base_url}/{layer}/query", bbox,
+                            where=where, page_size=_PAGE_SIZE)
+
+
 def fetch_victoria_storm(bbox, *, client=None) -> dict:
     """Storm network intersecting ``bbox`` (EPSG:4326 tuple, or object with ``.bbox``):
     STM mains by envelope, then referenced nodes BY AssetID. Returns
@@ -46,32 +52,12 @@ def fetch_victoria_storm(bbox, *, client=None) -> dict:
     if hasattr(bbox, "bbox"):
         bbox = bbox.bbox
     client = client or VicMapClient()
-    mains = _fetch_mains(bbox, client)
+    mains = _fetch_layer_bbox(BASE, MAINS, bbox, client, where="WaterType='STM'")
     by_layer = _node_ids_by_layer(mains)
     result = {"mains": mains, "manholes": [], "fittings": [], "outfalls": []}
     for layer, key in {MANHOLES: "manholes", FITTINGS: "fittings", OUTFALLS: "outfalls"}.items():
         result[key] = _fetch_nodes_by_assetid(layer, by_layer.get(layer, []), client)
     return result
-
-
-def _fetch_mains(bbox, client) -> list:
-    min_lon, min_lat, max_lon, max_lat = bbox
-    url = f"{BASE}/{MAINS}/query"
-    features, offset = [], 0
-    while True:
-        params = {
-            "where": "WaterType='STM'", "geometry": f"{min_lon},{min_lat},{max_lon},{max_lat}",
-            "geometryType": "esriGeometryEnvelope", "inSR": 4326,
-            "spatialRel": "esriSpatialRelIntersects", "outFields": "*", "returnGeometry": "true",
-            "outSR": 4326, "f": "geojson", "resultOffset": offset, "resultRecordCount": _PAGE_SIZE,
-        }
-        payload = client.get_json(url, params)
-        page = _payload_features(payload)
-        features.extend(page)
-        if not payload.get("exceededTransferLimit") or not page:
-            break
-        offset += len(page)
-    return features
 
 
 def _node_ids_by_layer(mains) -> dict:
@@ -106,26 +92,6 @@ def _fetch_nodes_by_assetid(layer: int, asset_ids, client) -> list:
                 continue
             seen.add(asset_id)
             features.append(feat)
-    return features
-
-
-def _fetch_layer_bbox(base_url, layer, bbox, client, where="1=1") -> list:
-    min_lon, min_lat, max_lon, max_lat = bbox
-    url = f"{base_url}/{layer}/query"
-    features, offset = [], 0
-    while True:
-        params = {
-            "where": where, "geometry": f"{min_lon},{min_lat},{max_lon},{max_lat}",
-            "geometryType": "esriGeometryEnvelope", "inSR": 4326,
-            "spatialRel": "esriSpatialRelIntersects", "outFields": "*", "returnGeometry": "true",
-            "outSR": 4326, "f": "geojson", "resultOffset": offset, "resultRecordCount": _PAGE_SIZE,
-        }
-        payload = client.get_json(url, params)
-        page = _payload_features(payload)
-        features.extend(page)
-        if not payload.get("exceededTransferLimit") or not page:
-            break
-        offset += len(page)
     return features
 
 

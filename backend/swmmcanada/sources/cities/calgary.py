@@ -45,23 +45,10 @@ def _as_geojson(feat: dict) -> dict:
 
 
 def _fetch(service, bbox, client, where="1=1") -> list:
-    min_lon, min_lat, max_lon, max_lat = bbox
-    url = f"{ORG}/{service}/FeatureServer/0/query"
-    features, offset = [], 0
-    while True:
-        params = {
-            "where": where, "geometry": f"{min_lon},{min_lat},{max_lon},{max_lat}",
-            "geometryType": "esriGeometryEnvelope", "inSR": 4326,
-            "spatialRel": "esriSpatialRelIntersects", "outFields": "*", "returnGeometry": "true",
-            "outSR": 4326, "f": "geojson", "resultOffset": offset, "resultRecordCount": _PAGE,
-        }
-        payload = client.get_json(url, params)
-        page = payload.get("features") or []
-        features.extend(_as_geojson(f) for f in page)
-        if not payload.get("exceededTransferLimit") or not page:
-            break
-        offset += len(page)
-    return features
+    """Paginated bbox query against a hosted FeatureServer layer, features normalised to
+    GeoJSON (``_as_geojson`` handles any Esri-JSON fallback)."""
+    return base.fetch_paged(client, f"{ORG}/{service}/FeatureServer/0/query", bbox,
+                            where=where, page_size=_PAGE, transform=_as_geojson)
 
 
 # A feature is an outfall when OUT_INLET names a receiving water body (non-null) OR S_FUNCTION

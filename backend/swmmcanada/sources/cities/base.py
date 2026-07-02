@@ -57,6 +57,34 @@ def esri_to_geojson(feat: dict) -> dict:
     return {"type": "Feature", "properties": feat.get("attributes") or {}, "geometry": g}
 
 
+def fetch_paged(client, url, bbox, *, where: str = "1=1", fmt: str = "geojson",
+                out_fields: str = "*", page_size: int = 1000, transform=None) -> list:
+    """Drain a paginated ArcGIS bbox-envelope layer query, concatenating every page's
+    features. Every city adapter pages the same way: request ``page_size`` features at
+    ``resultOffset``, advance by the page returned, and stop when the server no longer
+    reports ``exceededTransferLimit`` (or a page comes back empty). ``fmt`` is the response
+    format (``geojson``, or ``json`` for MapServers that only serve Esri JSON); ``transform``
+    converts each raw feature (e.g. ``esri_to_geojson``). Per-city layer URLs, where-clauses
+    and page sizes stay in the adapters."""
+    min_lon, min_lat, max_lon, max_lat = bbox
+    features, offset = [], 0
+    while True:
+        params = {
+            "where": where, "geometry": f"{min_lon},{min_lat},{max_lon},{max_lat}",
+            "geometryType": "esriGeometryEnvelope", "inSR": 4326,
+            "spatialRel": "esriSpatialRelIntersects", "outFields": out_fields,
+            "returnGeometry": "true", "outSR": 4326, "f": fmt,
+            "resultOffset": offset, "resultRecordCount": page_size,
+        }
+        payload = client.get_json(url, params) or {}
+        page = payload.get("features") or []
+        features.extend(map(transform, page) if transform else page)
+        if not payload.get("exceededTransferLimit") or not page:
+            break
+        offset += len(page)
+    return features
+
+
 # --- material -> Manning's n (uppercase code match; default when unknown) ----------------
 MATERIAL_ROUGHNESS: Dict[str, float] = {
     "PVC": 0.010, "VT": 0.013, "VITC": 0.013, "VC": 0.013,            # clay
@@ -391,64 +419,33 @@ def _parcel_cells(seeds, parcels, aoi, crs):
     return cells
 
 
-def delineate_catchbasin_subcatchments(
-    network: NetworkIn, catchbasins, parcels, buildings, aoi, *, crs: str = "EPSG:32610",
-    config: CatchbasinSubcatchmentConfig = CatchbasinSubcatchmentConfig(),
-):
-    """Voronoi seeded by REAL catch basins; impervious = roofs (buildings) + road
-    right-of-way (cell - parcels); outlet = nearest network node. Returns
-    (subcatchments, imperv_map, diagnostics). `crs` is the metric CRS for the city."""
-    import geopandas as gpd
-    import numpy as np
-    from pyproj import Transformer
-    from shapely.geometry import Polygon, shape
-    from shapely.ops import transform as shp_transform
-    from shapely.ops import unary_union
+def _shape_cells(seeds, parcels, aoi, crs):
+    """SHAPING seam: seeds -> repaired per-catchbasin cell polygons (issue #3 swaps this
+    step — e.g. DEM delineation — without touching imperviousness attribution).
 
-    from swmmcanada.build.models import SubcatchmentIn
+    Chooses the shape source as before: parcel-shaped cells along real lot lines
+    (``_parcel_cells``) when usable parcels exist, else Voronoi cells around the seeds.
+    Owns cell geometry repair: each piece is cleaned in the metric CRS (``_largest_valid``);
+    pieces that are empty, under 1 m², or whose stored EPSG:4326 ring fails the metric
+    round-trip (float precision) are dropped. Returns ``(pieces, method, n_dropped)`` where
+    ``pieces`` is ``[(cb_id, piece_index, poly_m, exterior_4326), ...]`` in seed order —
+    ``piece_index`` keeps the pre-drop numbering so split-piece names stay stable — and
+    ``method`` is ``"parcel"`` or ``"voronoi"``."""
+    from pyproj import Transformer
+    from shapely.geometry import Polygon
+    from shapely.ops import transform as shp_transform
+
     from swmmcanada.network.subcatchments import delineate_subcatchments
 
-    if not network.junctions:
-        return [], {}, {"reason": "no network junctions"}
-    seeds = {}
-    for i, f in enumerate(catchbasins or []):
-        g = (f.get("geometry") or {}).get("coordinates")
-        if g and len(g) >= 2:
-            p = f.get("properties") or {}
-            seeds[str(p.get("AssetID") or p.get("InfrastructureID") or p.get("OBJECTID") or f"CB{i}")] = (g[0], g[1])
-    if len(seeds) < 2:
-        return [], {}, {"reason": "insufficient catch basins", "n_catchbasins": len(seeds)}
-
     cells = _parcel_cells(seeds, parcels, aoi, crs)        # {cb_id: [pieces]} along real parcels
-    shape_method = "parcel" if cells else "voronoi"        # fall back to Voronoi where none exist
+    method = "parcel" if cells else "voronoi"              # fall back to Voronoi where none exist
     if not cells:                                          # Voronoi gives one cell per seed
         cells = {cb_id: [c] for cb_id, c in delineate_subcatchments(seeds, aoi.geometry).items()}
-    jnames = [j.name for j in network.junctions]
-    jcoord = np.array([[j.x, j.y] for j in network.junctions])
-
-    def nearest_node(xy):
-        d = (jcoord[:, 0] - xy[0]) ** 2 + (jcoord[:, 1] - xy[1]) ** 2
-        return jnames[int(d.argmin())]
 
     to_m = Transformer.from_crs("EPSG:4326", crs, always_xy=True).transform
     to_ll = Transformer.from_crs(crs, "EPSG:4326", always_xy=True).transform
 
-    def gdf(geoms):
-        s = gpd.GeoSeries(geoms, crs="EPSG:4326") if geoms else gpd.GeoSeries([], crs="EPSG:4326")
-        return gpd.GeoDataFrame(geometry=s).to_crs(crs)
-
-    par = gdf([shape(f["geometry"]) for f in (parcels or []) if f.get("geometry")])
-    bld = gdf([shape(f["geometry"]) for f in (buildings or []) if f.get("geometry")])
-    par_sidx = par.sindex if len(par) else None
-    bld_sidx = bld.sindex if len(bld) else None
-
-    def query_union(g, sidx, poly):
-        if sidx is None or not len(g):
-            return None
-        idx = sidx.query(poly, predicate="intersects")
-        return unary_union(g.geometry.iloc[idx].tolist()) if len(idx) else None
-
-    subs, imperv_map, n_parcel, n_split, n_dropped = [], {}, 0, 0, 0
+    pieces, n_dropped = [], 0
     for cb_id, piece_list in cells.items():
         for i, cell in enumerate(piece_list):
             if cell.area_m2 <= 0:
@@ -467,25 +464,97 @@ def delineate_catchbasin_subcatchments(
             if check_m.is_empty or not check_m.is_valid:
                 n_dropped += 1
                 continue
-            area_m2 = poly_m.area
-            name = f"S_{cb_id}" if i == 0 else f"S_{cb_id}__{i + 1}"   # split pieces -> same outlet
-            if i > 0:
-                n_split += 1
-            imperv = config.max_imperv
-            par_local = query_union(par, par_sidx, poly_m)
-            if par_local is not None and not par_local.is_empty:
-                roofs = query_union(bld, bld_sidx, poly_m)
-                roofs = roofs.intersection(poly_m) if roofs is not None else None
-                roads = poly_m.difference(par_local)
-                parts = [g for g in (roofs, roads) if g is not None and not g.is_empty]
-                area = unary_union(parts).area if parts else 0.0
-                imperv = max(config.min_imperv, min(config.max_imperv, 100.0 * area / area_m2))
-                imperv_map[name] = imperv
-                n_parcel += 1
-            subs.append(SubcatchmentIn(
-                name=name, outlet_node=nearest_node(seeds[cb_id]), area_ha=area_m2 / 1e4,
-                pct_imperv=imperv, width_m=math.sqrt(area_m2),
-                pct_slope=config.default_slope_pct, polygon=exterior))
+            pieces.append((cb_id, i, poly_m, exterior))
+    return pieces, method, n_dropped
+
+
+def _impervious_fraction(cell_poly, parcels_gdf, parcels_sidx, buildings_gdf, buildings_sidx,
+                         *, config: CatchbasinSubcatchmentConfig = CatchbasinSubcatchmentConfig()):
+    """IMPERVIOUSNESS seam: percent imperviousness of one metric cell polygon — roofs
+    (buildings clipped to the cell) plus road right-of-way (cell minus parcels) as a share
+    of cell area, clamped to [min_imperv, max_imperv]. Pure geometry on prebuilt
+    GeoDataFrames + spatial indexes, so it is unit-testable without any Voronoi/shaping.
+
+    Returns ``(pct, parcel_based)``: with no parcels intersecting the cell there is no
+    land-use evidence, so pct = max_imperv and ``parcel_based`` is False (the caller then
+    leaves the cell out of ``imperv_map``)."""
+    from shapely.ops import unary_union
+
+    def query_union(g, sidx):
+        if sidx is None or not len(g):
+            return None
+        idx = sidx.query(cell_poly, predicate="intersects")
+        return unary_union(g.geometry.iloc[idx].tolist()) if len(idx) else None
+
+    par_local = query_union(parcels_gdf, parcels_sidx)
+    if par_local is None or par_local.is_empty:
+        return config.max_imperv, False
+    roofs = query_union(buildings_gdf, buildings_sidx)
+    roofs = roofs.intersection(cell_poly) if roofs is not None else None
+    roads = cell_poly.difference(par_local)
+    parts = [g for g in (roofs, roads) if g is not None and not g.is_empty]
+    area = unary_union(parts).area if parts else 0.0
+    return max(config.min_imperv, min(config.max_imperv, 100.0 * area / cell_poly.area)), True
+
+
+def delineate_catchbasin_subcatchments(
+    network: NetworkIn, catchbasins, parcels, buildings, aoi, *, crs: str = "EPSG:32610",
+    config: CatchbasinSubcatchmentConfig = CatchbasinSubcatchmentConfig(),
+):
+    """Voronoi seeded by REAL catch basins; impervious = roofs (buildings) + road
+    right-of-way (cell - parcels); outlet = nearest network node. Returns
+    (subcatchments, imperv_map, diagnostics). `crs` is the metric CRS for the city.
+    Orchestration only: ``_shape_cells`` shapes + repairs the cells, ``_impervious_fraction``
+    attributes each cell's imperviousness."""
+    import geopandas as gpd
+    import numpy as np
+    from shapely.geometry import shape
+
+    from swmmcanada.build.models import SubcatchmentIn
+
+    if not network.junctions:
+        return [], {}, {"reason": "no network junctions"}
+    seeds = {}
+    for i, f in enumerate(catchbasins or []):
+        g = (f.get("geometry") or {}).get("coordinates")
+        if g and len(g) >= 2:
+            p = f.get("properties") or {}
+            seeds[str(p.get("AssetID") or p.get("InfrastructureID") or p.get("OBJECTID") or f"CB{i}")] = (g[0], g[1])
+    if len(seeds) < 2:
+        return [], {}, {"reason": "insufficient catch basins", "n_catchbasins": len(seeds)}
+
+    cells, shape_method, n_dropped = _shape_cells(seeds, parcels, aoi, crs)
+
+    jnames = [j.name for j in network.junctions]
+    jcoord = np.array([[j.x, j.y] for j in network.junctions])
+
+    def nearest_node(xy):
+        d = (jcoord[:, 0] - xy[0]) ** 2 + (jcoord[:, 1] - xy[1]) ** 2
+        return jnames[int(d.argmin())]
+
+    def gdf(geoms):
+        s = gpd.GeoSeries(geoms, crs="EPSG:4326") if geoms else gpd.GeoSeries([], crs="EPSG:4326")
+        return gpd.GeoDataFrame(geometry=s).to_crs(crs)
+
+    par = gdf([shape(f["geometry"]) for f in (parcels or []) if f.get("geometry")])
+    bld = gdf([shape(f["geometry"]) for f in (buildings or []) if f.get("geometry")])
+    par_sidx = par.sindex if len(par) else None
+    bld_sidx = bld.sindex if len(bld) else None
+
+    subs, imperv_map, n_parcel, n_split = [], {}, 0, 0
+    for cb_id, i, poly_m, exterior in cells:
+        area_m2 = poly_m.area
+        name = f"S_{cb_id}" if i == 0 else f"S_{cb_id}__{i + 1}"   # split pieces -> same outlet
+        if i > 0:
+            n_split += 1
+        imperv, parcel_based = _impervious_fraction(poly_m, par, par_sidx, bld, bld_sidx, config=config)
+        if parcel_based:
+            imperv_map[name] = imperv
+            n_parcel += 1
+        subs.append(SubcatchmentIn(
+            name=name, outlet_node=nearest_node(seeds[cb_id]), area_ha=area_m2 / 1e4,
+            pct_imperv=imperv, width_m=math.sqrt(area_m2),
+            pct_slope=config.default_slope_pct, polygon=exterior))
     diag = {"method": f"catchbasin+parcel/building ({shape_method}-shaped)", "n_catchbasins": len(seeds),
             "n_subcatchments": len(subs), "n_split_pieces": n_split, "n_dropped_invalid": n_dropped,
             "n_parcel_based_imperv": n_parcel,

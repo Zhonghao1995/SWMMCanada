@@ -36,23 +36,8 @@ def _fetch(url_root, layer, bbox, client, where="1=1") -> list:
     """Paginated bbox query against an ArcGIS layer. Kelowna's MapServer serves real geometry
     for ``f=geojson`` (verified 2026-06-22), so we read GeoJSON directly — no esri_to_geojson
     conversion needed."""
-    min_lon, min_lat, max_lon, max_lat = bbox
-    qurl = f"{url_root}/{layer}/query"
-    features, offset = [], 0
-    while True:
-        params = {
-            "where": where, "geometry": f"{min_lon},{min_lat},{max_lon},{max_lat}",
-            "geometryType": "esriGeometryEnvelope", "inSR": 4326,
-            "spatialRel": "esriSpatialRelIntersects", "outFields": "*", "returnGeometry": "true",
-            "outSR": 4326, "f": "geojson", "resultOffset": offset, "resultRecordCount": _PAGE,
-        }
-        payload = client.get_json(qurl, params)
-        page = payload.get("features") or []
-        features.extend(page)
-        if not payload.get("exceededTransferLimit") or not page:
-            break
-        offset += len(page)
-    return features
+    return base.fetch_paged(client, f"{url_root}/{layer}/query", bbox,
+                            where=where, page_size=_PAGE)
 
 
 def fetch_kelowna_storm(bbox, *, client=None) -> dict:

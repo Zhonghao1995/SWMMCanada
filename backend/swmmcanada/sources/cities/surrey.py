@@ -34,29 +34,11 @@ SurreyClient = base.ArcGISClient
 
 
 def _fetch(layer, bbox, client, where="1=1") -> list:
-    """Paginate an ArcGIS layer query over ``bbox`` and return GeoJSON Features.
-
-    Surrey's MapServer serves real geometry under ``f=geojson``; if a layer ever returns
-    Esri JSON instead (``attributes`` rather than GeoJSON ``properties``), each feature is
-    converted with ``base.esri_to_geojson`` so downstream code always sees GeoJSON.
-    """
-    min_lon, min_lat, max_lon, max_lat = bbox
-    url = f"{ARC}/{layer}/query"
-    features, offset = [], 0
-    while True:
-        params = {
-            "where": where, "geometry": f"{min_lon},{min_lat},{max_lon},{max_lat}",
-            "geometryType": "esriGeometryEnvelope", "inSR": 4326,
-            "spatialRel": "esriSpatialRelIntersects", "outFields": "*", "returnGeometry": "true",
-            "outSR": 4326, "f": "geojson", "resultOffset": offset, "resultRecordCount": _PAGE,
-        }
-        payload = client.get_json(url, params)
-        page = payload.get("features") or []
-        features.extend(_as_geojson(f) for f in page)
-        if not payload.get("exceededTransferLimit") or not page:
-            break
-        offset += len(page)
-    return features
+    """Paginated bbox query returning GeoJSON Features. Surrey's MapServer serves real
+    geometry under ``f=geojson``; if a layer ever returns Esri JSON instead (``attributes``
+    rather than ``properties``), ``_as_geojson`` converts each feature."""
+    return base.fetch_paged(client, f"{ARC}/{layer}/query", bbox,
+                            where=where, page_size=_PAGE, transform=_as_geojson)
 
 
 def _as_geojson(feat: dict) -> dict:

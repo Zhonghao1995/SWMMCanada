@@ -59,23 +59,8 @@ def _payload_features(payload: dict) -> list:
 
 def _fetch_layer_bbox(layer_url: str, bbox, client, *, where: str = "1=1", out_fields: str = "*") -> list:
     """Paginated envelope-intersect query against one FeatureServer layer (f=geojson)."""
-    min_lon, min_lat, max_lon, max_lat = bbox
-    url = f"{layer_url}/query"
-    features, offset = [], 0
-    while True:
-        params = {
-            "where": where, "geometry": f"{min_lon},{min_lat},{max_lon},{max_lat}",
-            "geometryType": "esriGeometryEnvelope", "inSR": 4326,
-            "spatialRel": "esriSpatialRelIntersects", "outFields": out_fields, "returnGeometry": "true",
-            "outSR": 4326, "f": "geojson", "resultOffset": offset, "resultRecordCount": _PAGE_SIZE,
-        }
-        payload = client.get_json(url, params)
-        page = _payload_features(payload)
-        features.extend(page)
-        if not payload.get("exceededTransferLimit") or not page:
-            break
-        offset += len(page)
-    return features
+    return base.fetch_paged(client, f"{layer_url}/query", bbox,
+                            where=where, out_fields=out_fields, page_size=_PAGE_SIZE)
 
 
 def _fetch_manholes_by_id(manhole_ids, client) -> list:
