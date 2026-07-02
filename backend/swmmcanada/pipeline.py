@@ -107,17 +107,18 @@ def _validate_or_raise(network, subcatchments, aoi, method: MethodDescriptor, ws
 
 
 def _dem_source_auto(dem_source):
-    """DEM source selection: explicit override > SWMMCANADA_DEM_SOURCE=auto (HRDEM LiDAR
-    where a sampled read proves coverage, else MRDEM) > MRDEM-30 default. The default stays
-    MRDEM deliberately: the delineation gate's 4.0 % threshold is calibrated on MRDEM-30
-    (ADR 0010) — flipping the default is a decision, not a drop-in."""
+    """DEM source selection (#51 decision): explicit override > SWMMCANADA_DEM_SOURCE=mrdem
+    (forces the 30 m national fallback) > **auto default** — HRDEM LiDAR where a sampled
+    read proves coverage, MRDEM-30 everywhere else. Safe to default because the delineation
+    gate is resolution-aware (4.0 % at ≥10 m posting, 1.0 % under LiDAR) and a bad DEM
+    result still falls back to Voronoi through the posterior validation gate."""
     if dem_source is not None:
         return dem_source
-    if os.environ.get("SWMMCANADA_DEM_SOURCE") == "auto":
-        from swmmcanada.sources.dem_hrdem import AutoDemSource
+    if os.environ.get("SWMMCANADA_DEM_SOURCE") == "mrdem":
+        return NRCanDemSource()
+    from swmmcanada.sources.dem_hrdem import AutoDemSource
 
-        return AutoDemSource()
-    return NRCanDemSource()
+    return AutoDemSource()
 
 
 def _export_mikeplus_safe(ws: Path) -> None:

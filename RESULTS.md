@@ -69,10 +69,14 @@ Junction-seeded subcatchments (synthesis mode and the no-catch-basin fallback) a
 delineated from the **conditioned DEM** — depressions filled, **OSM streets burned in** so
 urban flow follows roads, D8 basins to each manhole (`pyflwdir`) — but only where the terrain
 earns it. A two-layer **honesty gate** decides per AOI and records its readings in
-`validation.json`: if the median conditioned-DEM slope is below **4.0 %**, the AOI is flatter
-than MRDEM's noise floor (±1–2 m vertical accuracy at 30 m posting) and the delineation
-honestly stays junction-Voronoi; a DEM result that fails validation also falls back
-automatically.
+`validation.json`, with a **resolution-aware threshold**: below **4.0 %** median conditioned
+slope at ≥10 m posting (MRDEM's ±1–2 m accuracy makes gentler readings noise) or below
+**1.0 %** under LiDAR (≤2 m posting, ~0.1–0.2 m accuracy — urban micro-slope is real signal),
+the delineation honestly stays junction-Voronoi; a DEM result that fails validation also falls
+back automatically. The DEM source itself is automatic: **HRDEM LiDAR (1–2 m) wherever a
+sampled read proves coverage, MRDEM-30 everywhere else** — e.g. downtown Ottawa resolves to
+the city's own 2020 LiDAR (1 m), reads 2.52 % ≥ the 1.0 % fine gate, and upgrades from
+Voronoi to 442 DEM basins with zero errors and 0.0 % uncovered (42 s delineation).
 
 The 4.0 % default is measured, not guessed — median conditioned slope over the seven
 downtown fixture AOIs vs two hillside AOIs (MRDEM-30, 2026-07):

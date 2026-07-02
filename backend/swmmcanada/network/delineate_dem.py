@@ -33,14 +33,20 @@ METHOD_VORONOI = "junction_voronoi"
 class DemDelineationConfig:
     """Knobs of the v2 delineator; every reading is recorded in diagnostics."""
 
-    slope_gate_pct: float = 4.0     # prior gate: median AOI slope (%) below this → Voronoi.
-    #                                 Calibrated 2026-07-02 (ADR 0010): the 7 downtown fixture
-    #                                 AOIs read 1.1–3.3 % (inside MRDEM's ±1–2 m @30 m noise
-    #                                 band) while hilly AOIs read 9–13 % — 4.0 sits in the gap,
-    #                                 above every urban noise reading, under half of real slopes.
+    slope_gate_pct: float = 4.0     # prior gate at COARSE posting (≥ fine_res_m): median AOI
+    #                                 slope (%) below this → Voronoi. Calibrated 2026-07-02
+    #                                 (ADR 0010): 7 downtown fixture AOIs read 1.1–3.3 % on
+    #                                 MRDEM-30 (inside its ±1–2 m noise band), hilly AOIs 9–13 %.
+    slope_gate_pct_fine: float = 1.0  # gate at FINE posting (< fine_res_m): LiDAR vertical
+    #                                 accuracy ~0.1–0.2 m makes urban micro-slope real signal
+    #                                 (#51 decision — 1 m downtown medians measured 2.1–4.0 %).
+    fine_res_m: float = 10.0        # posting finer than this ⇒ the fine threshold applies
     burn_depth_m: float = 2.0       # street burning: metres carved out of the DEM along roads
     aoi_buffer_cells: int = 3       # DEM window padding around the AOI
     nodata: float = -9999.0
+
+    def gate_for(self, cell_size_m: float) -> float:
+        return self.slope_gate_pct_fine if cell_size_m < self.fine_res_m else self.slope_gate_pct
 
 
 def delineate_junction_subcatchments(
@@ -71,10 +77,16 @@ def delineate_junction_subcatchments(
 
     import pyflwdir
 
+    # Resolution-aware threshold (#51): what counts as "noise" depends on the posting.
+    cell_size = abs(transform.a)
+    threshold = config.gate_for(cell_size)
+    gate["threshold_pct"] = threshold
+    gate["cell_size_m"] = round(cell_size, 2)
+
     filled, _ = pyflwdir.dem.fill_depressions(dem, nodata=config.nodata)
     median_slope = _median_slope_pct(filled, aoi_mask, transform, config.nodata)
     gate["median_slope_pct"] = round(median_slope, 3)
-    if median_slope < config.slope_gate_pct:
+    if median_slope < threshold:
         gate["decision"] = "below_slope_gate"
         return _voronoi(junction_xy, aoi, network_config, gate)
 
