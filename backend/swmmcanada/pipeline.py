@@ -29,6 +29,7 @@ from swmmcanada.derive.core import derive_parameters
 from swmmcanada.geo.crs import utm_crs_for
 from swmmcanada.network import synthesise_network
 from swmmcanada.network.delineate_dem import delineate_junction_subcatchments
+from swmmcanada.network.sizing import size_conduits
 from swmmcanada.preview import network_geojson
 from swmmcanada.validate import (
     MethodDescriptor,
@@ -119,6 +120,30 @@ def _dem_source_auto(dem_source):
     from swmmcanada.sources.dem_hrdem import AutoDemSource
 
     return AutoDemSource()
+
+
+def _design_intensity_fn(aoi):
+    """``(intensity_fn, diagnostics)`` for rational-method pipe sizing (#56): the nearest
+    ECCC IDF station's fitted curve at T=5 yr, degrading to a documented 30 mm/h constant
+    when IDF is unreachable — sizing is additive and must never fail a build."""
+    lat = (aoi.bbox[1] + aoi.bbox[3]) / 2
+    lon = (aoi.bbox[0] + aoi.bbox[2]) / 2
+    try:
+        from swmmcanada.sources.idf_eccc import (
+            design_intensity_mm_h,
+            fetch_idf_table,
+            nearest_idf_station,
+        )
+
+        station = nearest_idf_station(lat, lon)
+        table = fetch_idf_table(station)
+        diag = {"intensity_source": f"eccc-idf:{station.station_id}",
+                "idf_station_name": station.name, "return_period_yr": 5}
+        return (lambda tc_min: design_intensity_mm_h(table, tc_min, return_period=5)), diag
+    except Exception:  # noqa: BLE001 — degrade to the documented constant, never raise
+        return (lambda tc_min: 30.0), {
+            "intensity_source": "fallback-constant", "intensity_mm_h": 30.0,
+            "return_period_yr": 5, "reason": "idf_unavailable"}
 
 
 def _export_mikeplus_safe(ws: Path) -> None:
@@ -235,11 +260,19 @@ def build_from_aoi(
         _r("DERIVE", 70)
         subcatchments = derive_parameters(subcatchments, dem.path, landcover, soil)
 
+    # Pipe sizing (#56): rational method over the derived subcatchments, design intensity
+    # from the nearest ECCC IDF station (falls back to a documented constant). Runs after
+    # derive so the runoff coefficients see real imperviousness.
+    _r("SIZING", 74)
+    intensity_fn, idf_diag = _design_intensity_fn(aoi)
+    network, sizing_diag = size_conduits(synth.network, subcatchments, intensity_fn)
+    sizing_diag.update(idf_diag)
+
     # Head done (network producer = OSM synthesis); the shared build spine does the rest.
     method = _method_descriptor(sub_diag)
     config = BuildConfig(out_dir=ws, start=start, end=end, coordinate_crs=utm_crs_for(aoi))
     return _finish_build(
-        ws, aoi, synth.network, subcatchments,
+        ws, aoi, network, subcatchments,
         start=start, end=end, method=method, config=config,
         extra_provenance={
             "sources": {
@@ -248,6 +281,7 @@ def build_from_aoi(
                 "streets": "OSM",
             },
             "subcatchment_diagnostics": sub_diag,
+            "pipe_sizing": sizing_diag,
         },
         climate_client=climate_client, climate_buffer_deg=climate_buffer_deg, report=report,
         sub_diag=sub_diag,

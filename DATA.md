@@ -56,6 +56,14 @@ All data is free. Most is under the **Open Government Licence – Canada** (or a
 - **How SWMMCanada uses it:** **default**: where a sampled read proves the LiDAR actually covers the AOI, the 1–2 m DTM replaces MRDEM; anywhere else it falls back to MRDEM-30 automatically (`SWMMCANADA_DEM_SOURCE=mrdem` forces the 30 m national fallback). The subcatchment-delineation gate is resolution-aware (4.0 % at 30 m posting, 1.0 % under LiDAR).
 - **Licence:** Open Government Licence – Canada.
 
+### Design rainfall intensities — ECCC Engineering Climate IDF
+
+- **What:** Intensity-Duration-Frequency tables (2–100 yr return periods, 5 min–24 h durations, with fitted power-law coefficients) for 662 ECCC stations, from the Engineering Climate Dataset (v3.20/v3.10/v3.00 per-province archives — the newest directly fetchable per-station distribution).
+- **Provider:** Environment and Climate Change Canada.
+- **Endpoint:** `https://collaboration.cmc.ec.gc.ca/cmc/climate/Engineer_Climate/IDF/` — per-station `.txt` extracted from the province archive via HTTP-Range partial reads (~200 KB per station, not the full zip). A bundled 662-station index (id/name/coordinates) ships with the package.
+- **How SWMMCanada uses it:** synthesis-mode pipe sizing (rational method): design intensity at the pipe's time of concentration from the **nearest station's** fitted curve, **T = 5 yr** default. If IDF is unreachable, sizing degrades to a documented 30 mm/h constant with a provenance note — never failing the build.
+- **Licence:** Environment and Climate Change Canada Data Servers End-use Licence (open).
+
 ### Land cover → imperviousness — NALCMS 2020
 
 - **What:** the North American Land Change Monitoring System (NALCMS) 2020 land-cover raster (30 m).
