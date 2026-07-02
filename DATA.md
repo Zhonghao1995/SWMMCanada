@@ -44,7 +44,15 @@ All data is free. Most is under the **Open Government Licence – Canada** (or a
 - **Endpoint (Cloud-Optimized GeoTIFF on AWS S3, EPSG:3979):**
   - `https://canelevation-dem.s3.ca-central-1.amazonaws.com/mrdem-30/mrdem-30-dtm.tif`
   - `https://canelevation-dem.s3.ca-central-1.amazonaws.com/mrdem-30/mrdem-30-dsm.tif`
-- **How SWMMCanada uses it:** clips the DEM to the AOI for ground elevations and slopes, and to orient the synthesized drainage network downhill.
+- **How SWMMCanada uses it:** clips the DEM to the AOI for ground elevations and slopes, to orient the synthesized drainage network downhill, and to delineate DEM subcatchments where the terrain honesty gate allows.
+- **Licence:** Open Government Licence – Canada.
+
+### Terrain (DEM) — NRCan HRDEM LiDAR 1–2 m (optional)
+
+- **What:** the High Resolution DEM (LiDAR projects, 1 m / 2 m), CanElevation Series — DTM + DSM per acquisition project.
+- **Provider:** Natural Resources Canada (NRCan).
+- **Discovery:** NRCan datacube STAC — `https://datacube.services.geo.ca/stac/api` (collection `hrdem-lidar`); COGs on AWS S3, EPSG:3979.
+- **How SWMMCanada uses it:** opt-in (`SWMMCANADA_DEM_SOURCE=auto`): where a sampled read proves the LiDAR actually covers the AOI, the 1–2 m DTM replaces MRDEM; anywhere else it falls back to MRDEM-30 automatically. The default remains MRDEM-30.
 - **Licence:** Open Government Licence – Canada.
 
 ### Land cover → imperviousness — NALCMS 2020
