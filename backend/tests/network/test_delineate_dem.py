@@ -193,3 +193,62 @@ def test_burn_streets_none_is_noop():
     transform = Affine(RES, 0, X0, 0, -RES, Y0)
     burned, n = _burn_streets(dem, transform, DEM_CRS, None, DemDelineationConfig())
     assert n == 0 and (burned == dem).all()
+
+
+# --- resolution-aware gate (#51): what counts as noise depends on the posting ------
+
+
+def _write_dem_1m(tmp_path, array):
+    path = tmp_path / "dem1m.tif"
+    with rasterio.open(
+        path, "w", driver="GTiff", height=array.shape[0], width=array.shape[1],
+        count=1, dtype="float32", crs=CRS.from_string(DEM_CRS),
+        transform=Affine(1.0, 0, X0, 0, -1.0, Y0), nodata=-9999.0,
+    ) as dst:
+        dst.write(array.astype("float32"), 1)
+    return path
+
+
+def _aoi_1m(margin=5):
+    x1, y1 = X0 + margin, Y0 - (N - margin)
+    x2, y2 = X0 + (N - margin), Y0 - margin
+    lo1, la1 = _TO_LL(x1, y1)
+    lo2, la2 = _TO_LL(x2, y2)
+    return aoi_from_geojson({"type": "Polygon", "coordinates": [[
+        [lo1, la1], [lo2, la1], [lo2, la2], [lo1, la2], [lo1, la1]]]})
+
+
+def _junctions_1m():
+    return {"JA": _TO_LL(X0 + 30, Y0 - 50), "JB": _TO_LL(X0 + 70, Y0 - 50)}
+
+
+def test_fine_posting_uses_fine_threshold(tmp_path):
+    """A 2 % gentle valley at 1 m posting: real signal under LiDAR (fine gate 1.0 %) even
+    though the coarse gate (4.0 %) would have rejected it."""
+    rows = np.abs(np.arange(N) - 50)[:, None] * 0.02          # 2 % side slopes
+    tilt = (N - np.arange(N))[None, :] * 0.005
+    dem = _write_dem_1m(tmp_path, rows + tilt + 100.0)
+
+    subs, diag = delineate_junction_subcatchments(_junctions_1m(), _aoi_1m(), dem_path=dem)
+    assert diag["gate"]["cell_size_m"] == 1.0
+    assert diag["gate"]["threshold_pct"] == 1.0               # fine tier applied
+    assert 1.0 < diag["gate"]["median_slope_pct"] < 4.0       # would fail the coarse tier
+    assert diag["method"] == "junction_dem"
+
+
+def test_fine_posting_still_gates_flat_ground(tmp_path):
+    """0.3 % at 1 m posting is below even the fine threshold → honest Voronoi."""
+    tilt = (N - np.arange(N))[None, :] * 0.003
+    dem = _write_dem_1m(tmp_path, np.zeros((N, N)) + tilt + 100.0)
+
+    subs, diag = delineate_junction_subcatchments(_junctions_1m(), _aoi_1m(), dem_path=dem)
+    assert diag["gate"]["threshold_pct"] == 1.0
+    assert diag["gate"]["decision"] == "below_slope_gate"
+    assert diag["method"] == "junction_voronoi"
+
+
+def test_coarse_posting_keeps_calibrated_threshold(tmp_path):
+    dem = _write_dem(tmp_path, _valley_dem())                 # 10 m posting
+    _, diag = delineate_junction_subcatchments(_valley_junctions(), AOI, dem_path=dem)
+    assert diag["gate"]["cell_size_m"] == 10.0
+    assert diag["gate"]["threshold_pct"] == 4.0               # coarse tier

@@ -107,22 +107,22 @@ def test_auto_falls_back_when_no_item():
     assert auto.select(BBOX, "auto").source == "mrdem-30"
 
 
-# --- pipeline wiring (opt-in only; the MRDEM default is the calibration baseline) --
+# --- pipeline wiring (#51: auto IS the default; mrdem is the escape hatch) --------
 
 
-def test_pipeline_default_stays_mrdem(monkeypatch):
+def test_pipeline_default_is_auto(monkeypatch):
+    from swmmcanada.pipeline import _dem_source_auto
+
+    monkeypatch.delenv("SWMMCANADA_DEM_SOURCE", raising=False)
+    assert isinstance(_dem_source_auto(None), AutoDemSource)
+
+
+def test_pipeline_env_forces_mrdem(monkeypatch):
     from swmmcanada.pipeline import _dem_source_auto
     from swmmcanada.sources.dem_nrcan import NRCanDemSource
 
-    monkeypatch.delenv("SWMMCANADA_DEM_SOURCE", raising=False)
+    monkeypatch.setenv("SWMMCANADA_DEM_SOURCE", "mrdem")
     assert isinstance(_dem_source_auto(None), NRCanDemSource)
-
-
-def test_pipeline_env_opts_into_auto(monkeypatch):
-    from swmmcanada.pipeline import _dem_source_auto
-
-    monkeypatch.setenv("SWMMCANADA_DEM_SOURCE", "auto")
-    assert isinstance(_dem_source_auto(None), AutoDemSource)
 
 
 def test_pipeline_explicit_source_always_wins(monkeypatch):

@@ -53,7 +53,7 @@ All data is free. Most is under the **Open Government Licence – Canada** (or a
 - **What:** the High Resolution DEM (LiDAR projects, 1 m / 2 m), CanElevation Series — DTM + DSM per acquisition project.
 - **Provider:** Natural Resources Canada (NRCan).
 - **Discovery:** NRCan datacube STAC — `https://datacube.services.geo.ca/stac/api` (collection `hrdem-lidar`); COGs on AWS S3, EPSG:3979.
-- **How SWMMCanada uses it:** opt-in (`SWMMCANADA_DEM_SOURCE=auto`): where a sampled read proves the LiDAR actually covers the AOI, the 1–2 m DTM replaces MRDEM; anywhere else it falls back to MRDEM-30 automatically. The default remains MRDEM-30.
+- **How SWMMCanada uses it:** **default**: where a sampled read proves the LiDAR actually covers the AOI, the 1–2 m DTM replaces MRDEM; anywhere else it falls back to MRDEM-30 automatically (`SWMMCANADA_DEM_SOURCE=mrdem` forces the 30 m national fallback). The subcatchment-delineation gate is resolution-aware (4.0 % at 30 m posting, 1.0 % under LiDAR).
 - **Licence:** Open Government Licence – Canada.
 
 ### Land cover → imperviousness — NALCMS 2020
