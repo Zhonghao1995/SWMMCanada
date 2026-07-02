@@ -25,14 +25,36 @@ from swmm_api.input_file.sections import (
     Outfall,
     Polygon,
     RainGage,
+    SnowPack,
     SubArea,
     SubCatchment,
     Timeseries,
     TimeseriesData,
 )
+from swmm_api.input_file.sections.generic_section import TemperatureSection
 
 from swmmcanada.build.config import BuildConfig
-from swmmcanada.build.models import EvaporationSeries, NetworkIn, RainfallSeries, SubcatchmentIn
+from swmmcanada.build.models import (
+    EvaporationSeries,
+    NetworkIn,
+    RainfallSeries,
+    SubcatchmentIn,
+    TemperatureSeries,
+)
+
+# Snowmelt defaults (issue #55; ASSUMPTIONS.md documents these with sources). Melt
+# coefficients from typical degree-day factors 2.4–7.2 mm·d⁻¹·°C⁻¹ → mm·h⁻¹·°C⁻¹;
+# dividing temperature 0 °C; ATI weight / negative-melt ratio are SWMM manual defaults.
+SNOWPACK_NAME = "URBAN"
+_MELT_CMIN = 0.1        # mm/h/°C  (≈2.4 mm/d/°C, season start)
+_MELT_CMAX = 0.3        # mm/h/°C  (≈7.2 mm/d/°C, season end)
+_TBASE_C = 0.0
+_FWF = 0.10             # free-water holding capacity fraction
+_SNN0 = 0.10            # plowable fraction of impervious area
+_SD100_MM = 25.0        # snow depth at 100 % areal coverage
+_SNOW_TEMP_DIVIDE_C = 0.0
+_ATI_WEIGHT = 0.5       # SWMM defaults
+_NEG_MELT_RATIO = 0.6
 
 
 @dataclass(frozen=True)
@@ -77,8 +99,10 @@ def assemble_inp(
     rain: RainfallSeries,
     config: BuildConfig,
     evaporation: Optional[EvaporationSeries] = None,
+    temperature: Optional[TemperatureSeries] = None,
 ) -> SwmmInput:
     inp = SwmmInput()
+    with_snow = temperature is not None and bool(temperature.timestamps)
 
     opt = OptionSection()
     opt["FLOW_UNITS"] = config.flow_units.value
@@ -113,6 +137,7 @@ def assemble_inp(
     subareas = SubArea.create_section()
     infil = Infiltration.create_section()
     for s in subcatchments:
+        sub_kwargs = {"snow_pack": SNOWPACK_NAME} if with_snow else {}
         subs.add_obj(
             SubCatchment(
                 s.name,
@@ -122,6 +147,7 @@ def assemble_inp(
                 imperviousness=s.pct_imperv,
                 width=s.width_m,
                 slope=s.pct_slope,
+                **sub_kwargs,
             )
         )
         subareas.add_obj(
@@ -161,6 +187,33 @@ def assemble_inp(
         evap_sec = EvaporationSection()
         evap_sec["TIMESERIES"] = evaporation.ts_name
         inp[SEC.EVAPORATION] = evap_sec
+
+    # Snowmelt (#55): a temperature series turns on SWMM's snow machinery — [TEMPERATURE]
+    # (series + SNOWMELT climatology) and one URBAN snow pack every subcatchment references.
+    # Above the dividing temperature nothing accumulates, so summer-only runs are unaffected.
+    if with_snow:
+        series.add_obj(
+            TimeseriesData("temperature", list(zip(temperature.timestamps, temperature.tmean_c)))
+        )
+        lat = _mean_latitude(network)
+        elev = _mean_invert(network)
+        temp_sec = TemperatureSection()
+        temp_sec["TIMESERIES"] = "temperature"
+        temp_sec["SNOWMELT"] = (
+            _SNOW_TEMP_DIVIDE_C, _ATI_WEIGHT, _NEG_MELT_RATIO, round(elev, 1), round(lat, 4), 0.0,
+        )
+        inp[SEC.TEMPERATURE] = temp_sec
+
+        pack = SnowPack(SNOWPACK_NAME)
+        pack.parts["PLOWABLE"] = SnowPack.PARTS.Plowable(
+            _MELT_CMIN, _MELT_CMAX, _TBASE_C, _FWF, 0.0, 0.0, _SNN0)
+        pack.parts["IMPERVIOUS"] = SnowPack.PARTS.Impervious(
+            _MELT_CMIN, _MELT_CMAX, _TBASE_C, _FWF, 0.0, 0.0, _SD100_MM)
+        pack.parts["PERVIOUS"] = SnowPack.PARTS.Pervious(
+            _MELT_CMIN, _MELT_CMAX, _TBASE_C, _FWF, 0.0, 0.0, _SD100_MM)
+        packs = SnowPack.create_section()
+        packs.add_obj(pack)
+        inp[SEC.SNOWPACKS] = packs
     inp[SEC.TIMESERIES] = series
 
     project = _coord_projector(config.coordinate_crs)
@@ -179,6 +232,20 @@ def assemble_inp(
         inp[SEC.POLYGONS] = polys
 
     return inp
+
+
+def _mean_latitude(network: NetworkIn) -> float:
+    """Mean junction latitude — the SNOWMELT climatology's latitude input (node y is
+    EPSG:4326 by repo contract)."""
+    ys = [j.y for j in network.junctions] or [50.0]
+    return sum(ys) / len(ys)
+
+
+def _mean_invert(network: NetworkIn) -> float:
+    """Mean junction invert (m) — a serviceable site elevation for SNOWMELT's
+    atmospheric-pressure term."""
+    zs = [j.invert_m for j in network.junctions] or [0.0]
+    return sum(zs) / len(zs)
 
 
 def validate_inp(inp_path: Path) -> List[str]:
@@ -206,13 +273,15 @@ def build_model(
     rain: RainfallSeries,
     config: BuildConfig,
     evaporation: Optional[EvaporationSeries] = None,
+    temperature: Optional[TemperatureSeries] = None,
     observed=None,
     aoi=None,
 ) -> BuildResult:
     out_dir = Path(config.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    inp = assemble_inp(network, subcatchments, rain, config, evaporation=evaporation)
+    inp = assemble_inp(network, subcatchments, rain, config, evaporation=evaporation,
+                       temperature=temperature)
     inp_path = out_dir / "model.inp"
     inp.write_file(str(inp_path))
 
@@ -230,6 +299,7 @@ def build_model(
         "n_conduits": len(network.conduits),
         "n_subcatchments": len(subcatchments),
         "has_evaporation": str(SEC.EVAPORATION) in sections,
+        "has_snowmelt": str(SEC.SNOWPACKS) in sections,
         "sections": sections,
         "inp_sha256": hashlib.sha256(inp_path.read_bytes()).hexdigest(),
     }
