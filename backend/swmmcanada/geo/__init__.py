@@ -5,6 +5,7 @@ from swmmcanada.geo.aoi import (
     aoi_from_geojson,
     aoi_from_shapefile,
 )
+from swmmcanada.geo.crs import lonlat_projector, utm_crs_for
 from swmmcanada.geo.stations import StationSelection, StationSource, select_stations
 
 __all__ = [
@@ -13,6 +14,8 @@ __all__ = [
     "aoi_from_shapefile",
     "WORKING_CRS",
     "AREA_CRS",
+    "utm_crs_for",
+    "lonlat_projector",
     "StationSelection",
     "StationSource",
     "select_stations",

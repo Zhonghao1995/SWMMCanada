@@ -65,12 +65,10 @@ def _rain_interval(rain: RainfallSeries, config: BuildConfig) -> timedelta:
 def _coord_projector(crs):
     """A (lon, lat) -> (x, y) projector for the .inp display coords, or identity if no CRS.
     Node x/y and polygons are EPSG:4326; projecting to a metric CRS (UTM) makes SWMM/PCSWMM
-    render them undistorted."""
-    if not crs:
-        return lambda x, y: (x, y)
-    from pyproj import Transformer
-    tr = Transformer.from_crs("EPSG:4326", crs, always_xy=True)
-    return lambda x, y: tr.transform(x, y)
+    render them undistorted. Delegates to the shared CRS seam (geo.crs)."""
+    from swmmcanada.geo.crs import lonlat_projector
+
+    return lonlat_projector(crs)
 
 
 def assemble_inp(

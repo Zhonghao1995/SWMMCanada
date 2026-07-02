@@ -24,7 +24,9 @@ from swmmcanada.acquire.landcover import acquire_landcover
 from swmmcanada.acquire.soil import acquire_soil
 from swmmcanada.build import BuildConfig, BuildResult
 from swmmcanada.datastore import build_from_datastore, write_datastore
+from swmmcanada import result_package
 from swmmcanada.derive.core import derive_parameters
+from swmmcanada.geo.crs import utm_crs_for
 from swmmcanada.network import synthesise_network
 from swmmcanada.network.synth import NetworkConfig, _build_subcatchments
 from swmmcanada.preview import network_geojson
@@ -96,14 +98,6 @@ def _validate_or_raise(network, subcatchments, aoi, method: MethodDescriptor, ws
     return report
 
 
-def _utm_crs_for(aoi) -> str:
-    """The UTM zone CRS (metres, northern hemisphere) covering the AOI — used for the .inp's
-    display coordinates so SWMM/PCSWMM render the model undistorted rather than as lon/lat."""
-    min_lon, _, max_lon, _ = aoi.bbox
-    zone = int(((min_lon + max_lon) / 2 + 180) / 6) + 1
-    return f"EPSG:{32600 + zone}"
-
-
 def _export_mikeplus_safe(ws: Path) -> None:
     """Emit the MIKE+ CS import package into ``ws/mikeplus`` alongside the .inp (ADR 0008).
 
@@ -113,11 +107,64 @@ def _export_mikeplus_safe(ws: Path) -> None:
     try:
         from swmmcanada.export import export_mikeplus
 
-        export_mikeplus(ws / "datastore", ws / "mikeplus")
+        export_mikeplus(ws / result_package.DATASTORE_DIR, ws / result_package.MIKEPLUS_DIR)
     except Exception as exc:  # noqa: BLE001 — MIKE+ export must never break the build
-        target = ws / "mikeplus"
+        target = ws / result_package.MIKEPLUS_DIR
         target.mkdir(parents=True, exist_ok=True)
         (target / "EXPORT_FAILED.txt").write_text(f"MIKE+ export failed: {exc!r}\n")
+
+
+def _finish_build(
+    ws: Path, aoi, network, subcatchments, *, start: date, end: date, method,
+    config: BuildConfig, extra_provenance: dict, climate_client, climate_buffer_deg: float,
+    report=None,
+) -> BuildResult:
+    """The build spine (CONTEXT "Build spine") — the single shared tail of every build path.
+
+    Network producers differ upstream (OSM synthesis vs a real-city adapter + catch-basin
+    delineation); from here on all paths run ONE sequence: climate forcing → validation gate
+    → datastore write (the primary build path, ADR 0007) → `.inp` via build_from_datastore
+    → exports (ADR 0008) → map preview. A new stage is added here exactly once."""
+    def _r(stage: str, pct: int):
+        if report:
+            report(stage, pct)
+
+    _r("CLIMATE", 80)
+    climate = fetch_climate(aoi, start, end, client=climate_client, near_buffer_deg=climate_buffer_deg)
+    series = next((s for s in climate.series if not s.frame.empty), None)
+    if series is None:
+        raise RuntimeError("No climate data available for this AOI/period.")
+    rain = to_rainfall_series(series)
+    evaporation = to_evaporation_series(series)
+    temperature = to_temperature_series(series)
+
+    _r("VALIDATING", 85)
+    _validate_or_raise(network, subcatchments, aoi, method, ws)
+
+    _r("BUILDING", 90)
+    # Datastore is the PRIMARY build path (ADR 0007): write it, then build the .inp from it.
+    write_datastore(
+        ws / result_package.DATASTORE_DIR, network=network, subcatchments=subcatchments, rain=rain,
+        config=config, evaporation=evaporation, temperature=temperature,
+        provenance={
+            "aoi_bbox": list(aoi.bbox), "crs": "EPSG:4326",
+            "start": start.isoformat(), "end": end.isoformat(),
+            "subcatchment_method": method.method,
+            "physical_basis": method.physical_basis,
+            "confidence": method.confidence,
+            **extra_provenance,
+        },
+    )
+    result = build_from_datastore(ws / result_package.DATASTORE_DIR, ws)
+    _export_mikeplus_safe(ws)  # ADR 0008: MIKE+ CS package — every build, graceful
+
+    # Map preview: GeoJSON of the model geometry for the frontend's layers.
+    preview_path = ws / result_package.PREVIEW_GEOJSON
+    preview_path.parent.mkdir(exist_ok=True)
+    preview_path.write_text(json.dumps(network_geojson(network, subcatchments)))
+
+    _r("DONE", 100)
+    return result
 
 
 def build_from_aoi(
@@ -161,61 +208,19 @@ def build_from_aoi(
         _r("DERIVE", 70)
         subcatchments = derive_parameters(subcatchments, dem.path, landcover, soil)
 
-    _r("CLIMATE", 75)
-    climate = fetch_climate(aoi, start, end, client=climate_client, near_buffer_deg=climate_buffer_deg)
-    series = next((s for s in climate.series if not s.frame.empty), None)
-    if series is None:
-        raise RuntimeError("No climate data available for this AOI/period.")
-    rain = to_rainfall_series(series)
-    evaporation = to_evaporation_series(series)
-    temperature = to_temperature_series(series)
-
-    _r("VALIDATING", 85)
+    # Head done (network producer = OSM synthesis); the shared build spine does the rest.
     method = MethodDescriptor("junction_voronoi", "nearest node service area", "low")
-    _validate_or_raise(synth.network, subcatchments, aoi, method, ws)
-
-    _r("BUILDING", 90)
-    config = BuildConfig(out_dir=ws, start=start, end=end, coordinate_crs=_utm_crs_for(aoi))
-
-    # Model-ready datastore is the PRIMARY build path (ADR 0007): write the framework-
-    # independent, citable artifact (GeoPackage network + netCDF forcing + JSON config/
-    # provenance), then build model.inp by reading it back, so the shipped model is — by
-    # construction — produced from the datastore (ADR 0003 / spec 11).
-    write_datastore(
-        ws / "datastore",
-        network=synth.network,
-        subcatchments=subcatchments,
-        rain=rain,
-        config=config,
-        evaporation=evaporation,
-        temperature=temperature,
-        provenance={
-            "aoi_bbox": list(aoi.bbox),
-            "crs": "EPSG:4326",
-            "start": start.isoformat(),
-            "end": end.isoformat(),
-            "sources": {
-                "dem": type(dem_source).__name__,
-                "climate": type(climate_client).__name__,
-                "streets": "OSM",
-            },
-            "subcatchment_method": method.method,
-            "physical_basis": method.physical_basis,
-            "confidence": method.confidence,
-        },
+    config = BuildConfig(out_dir=ws, start=start, end=end, coordinate_crs=utm_crs_for(aoi))
+    return _finish_build(
+        ws, aoi, synth.network, subcatchments,
+        start=start, end=end, method=method, config=config,
+        extra_provenance={"sources": {
+            "dem": type(dem_source).__name__,
+            "climate": type(climate_client).__name__,
+            "streets": "OSM",
+        }},
+        climate_client=climate_client, climate_buffer_deg=climate_buffer_deg, report=report,
     )
-    result = build_from_datastore(ws / "datastore", ws)
-    _export_mikeplus_safe(ws)  # ADR 0008: MIKE+ CS package — every build, graceful
-
-    # Map preview: GeoJSON of the model geometry for the frontend's layers.
-    preview_dir = ws / "preview"
-    preview_dir.mkdir(exist_ok=True)
-    (preview_dir / "network.geojson").write_text(
-        json.dumps(network_geojson(synth.network, subcatchments))
-    )
-
-    _r("DONE", 100)
-    return result
 
 
 def _build_real_network(
@@ -273,46 +278,20 @@ def _build_real_network(
                 for s in subcatchments
             ]
 
-    _r("CLIMATE", 80)
-    climate = fetch_climate(aoi, start, end, client=climate_client, near_buffer_deg=climate_buffer_deg)
-    series = next((s for s in climate.series if not s.frame.empty), None)
-    if series is None:
-        raise RuntimeError("No climate data available for this AOI/period.")
-    rain = to_rainfall_series(series)
-    evaporation = to_evaporation_series(series)
-    temperature = to_temperature_series(series)
-
-    _r("VALIDATING", 85)
+    # Head done (network producer = the city adapter); the shared build spine does the rest.
     method = _method_descriptor(sub_diag)
-    _validate_or_raise(network, subcatchments, aoi, method, ws)
-
-    _r("BUILDING", 90)
     config = BuildConfig(out_dir=ws, start=start, end=end, title=f"SWMMCanada ({city} real network)",
                          coordinate_crs=sub_crs)
-
-    # Datastore is the PRIMARY build path (ADR 0007): write it, then build the .inp from it.
-    write_datastore(
-        ws / "datastore", network=network, subcatchments=subcatchments, rain=rain, config=config,
-        evaporation=evaporation, temperature=temperature,
-        provenance={
-            "aoi_bbox": list(aoi.bbox), "crs": "EPSG:4326", "city": city,
-            "network_source": network_source, "network_diagnostics": netres.diagnostics,
+    return _finish_build(
+        ws, aoi, network, subcatchments,
+        start=start, end=end, method=method, config=config,
+        extra_provenance={
+            "city": city, "network_source": network_source,
+            "network_diagnostics": netres.diagnostics,
             "subcatchment_diagnostics": sub_diag,
-            "subcatchment_method": method.method,
-            "physical_basis": method.physical_basis,
-            "confidence": method.confidence,
-            "start": start.isoformat(), "end": end.isoformat(),
         },
+        climate_client=climate_client, climate_buffer_deg=climate_buffer_deg, report=report,
     )
-    result = build_from_datastore(ws / "datastore", ws)
-    _export_mikeplus_safe(ws)  # ADR 0008: MIKE+ CS package — every build, graceful
-
-    preview_dir = ws / "preview"
-    preview_dir.mkdir(exist_ok=True)
-    (preview_dir / "network.geojson").write_text(json.dumps(network_geojson(network, subcatchments)))
-
-    _r("DONE", 100)
-    return result
 
 
 def build_from_victoria(aoi, start: date, end: date, workspace, *, victoria_client=None,

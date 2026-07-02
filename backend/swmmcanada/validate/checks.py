@@ -54,21 +54,16 @@ def check_geometry_absent(subs: List[SubcatchmentIn]):
 # --- geometric context (one reprojection, shared) -----------------------------
 
 
-def _utm_crs(aoi) -> str:
-    min_lon, _, max_lon, _ = aoi.bbox
-    zone = int(((min_lon + max_lon) / 2 + 180) / 6) + 1   # Canada -> northern hemisphere
-    return f"EPSG:{32600 + zone}"
-
-
 class GeoContext:
     """Cell polygons + AOI reprojected once into a metric CRS, with a cached cell union."""
 
     def __init__(self, subcatchments: List[SubcatchmentIn], aoi):
-        from pyproj import Transformer
         from shapely.geometry import Polygon
         from shapely.ops import transform as shp_transform
 
-        self._tr = Transformer.from_crs("EPSG:4326", _utm_crs(aoi), always_xy=True).transform
+        from swmmcanada.geo.crs import lonlat_projector, utm_crs_for
+
+        self._tr = lonlat_projector(utm_crs_for(aoi))
         self.aoi_m = shp_transform(self._tr, aoi.geometry)
         self.cells: List[Tuple[SubcatchmentIn, object]] = []
         for s in subcatchments:

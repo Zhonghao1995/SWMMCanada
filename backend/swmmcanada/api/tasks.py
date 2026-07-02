@@ -9,6 +9,8 @@ from datetime import date
 from pathlib import Path
 from typing import Optional
 
+from swmmcanada import result_package
+
 
 @dataclass
 class Task:
@@ -62,8 +64,13 @@ def run_task(task_id: str, aoi, start: date, end: date, store: TaskStore, workdi
             store.update(task_id, stage=stage, progress_pct=int(pct))
 
         result = pipeline(aoi, start, end, ws, report=report)
+        pkg = Path(getattr(result, "package_dir", ws))
+        missing = result_package.missing_required(pkg)
+        if missing:  # refuse to ship an incomplete package (ADR 0009) — fail loudly HERE,
+            raise RuntimeError(  # not at aiswmm's runtime
+                f"result package incomplete — missing: {', '.join(missing)}")
         zip_path = _zip_package(result, ws)
-        preview = Path(getattr(result, "package_dir", ws)) / "preview" / "network.geojson"
+        preview = pkg / result_package.PREVIEW_GEOJSON
         store.update(
             task_id, state="SUCCEEDED", progress_pct=100, stage="DONE",
             result_zip=zip_path, preview=(preview if preview.exists() else None),

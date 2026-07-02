@@ -28,6 +28,14 @@ def fake_pipeline(aoi, start, end, ws, *, report=None, **kwargs):
     (ws / "model.inp").write_text("[TITLE]\nfake model\n")
     (ws / "manifest.json").write_text("{}")
     (ws / "validation.json").write_text(json.dumps({"ok": True, "subcatchment_method": "junction_voronoi"}))
+    # The worker refuses to ship an incomplete result package (ADR 0009) — a fake must
+    # produce every required path too (empty carriers are fine, only presence is checked).
+    from swmmcanada import result_package
+    for rel in result_package.REQUIRED:
+        p = ws / rel
+        if not p.exists():
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_bytes(b"")
     if report:
         report("BUILDING", 90)
     return BuildResult(
@@ -38,6 +46,26 @@ def fake_pipeline(aoi, start, end, ws, *, report=None, **kwargs):
 
 def _client(tmp_path):
     return TestClient(create_app(pipeline=fake_pipeline, workdir=tmp_path, run_inline=True))
+
+
+def test_incomplete_package_fails_the_task(tmp_path):
+    """ADR 0009: a structurally incomplete package must FAIL loudly here, not ship a zip
+    that breaks downstream (aiswmm) at runtime."""
+    def broken_pipeline(aoi, start, end, ws, *, report=None, **kwargs):
+        ws = Path(ws)
+        ws.mkdir(parents=True, exist_ok=True)
+        (ws / "model.inp").write_text("[TITLE]\n")      # no datastore/, no preview/
+        (ws / "manifest.json").write_text("{}")
+        (ws / "validation.json").write_text('{"ok": true}')
+        return BuildResult(inp_path=ws / "model.inp", package_dir=ws,
+                           manifest_path=ws / "manifest.json", sections_written=[], warnings=[])
+
+    client = TestClient(create_app(pipeline=broken_pipeline, workdir=tmp_path, run_inline=True))
+    task_id = _submit(client, OTTAWA).json()["task_id"]
+    body = client.get(f"/api/v1/tasks/{task_id}").json()
+    assert body["state"] == "FAILED"
+    msg = body["error"]["message"]
+    assert "incomplete" in msg and "datastore" in msg
 
 
 def _submit(client, geojson, start="2022-06-01", end="2022-06-07"):
