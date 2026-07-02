@@ -428,3 +428,61 @@ def test_build_from_datastore_applies_coordinate_crs(tmp_path):
     result = build_from_datastore(ds_dir, tmp_path / "model")
     coords = read_inp_file(str(result.inp_path))[SEC.COORDINATES]
     assert coords["J1"].x > 1000  # projected metres (UTM 18N ≈ 4.5e5), not lon/lat
+
+
+# --------------------------------------------------------------------------- #
+# 5. ADR 0007 parity: the datastore-built .inp MATCHES the direct build
+# --------------------------------------------------------------------------- #
+def test_datastore_build_matches_direct_build(tmp_path):
+    """The shipped .inp is produced via the datastore (ADR 0007), so the datastore build
+    must equal the direct build — same sections, same elements in the same order, same
+    hydraulic values and display coordinates — not merely "is valid". This is the guard
+    that a new build input can't be silently lost by the datastore."""
+    from dataclasses import replace
+
+    from swmm_api import read_inp_file
+    from swmm_api.input_file import SEC
+
+    from swmmcanada.build import build_model
+
+    config = replace(_config(tmp_path / "direct"), coordinate_crs="EPSG:32618")
+    direct = build_model(
+        network=_network(), subcatchments=_subcatchments(), rain=_rain(),
+        config=config, evaporation=_evaporation(),
+    )
+    ds_dir = write_datastore(
+        tmp_path / "ds", network=_network(), subcatchments=_subcatchments(), rain=_rain(),
+        config=config, provenance=_provenance(), evaporation=_evaporation(),
+    )
+    rebuilt = build_from_datastore(ds_dir, tmp_path / "rebuilt")
+
+    a = read_inp_file(str(direct.inp_path))
+    b = read_inp_file(str(rebuilt.inp_path))
+
+    # Same sections...
+    assert sorted(map(str, a.keys())) == sorted(map(str, b.keys()))
+    # ...same elements in the same order, per section (order is a round-trip invariant).
+    for sec in (SEC.JUNCTIONS, SEC.OUTFALLS, SEC.CONDUITS, SEC.XSECTIONS,
+                SEC.SUBCATCHMENTS, SEC.SUBAREAS, SEC.INFILTRATION,
+                SEC.RAINGAGES, SEC.TIMESERIES, SEC.COORDINATES, SEC.POLYGONS):
+        assert list(a[sec].keys()) == list(b[sec].keys()), f"{sec} differs"
+
+    # Hydraulic values survive exactly (float64 round-trip).
+    for name, ca in a[SEC.CONDUITS].items():
+        cb = b[SEC.CONDUITS][name]
+        assert ca.length == cb.length and ca.roughness == cb.roughness
+    for name, sa in a[SEC.SUBCATCHMENTS].items():
+        sb = b[SEC.SUBCATCHMENTS][name]
+        assert (sa.area, sa.imperviousness, sa.width, sa.slope) == \
+               (sb.area, sb.imperviousness, sb.width, sb.slope)
+
+    # Display coordinates identical (projected through the same stored CRS).
+    for name, pa in a[SEC.COORDINATES].items():
+        pb = b[SEC.COORDINATES][name]
+        assert pa.x == pytest.approx(pb.x, abs=1e-6)
+        assert pa.y == pytest.approx(pb.y, abs=1e-6)
+    assert abs(a[SEC.COORDINATES]["J1"].x) > 180  # genuinely projected, not lon/lat
+
+    # The rain + evaporation series carry identical data points.
+    for ts_name in ("rain", "evap"):
+        assert a[SEC.TIMESERIES][ts_name].data == b[SEC.TIMESERIES][ts_name].data
