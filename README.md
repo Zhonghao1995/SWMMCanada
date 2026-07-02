@@ -17,7 +17,7 @@
 
 **Draw an area anywhere in Canada and get a ready-to-run EPA SWMM stormwater model.**
 
-You draw (or upload) a boundary on the map. SWMMCanada pulls the Canadian open data for that spot (rainfall, terrain, land cover, soil, and the city's storm pipes) and assembles a complete `model.inp` you can open and run in EPA SWMM. No hunting across data portals, no manual setup.
+You draw (or upload) a boundary on the map. SWMMCanada pulls the Canadian open data for that spot (rainfall, terrain — 1 m LiDAR where available, land cover, soil, ECCC design-storm intensities, and the city's storm + sanitary pipes) and assembles a complete `model.inp` you can open and run in EPA SWMM. No hunting across data portals, no manual setup.
 
 > [!TIP]
 > **🌐 Try it now. No install, no deployment.** A hosted **beta** is live at **[swmm.h2ox.me](https://swmm.h2ox.me/)**. Draw an area and build a SWMM model right in your browser.
@@ -36,7 +36,7 @@ SWMMCanada chooses how to build the network from **where you draw**. You don't s
 | Mode | What it does | Where it kicks in |
 |---|---|---|
 | **Real network** | uses the city's published storm pipes (real inverts, diameters, manholes, and outfalls) | **8 cities** that publish a storm network: Victoria, Ottawa, Calgary, Surrey, London, Kitchener–Waterloo, Kelowna, Regina |
-| **Synthesize** | builds a realistic network from the street map + open data | anywhere else in Canada |
+| **Synthesize** | builds a realistic network from the street map + open data: DEM-delineated subcatchments where the terrain earns it, pipes sized by the rational method with real ECCC IDF intensities | anywhere else in Canada |
 
 Either mode then gives you the same things: subcatchments, rainfall, and a shareable data package. Where a city also publishes parcels (like Victoria), the subcatchments follow real lot lines. Where a city publishes its **sanitary sewer** too (Regina), the model carries it as a second tagged system in the same `.inp` — the foundation for dual-drainage and separated-sewer studies.
 
@@ -80,10 +80,10 @@ build_from_aoi(aoi, date(2022, 6, 1), date(2022, 6, 7), "out/")
 ```
 backend/swmmcanada/      # Python pipeline: open data -> SWMM model
   geo/         AOI parsing, station selection, CRS
-  acquire/     ECCC climate · NRCan DEM · NALCMS land cover · SoilGrids soil · HYDAT flow
-  sources/     live data adapters (climate, DEM, land cover, soil, OSM streets)
+  acquire/     ECCC climate · NRCan DEM (MRDEM + HRDEM LiDAR) · NALCMS land cover · SoilGrids soil · HYDAT flow
+  sources/     live data adapters (climate, DEM incl. 1 m LiDAR auto-select, ECCC IDF design storms, land cover, soil, OSM streets)
     cities/    base.py (shared assembler) + 8 real-network adapters (victoria · ottawa · calgary · surrey · london · kitchener · kelowna · regina)
-  network/     street-graph synthesis + Voronoi subcatchments (synthesize mode)
+  network/     street-graph synthesis · DEM subcatchments behind a terrain honesty gate (Voronoi fallback) · rational-method pipe sizing
   derive/      clip + zonal stats -> subcatchment parameters
   build/       assemble + validate the SWMM .inp
   datastore/   model-ready datastore (GeoPackage + netCDF + JSON)
@@ -101,7 +101,7 @@ frontend/src/            # React + Vite + MapLibre web app
 
 Every build ships one result package:
 
-- **`model.inp`** — runs in EPA SWMM 5.2 (plus `manifest.json`);
+- **`model.inp`** — runs in EPA SWMM 5.2, with snowmelt whenever temperature data exists (plus `manifest.json`);
 - **`datastore/`** — the shareable model-ready datastore (GeoPackage network + netCDF/CF forcing + JSON provenance) that every export target reads from;
 - **`mikeplus/`** — a **DHI MIKE+ Collection System import package**: `nodes` / `links` / `catchments` shapefiles + `rain.csv` + a field-mapping sheet, with import steps and every approximation documented inside (`README.md` / `field_mapping.md`);
 - **`validation.json`** — the model's health report: structural checks, the delineation method used, and its confidence;
