@@ -75,6 +75,11 @@ from swmmcanada.sources.cities.kelowna import (
     fetch_kelowna_land,
     fetch_kelowna_storm,
 )
+from swmmcanada.sources.cities.regina import (
+    build_regina_network,
+    fetch_regina_land,
+    fetch_regina_storm,
+)
 
 
 def _method_descriptor(sub_diag: Optional[dict]) -> MethodDescriptor:
@@ -417,6 +422,20 @@ def build_from_kelowna(aoi, start: date, end: date, workspace, *, kelowna_client
         subcatchment_method=subcatchment_method, report=report, **kwargs)
 
 
+def build_from_regina(aoi, start: date, end: date, workspace, *, regina_client=None,
+                      subcatchment_method: str = "parcel", report=None, **kwargs) -> BuildResult:
+    """Build a SWMM model from the REAL City of Regina storm network (ADR 0006). Geometry-inferred
+    topology (active gravity lines; node inverts back-filled from pipe ends); parcels + building
+    footprints published."""
+    return _build_real_network(
+        aoi, start, end, workspace,
+        network_fn=lambda a: build_regina_network(fetch_regina_storm(tuple(a.bbox), client=regina_client)),
+        land_fn=lambda a: fetch_regina_land(tuple(a.bbox), client=regina_client),
+        sub_crs="EPSG:32613", city="regina",
+        network_source="City of Regina storm sewer (real municipal network)",
+        subcatchment_method=subcatchment_method, report=report, **kwargs)
+
+
 # Cities with a real-network adapter, gated by a coarse coverage bbox
 # (min_lon, min_lat, max_lon, max_lat). Order: first match wins; boxes must not overlap.
 _REAL_NETWORK_CITIES = [
@@ -427,6 +446,7 @@ _REAL_NETWORK_CITIES = [
     ("Calgary, AB", (-114.32, 50.84, -113.86, 51.21), build_from_calgary),
     ("Surrey, BC", (-123.00, 49.00, -122.69, 49.22), build_from_surrey),
     ("Kelowna, BC", (-119.60, 49.77, -119.28, 50.05), build_from_kelowna),
+    ("Regina, SK", (-104.80, 50.35, -104.45, 50.55), build_from_regina),
 ]
 
 

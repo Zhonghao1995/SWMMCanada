@@ -21,6 +21,7 @@ All data is free. Most is under the **Open Government Licence – Canada** (or a
 | Sewer + land (BaseMaps) | City of London Open Data | real storm network, parcels, buildings | City of London ToU |
 | Storm (Region of Waterloo) | Kitchener / Region of Waterloo | real storm network, buildings | OGL – Kitchener |
 | Storm utilities + land | City of Kelowna Open Data | real storm network, parcels, buildings | OGL – Kelowna |
+| Storm Sewer Network + land | City of Regina Open Data | real storm network, parcels, buildings | OGL – Regina |
 | Positron basemap | CARTO + OSM | web-map background (display only) | © OSM, © CARTO |
 
 ---
@@ -121,12 +122,12 @@ Each supported city has its own adapter under `backend/swmmcanada/sources/cities
 - **How SWMMCanada uses it:** Ottawa publishes no explicit node IDs, so topology is inferred from pipe geometry; subcatchments seed on catch basins (Ottawa publishes no parcels, so a catch-basin tessellation is used).
 - **Licence:** Open Government Licence – City of Ottawa.
 
-#### More real-network cities (BC · ON · AB)
+#### More real-network cities (BC · ON · AB · SK)
 
-Five more cities were added in the multi-city expansion via the same adapter pattern (read the
+Six more cities have been added via the same adapter pattern (read the
 city's ArcGIS REST layers → shared `cities/base.py` assembler). Each clears the bar: published
 storm pipes **with invert elevations** plus resolvable topology. All endpoints verified live
-2026-06-22; coverage is gated by a non-overlapping per-city bbox in
+2026-06-22 (Regina: 2026-07-02); coverage is gated by a non-overlapping per-city bbox in
 `pipeline._REAL_NETWORK_CITIES`.
 
 | City | ArcGIS REST service | Key storm layers (invert field) | Topology | Parcels / buildings | Licence |
@@ -136,6 +137,7 @@ storm pipes **with invert elevations** plus resolvable topology. All endpoints v
 | **London, ON** | `maps.london.ca/server/rest/services/OpenData/OpenData_Environment/MapServer` | `5` Sewer Pipes `FlowType='STM'` (Upstream/DownstreamInvert) · `2/3` Nodes · `4` Outfalls · `1` Catch Basins | explicit node IDs | BaseMaps `53` Parcels · `3` Buildings | City of London ToU |
 | **Kitchener–Waterloo, ON** | `services1.arcgis.com/qAo1OsXi67t7XgmS/.../FeatureServer` | `Storm_Pipes` (UP/DN_INVERT) · `Storm_Manholes` · `Storm_Outlets` · `Storm_Catchbasins` | explicit integer node IDs | `Building_Outlines` only (no parcel polygons) | OGL – Kitchener |
 | **Kelowna, BC** | `geoportal.kelowna.ca/arcgis/rest/services/ArcGISOnline/OpenData_Utilities_Storm/MapServer` | `22` Storm Main (INVERT_IN_Z/OUT_Z) · `7` Manholes · `4` Outfalls · `19` Catch Basins | geometry-inferred | Planning `3` Legal Parcel · `17` Building Outlines | OGL – Kelowna |
+| **Regina, SK** | `opengis.regina.ca/arcgis/rest/services/OpenData` ([open.regina.ca](https://open.regina.ca)) | StormSewerNetwork `5` Storm Sewer Line, `STATUS='ACTIVE'` non-Force (START/ENDELEVATION) · `2` Manholes · `4` Outfalls · `3` Catch Basins | geometry-inferred | `Parcels` (ASSESSMENT_REGIONS lots) · `BuildingFootprint` | [OGL – Regina](https://www.regina.ca/city-government/open-data/open-government-licence/) |
 
 One feed covers the whole **Region of Waterloo** (Kitchener / Waterloo / Cambridge). How each
 city's data turns into a model — and which parts are real vs derived vs synthesized — is in

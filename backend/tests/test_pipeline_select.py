@@ -8,6 +8,7 @@ from swmmcanada.pipeline import (
     build_from_kitchener,
     build_from_london,
     build_from_ottawa,
+    build_from_regina,
     build_from_surrey,
     build_from_victoria,
     pipeline_for_aoi,
@@ -29,6 +30,7 @@ def test_real_network_cities_selected():
         (-114.06, 51.05, build_from_calgary, "Calgary"),        # Calgary, AB
         (-122.82, 49.12, build_from_surrey, "Surrey"),          # Surrey, BC
         (-119.47, 49.88, build_from_kelowna, "Kelowna"),        # Kelowna, BC
+        (-104.61, 50.445, build_from_regina, "Regina"),         # Regina, SK
     ]
     for lon, lat, fn, label in cases:
         got_fn, mode = pipeline_for_aoi(_aoi(lon, lat))
