@@ -63,6 +63,36 @@ The report also records an honest delineation **method** (`catchbasin_parcel` /
 service area*, **not** a DEM-derived watershed), and a confidence level — so an approximate
 service area is never mistaken for a true hydrological catchment.
 
+### Delineation v2 — DEM basins behind a terrain honesty gate
+
+Junction-seeded subcatchments (synthesis mode and the no-catch-basin fallback) are now
+delineated from the **conditioned DEM** — depressions filled, **OSM streets burned in** so
+urban flow follows roads, D8 basins to each manhole (`pyflwdir`) — but only where the terrain
+earns it. A two-layer **honesty gate** decides per AOI and records its readings in
+`validation.json`: if the median conditioned-DEM slope is below **4.0 %**, the AOI is flatter
+than MRDEM's noise floor (±1–2 m vertical accuracy at 30 m posting) and the delineation
+honestly stays junction-Voronoi; a DEM result that fails validation also falls back
+automatically.
+
+The 4.0 % default is measured, not guessed — median conditioned slope over the seven
+downtown fixture AOIs vs two hillside AOIs (MRDEM-30, 2026-07):
+
+| AOI | median slope % | gate (4.0 %) |
+|---|---|---|
+| Calgary 1.14 · Ottawa 1.26 · Surrey 1.99 · Kelowna 2.18 · London 2.51 · Victoria 2.90 · Kitchener 3.26 | 1.1–3.3 | **Voronoi** (inside DEM noise) |
+| Kelowna hillside 9.12 · North-Vancouver slopes 13.25 | 9–13 | **DEM basins** |
+
+Flat/hilly contrast (same code, gate deciding): downtown Ottawa (1.26 %) keeps the honest
+Voronoi — 442 cells, zero errors, full coverage. The Kelowna hillside AOI (9.12 %) crosses the
+gate: 197 street-burned DEM basins, zero errors, 0.0 % uncovered, terrain-following boundaries
+instead of geometric polygons:
+
+![Delineation v2 on a hillside AOI](assets/delineation_v2_kelowna_hillside.png)
+
+A guarded smoke test (`tests/build/test_delineation_v2_run.py`) runs EPA SWMM 5.2 on a
+v2-delineated model and asserts a clean run with continuity within tolerance — a runnability
+check, deliberately not an accuracy claim (calibration stays downstream).
+
 **Regression baselines** (`tests/validate/test_regression_baselines.py`) lock today's
 delineation verdict on the checked-in downtown fixtures — Victoria: 74 junction-Voronoi
 cells, Ottawa: 400 catch-basin cells (the CI-runnable subsets of the full downtown runs

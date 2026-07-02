@@ -144,3 +144,19 @@ def test_no_catchbasins_falls_back_to_junction_voronoi(ottawa):
     assert len(fb) == OTT_N_JUNCTIONS
     r = validate_model(net, fb, aoi, method=JUNCTION_VORONOI)
     assert r.ok and r.errors == []
+
+
+def test_junction_delineator_records_honest_fallback_without_dem(ottawa):
+    """Delineation v2 (ADR 0010): with no DEM available the gated delineator must produce
+    exactly the locked junction-Voronoi baseline AND say why in its diagnostics."""
+    from swmmcanada.network.delineate_dem import delineate_junction_subcatchments
+
+    net, _, aoi = ottawa
+    jxy = {j.name: (j.x, j.y) for j in net.junctions}
+    subs, diag = delineate_junction_subcatchments(jxy, aoi, dem_path=None)
+
+    assert diag["method"] == "junction_voronoi"
+    assert diag["gate"]["decision"] == "no_dem"          # the honesty trail
+    assert len(subs) == OTT_N_JUNCTIONS                  # identical to the locked baseline
+    baseline = _build_subcatchments(jxy, aoi, NetworkConfig())
+    assert [(s.name, s.area_ha) for s in subs] == [(s.name, s.area_ha) for s in baseline]

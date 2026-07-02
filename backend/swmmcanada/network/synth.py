@@ -143,13 +143,15 @@ def synthesise_network(
     )
 
 
-def _build_subcatchments(junction_xy, aoi, config: NetworkConfig) -> List[SubcatchmentIn]:
-    """Voronoi delineation when an AOI polygon is given (real polygons + areas), else a
-    nominal placeholder area per junction. %imperv stays a placeholder (derive overwrites)."""
-    cells = {}
-    if aoi is not None and len(junction_xy) >= 2:
-        poly = aoi.geometry if hasattr(aoi, "geometry") else aoi
-        cells = delineate_subcatchments(junction_xy, poly)
+def _build_subcatchments(junction_xy, aoi, config: NetworkConfig, cells=None) -> List[SubcatchmentIn]:
+    """Cells → one SubcatchmentIn per junction (missing cell → nominal placeholder; %imperv
+    stays a placeholder, derive overwrites). ``cells`` defaults to Voronoi delineation when
+    an AOI polygon is given; the DEM delineator (delineate_dem, ADR 0010) passes its own."""
+    if cells is None:
+        cells = {}
+        if aoi is not None and len(junction_xy) >= 2:
+            poly = aoi.geometry if hasattr(aoi, "geometry") else aoi
+            cells = delineate_subcatchments(junction_xy, poly)
     subs: List[SubcatchmentIn] = []
     for jname in junction_xy:
         cell = cells.get(jname)
