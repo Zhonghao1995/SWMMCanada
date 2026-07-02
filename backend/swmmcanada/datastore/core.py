@@ -123,6 +123,7 @@ def _write_network_gpkg(
             "name": [j.name for j in network.junctions],
             "invert_m": [float(j.invert_m) for j in network.junctions],
             "max_depth_m": [float(j.max_depth_m) for j in network.junctions],
+            "system": [j.system for j in network.junctions],
         },
         geometry=[Point(float(j.x), float(j.y)) for j in network.junctions],
         crs=schema.CRS,
@@ -133,6 +134,7 @@ def _write_network_gpkg(
             "name": [o.name for o in network.outfalls],
             "invert_m": [float(o.invert_m) for o in network.outfalls],
             "kind": [o.kind for o in network.outfalls],
+            "system": [o.system for o in network.outfalls],
         },
         geometry=[Point(float(o.x), float(o.y)) for o in network.outfalls],
         crs=schema.CRS,
@@ -152,6 +154,7 @@ def _write_network_gpkg(
             "length_m": [float(c.length_m) for c in network.conduits],
             "diameter_m": [float(c.diameter_m) for c in network.conduits],
             "roughness_n": [float(c.roughness_n) for c in network.conduits],
+            "system": [c.system for c in network.conduits],
         },
         geometry=conduit_geoms,
         crs=schema.CRS,
@@ -263,6 +266,7 @@ def _read_network(gpkg: Path) -> NetworkIn:
             x=float(geom.x),
             y=float(geom.y),
             max_depth_m=float(r["max_depth_m"]),
+            system=str(r.get("system") or "storm_minor"),
         )
         for geom, r in zip(jdf.geometry, jdf.to_dict("records"))
     ]
@@ -275,6 +279,7 @@ def _read_network(gpkg: Path) -> NetworkIn:
             x=float(geom.x),
             y=float(geom.y),
             kind=str(r["kind"]),
+            system=str(r.get("system") or "storm_minor"),
         )
         for geom, r in zip(odf.geometry, odf.to_dict("records"))
     ]
@@ -288,6 +293,7 @@ def _read_network(gpkg: Path) -> NetworkIn:
             length_m=float(r["length_m"]),
             diameter_m=float(r["diameter_m"]),
             roughness_n=float(r["roughness_n"]),
+            system=str(r.get("system") or "storm_minor"),
         )
         for r in cdf.to_dict("records")
     ]
@@ -315,6 +321,7 @@ def _read_subcatchments(gpkg: Path) -> List[SubcatchmentIn]:
                 s_perv_mm=float(r["s_perv_mm"]),
                 pct_zero=float(r["pct_zero"]),
                 polygon=polygon,
+                system=str(r.get("system") or "storm_minor"),
             )
         )
     return subs

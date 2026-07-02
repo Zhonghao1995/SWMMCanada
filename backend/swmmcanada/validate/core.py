@@ -45,6 +45,7 @@ class ValidationReport:
     n_subcatchments: int
     checks: List[CheckResult]
     delineation: Optional[dict] = None   # gate readings / fallback reason (ADR 0010)
+    systems: Optional[dict] = None       # per-system element counts (ADR 0011)
 
     @property
     def errors(self) -> List[CheckResult]:
@@ -81,6 +82,8 @@ class ValidationReport:
         }
         if self.delineation:
             out["delineation"] = self.delineation
+        if self.systems:
+            out["systems"] = self.systems
         return out
 
 
@@ -93,8 +96,20 @@ def validate_model(
     delineation: Optional[dict] = None,
 ) -> ValidationReport:
     """Run every check against the assembled model and return a structured report."""
-    node_names = {n.name for n in list(network.junctions) + list(network.outfalls)}
-    node_coords = {n.name: (float(n.x), float(n.y)) for n in list(network.junctions) + list(network.outfalls)}
+    all_nodes = list(network.junctions) + list(network.outfalls)
+    # Outlet resolution may target any node; coverage/distance diagnostics are a STORM
+    # question — a sanitary manhole not covered by a (storm) subcatchment is not a gap
+    # (ADR 0011 per-system scoping).
+    node_names = {n.name for n in all_nodes}
+    storm_nodes = [n for n in all_nodes if getattr(n, "system", "storm_minor") == "storm_minor"]
+    node_coords = {n.name: (float(n.x), float(n.y)) for n in storm_nodes}
+    systems: dict = {}
+    for n in all_nodes:
+        sysname = getattr(n, "system", "storm_minor")
+        systems.setdefault(sysname, {"nodes": 0, "conduits": 0})["nodes"] += 1
+    for c in network.conduits:
+        sysname = getattr(c, "system", "storm_minor")
+        systems.setdefault(sysname, {"nodes": 0, "conduits": 0})["conduits"] += 1
 
     results: List[CheckResult] = []
 
@@ -117,5 +132,5 @@ def validate_model(
 
     return ValidationReport(
         method=method, n_subcatchments=len(subcatchments), checks=results,
-        delineation=delineation,
+        delineation=delineation, systems=systems or None,
     )

@@ -59,14 +59,15 @@ class MikePlusExporter:
         out.mkdir(parents=True, exist_ok=True)
 
         crs = ds.config.get("coordinate_crs")  # e.g. "EPSG:32610"; None → keep EPSG:4326
-        node_xy = _node_lookup(ds.network)  # name → (lon, lat) over junctions + outfalls
+        network = _storm_only(ds.network)   # v1 exports the storm system only (ADR 0011)
+        node_xy = _node_lookup(network)     # name → (lon, lat) over junctions + outfalls
 
         lossy: List[LossyMapping] = list(_hydrology_lossy())
         warnings: List[str] = []
         files: List[Path] = []
 
-        files.append(_write_nodes(out / "nodes.shp", ds.network, crs))
-        files.append(_write_links(out / "links.shp", ds.network, node_xy, crs, warnings))
+        files.append(_write_nodes(out / "nodes.shp", network, crs))
+        files.append(_write_links(out / "links.shp", network, node_xy, crs, warnings))
         files.append(_write_catchments(out / "catchments.shp", ds, node_xy, crs, lossy, warnings))
         files.append(_write_rain(out / "rain.csv", ds.rain))
         files.append(_write_field_mapping(out / "field_mapping.md", lossy))
@@ -87,6 +88,17 @@ def export_mikeplus(datastore_dir, out_dir) -> ExportResult:
 # --------------------------------------------------------------------------- #
 # geometry helpers
 # --------------------------------------------------------------------------- #
+def _storm_only(network):
+    """The storm-minor subgraph — MIKE+ CS v1 exports the storm system; other tagged
+    systems (sanitary, ADR 0011) are omitted and noted in the field-mapping sheet."""
+    from swmmcanada.build.models import NetworkIn
+
+    keep = lambda e: getattr(e, "system", "storm_minor") == "storm_minor"
+    return NetworkIn(junctions=[j for j in network.junctions if keep(j)],
+                     outfalls=[o for o in network.outfalls if keep(o)],
+                     conduits=[c for c in network.conduits if keep(c)])
+
+
 def _node_lookup(network) -> Dict[str, Tuple[float, float]]:
     """name → (lon, lat) over junctions + outfalls (link endpoints + catchment placeholders)."""
     xy: Dict[str, Tuple[float, float]] = {}
@@ -290,6 +302,8 @@ def _write_field_mapping(path: Path, lossy: List[LossyMapping]) -> Path:
                  "should be reviewed before running the CS engine.\n")
     lines.append("> **Rainfall is exported as CSV** (`rain.csv`); the native MIKE `.dfs0` "
                  "carrier is deferred (`mikecore`/`mikeio` have no macOS wheel).\n")
+    lines.append("> **Storm system only:** models carrying additional tagged systems "
+                 "(e.g. a separated sanitary subgraph) export their storm_minor elements here.\n")
     lines.append("## SWMM datastore field → MIKE+ Model B field\n")
     lines.append("| SWMM datastore field | MIKE+ Model B field | conversion |")
     lines.append("|---|---|---|")

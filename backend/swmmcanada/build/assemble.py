@@ -234,6 +234,16 @@ def assemble_inp(
     return inp
 
 
+def _system_counts(network: NetworkIn) -> dict:
+    """Per-system element counts (ADR 0011); single-system models report one entry."""
+    out: dict = {}
+    for n in list(network.junctions) + list(network.outfalls):
+        out.setdefault(n.system, {"nodes": 0, "conduits": 0})["nodes"] += 1
+    for c in network.conduits:
+        out.setdefault(c.system, {"nodes": 0, "conduits": 0})["conduits"] += 1
+    return out
+
+
 def _mean_latitude(network: NetworkIn) -> float:
     """Mean junction latitude — the SNOWMELT climatology's latitude input (node y is
     EPSG:4326 by repo contract)."""
@@ -300,6 +310,7 @@ def build_model(
         "n_subcatchments": len(subcatchments),
         "has_evaporation": str(SEC.EVAPORATION) in sections,
         "has_snowmelt": str(SEC.SNOWPACKS) in sections,
+        "systems": _system_counts(network),
         "sections": sections,
         "inp_sha256": hashlib.sha256(inp_path.read_bytes()).hexdigest(),
     }

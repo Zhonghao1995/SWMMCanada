@@ -30,12 +30,12 @@ LAYER_CONDUITS = "conduits"
 LAYER_SUBCATCHMENTS = "subcatchments"
 
 # Non-geometry attribute columns per layer (geometry is carried separately by the GPKG).
-JUNCTION_FIELDS = ["name", "invert_m", "max_depth_m"]
-OUTFALL_FIELDS = ["name", "invert_m", "kind"]
-CONDUIT_FIELDS = ["name", "from_node", "to_node", "length_m", "diameter_m", "roughness_n"]
+JUNCTION_FIELDS = ["name", "invert_m", "max_depth_m", "system"]
+OUTFALL_FIELDS = ["name", "invert_m", "kind", "system"]
+CONDUIT_FIELDS = ["name", "from_node", "to_node", "length_m", "diameter_m", "roughness_n", "system"]
 SUBCATCHMENT_FIELDS = [
     "name", "outlet_node", "area_ha", "pct_imperv", "width_m", "pct_slope", "cn",
-    "n_imperv", "n_perv", "s_imperv_mm", "s_perv_mm", "pct_zero",
+    "n_imperv", "n_perv", "s_imperv_mm", "s_perv_mm", "pct_zero", "system",
 ]
 
 # netCDF (CF) names. Rainfall, temperature, and evaporation are the climate-forcing triad
