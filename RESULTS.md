@@ -63,6 +63,15 @@ The report also records an honest delineation **method** (`catchbasin_parcel` /
 service area*, **not** a DEM-derived watershed), and a confidence level — so an approximate
 service area is never mistaken for a true hydrological catchment.
 
+**Regression baselines** (`tests/validate/test_regression_baselines.py`) lock today's
+delineation verdict on the checked-in downtown fixtures — Victoria: 74 junction-Voronoi
+cells, Ottawa: 400 catch-basin cells (the CI-runnable subsets of the full downtown runs
+above: 732 / 2,461) — asserting one cell per seed, zero errors, no blank holes or overlap,
+exactly today's warning set (Ottawa's >50 m outlet-distance tail stays surfaced), determinism
+(same input ⇒ identical cells), and the no-catch-basin fallback to junction-Voronoi. Any
+future delineation change (DEM refinement, outlet rerouting) must move these baselines in a
+reviewed diff — it cannot silently degrade coverage.
+
 ## Victoria — fidelity to the source data
 
 Victoria publishes storm mains with explicit topology, invert elevations, diameters and
