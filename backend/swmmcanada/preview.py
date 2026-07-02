@@ -34,14 +34,15 @@ def network_geojson(network: NetworkIn, subcatchments: List[SubcatchmentIn]) -> 
         if c.from_node in coord and c.to_node in coord:
             features.append({
                 "type": "Feature",
-                "properties": {"kind": "conduit", "id": c.name, "diameter_m": c.diameter_m},
+                "properties": {"kind": "conduit", "id": c.name, "diameter_m": c.diameter_m,
+                               "system": c.system},
                 "geometry": {"type": "LineString", "coordinates": [coord[c.from_node], coord[c.to_node]]},
             })
 
     for j in network.junctions:
         features.append({
             "type": "Feature",
-            "properties": {"kind": "junction", "id": j.name},
+            "properties": {"kind": "junction", "id": j.name, "system": j.system},
             "geometry": {"type": "Point", "coordinates": [float(j.x), float(j.y)]},
         })
 

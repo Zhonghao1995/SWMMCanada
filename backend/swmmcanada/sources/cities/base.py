@@ -497,6 +497,22 @@ def _impervious_fraction(cell_poly, parcels_gdf, parcels_sidx, buildings_gdf, bu
     return max(config.min_imperv, min(config.max_imperv, 100.0 * area / cell_poly.area)), True
 
 
+def merge_secondary_system(primary: NetworkIn, secondary: NetworkIn, *, prefix: str,
+                           system: str) -> NetworkIn:
+    """One model, N tagged systems (ADR 0011): graft ``secondary`` into ``primary`` as a
+    disconnected subgraph — every element renamed with ``prefix`` (collision-free) and
+    tagged ``system``. The primary's elements are untouched."""
+    from dataclasses import replace as _rep
+
+    js = [_rep(j, name=f"{prefix}{j.name}", system=system) for j in secondary.junctions]
+    os_ = [_rep(o, name=f"{prefix}{o.name}", system=system) for o in secondary.outfalls]
+    cs = [_rep(c, name=f"{prefix}{c.name}", from_node=f"{prefix}{c.from_node}",
+               to_node=f"{prefix}{c.to_node}", system=system) for c in secondary.conduits]
+    return NetworkIn(junctions=list(primary.junctions) + js,
+                     outfalls=list(primary.outfalls) + os_,
+                     conduits=list(primary.conduits) + cs)
+
+
 def _outlet_resolver(network: NetworkIn, crs: str):
     """``(lon, lat) -> node name``: the nearer endpoint of the NEAREST conduit, measured in
     the city's metric CRS. A catch basin's lead taps the closest main, so its outlet must

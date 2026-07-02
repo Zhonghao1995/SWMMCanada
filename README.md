@@ -38,7 +38,7 @@ SWMMCanada chooses how to build the network from **where you draw**. You don't s
 | **Real network** | uses the city's published storm pipes (real inverts, diameters, manholes, and outfalls) | **8 cities** that publish a storm network: Victoria, Ottawa, Calgary, Surrey, London, Kitchener–Waterloo, Kelowna, Regina |
 | **Synthesize** | builds a realistic network from the street map + open data | anywhere else in Canada |
 
-Either mode then gives you the same things: subcatchments, rainfall, and a shareable data package. Where a city also publishes parcels (like Victoria), the subcatchments follow real lot lines.
+Either mode then gives you the same things: subcatchments, rainfall, and a shareable data package. Where a city also publishes parcels (like Victoria), the subcatchments follow real lot lines. Where a city publishes its **sanitary sewer** too (Regina), the model carries it as a second tagged system in the same `.inp` — the foundation for dual-drainage and separated-sewer studies.
 
 ## Try it
 

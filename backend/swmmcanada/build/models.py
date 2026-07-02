@@ -12,6 +12,7 @@ class JunctionIn:
     x: float
     y: float
     max_depth_m: float = 2.0
+    system: str = "storm_minor"   # drainage system tag (ADR 0011): storm_minor|storm_major|sanitary
 
 
 @dataclass(frozen=True)
@@ -21,6 +22,7 @@ class OutfallIn:
     x: float
     y: float
     kind: str = "FREE"
+    system: str = "storm_minor"
 
 
 @dataclass(frozen=True)
@@ -31,6 +33,7 @@ class ConduitIn:
     length_m: float
     diameter_m: float = 0.30
     roughness_n: float = 0.013
+    system: str = "storm_minor"
 
 
 @dataclass(frozen=True)
@@ -48,6 +51,7 @@ class SubcatchmentIn:
     s_perv_mm: float = 5.0
     pct_zero: float = 25.0
     polygon: Optional[List[Tuple[float, float]]] = None
+    system: str = "storm_minor"
 
 
 @dataclass(frozen=True)

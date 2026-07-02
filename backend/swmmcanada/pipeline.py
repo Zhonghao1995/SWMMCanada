@@ -79,6 +79,7 @@ from swmmcanada.sources.cities.kelowna import (
 from swmmcanada.sources.cities.regina import (
     build_regina_network,
     fetch_regina_land,
+    fetch_regina_sanitary,
     fetch_regina_storm,
 )
 
@@ -293,6 +294,7 @@ def _build_real_network(
     network_fn, land_fn, sub_crs: str, city: str, network_source: str,
     dem_source=None, climate_client=None, climate_buffer_deg: float = 0.3, derive: bool = True,
     landcover_source=None, soil_source=None, subcatchment_method: str = "parcel", report=None,
+    sanitary_fn=None,
 ) -> BuildResult:
     """Shared real-municipal-network pipeline (ADR 0006). ``network_fn(aoi)`` assembles the
     city's real pipes (returns an object with ``.network`` + ``.diagnostics``); ``land_fn(aoi)``
@@ -348,6 +350,22 @@ def _build_real_network(
                 for s in subcatchments
             ]
 
+    # Sanitary tracer (ADR 0011): where the city publishes a sanitary layer, graft it in
+    # as a tagged, disconnected subgraph — AFTER subcatchments (they are storm-seeded) and
+    # with graceful degradation (a sanitary fetch failure never blocks the storm build).
+    san_diag = {"included": False, "reason": "not_published"}
+    if sanitary_fn is not None:
+        _r("SANITARY", 78)
+        try:
+            sanres = sanitary_fn(aoi)
+            network = base.merge_secondary_system(
+                network, sanres.network, prefix="SAN_", system="sanitary")
+            san_diag = {"included": True,
+                        "n_junctions": len(sanres.network.junctions),
+                        "n_conduits": len(sanres.network.conduits)}
+        except Exception as exc:  # noqa: BLE001 — additive system, degrade with a note
+            san_diag = {"included": False, "reason": f"{type(exc).__name__}: {exc}"}
+
     # Head done (network producer = the city adapter); the shared build spine does the rest.
     method = _method_descriptor(sub_diag)
     config = BuildConfig(out_dir=ws, start=start, end=end, title=f"SWMMCanada ({city} real network)",
@@ -359,6 +377,7 @@ def _build_real_network(
             "city": city, "network_source": network_source,
             "network_diagnostics": netres.diagnostics,
             "subcatchment_diagnostics": sub_diag,
+            "sanitary": san_diag,
         },
         climate_client=climate_client, climate_buffer_deg=climate_buffer_deg, report=report,
         sub_diag=sub_diag,
@@ -468,6 +487,7 @@ def build_from_regina(aoi, start: date, end: date, workspace, *, regina_client=N
         land_fn=lambda a: fetch_regina_land(tuple(a.bbox), client=regina_client),
         sub_crs="EPSG:32613", city="regina",
         network_source="City of Regina storm sewer (real municipal network)",
+        sanitary_fn=lambda a: build_regina_network(fetch_regina_sanitary(tuple(a.bbox), client=regina_client)),
         subcatchment_method=subcatchment_method, report=report, **kwargs)
 
 

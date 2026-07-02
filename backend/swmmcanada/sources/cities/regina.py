@@ -26,6 +26,8 @@ STORM_PIPES = 5        # Storm Sewer Line (polyline); STARTELEVATION/ENDELEVATIO
 STORM_OUTFALLS = 4     # Outfall (point)
 STORM_CATCHBASINS = 3  # Catch Basin (point); RIMELEVATION, SUMPELEVATION
 STORM_MANHOLES = 2     # Manhole (point); RIMELEVATION (~88% populated) -> node ground/max-depth
+DOMESTIC = f"{ARC}/DomesticSewerNetwork/MapServer"
+DOMESTIC_PIPES = 3     # Domestic Sewer Line — same schema as storm (inverts/diameter/material)
 # Parcels + building footprints live on their own OpenData services.
 PARCELS = f"{ARC}/Parcels/MapServer/0"                  # ASSESSMENT_REGIONS (lot polygons)
 BUILDINGS = f"{ARC}/BuildingFootprint/MapServer/0"      # BUILDING FOOTPRINT (polygons)
@@ -69,6 +71,17 @@ def fetch_regina_storm(bbox, *, client=None) -> dict:
         "outfalls": _fetch(f"{STORM}/{STORM_OUTFALLS}", bbox, client),
         "manholes": _fetch(f"{STORM}/{STORM_MANHOLES}", bbox, client),
     }
+
+
+def fetch_regina_sanitary(bbox, *, client=None) -> dict:
+    """Separated sanitary (domestic) sewer lines intersecting ``bbox`` — the second tagged
+    system (ADR 0011). Same publication schema as the storm layer, so
+    :func:`build_regina_network` assembles it unchanged (per-component sinks stand in for
+    the treatment-bound trunk exits)."""
+    if hasattr(bbox, "bbox"):
+        bbox = bbox.bbox
+    client = client or ReginaClient()
+    return {"pipes": _fetch(f"{DOMESTIC}/{DOMESTIC_PIPES}", bbox, client, where=_PIPES_WHERE)}
 
 
 def fetch_regina_land(bbox, *, client=None) -> dict:
