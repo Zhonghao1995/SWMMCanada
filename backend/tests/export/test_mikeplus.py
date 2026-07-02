@@ -111,3 +111,54 @@ def test_lossy_reported(tmp_path):
 
 def test_satisfies_exporter_protocol():
     assert isinstance(MikePlusExporter(), ModelExporter)
+
+
+# --- dirty-data defence: one bad record warns, it never kills the export --------
+
+
+def _dirty_datastore() -> ModelReadyDatastore:
+    """Real city data contains zeros: width_m=0, n=0, roughness_n=0 must not crash."""
+    ds = _datastore()
+    ds.network.conduits.append(
+        ConduitIn(name="C_BAD", from_node="J1", to_node="O1", length_m=50.0,
+                  diameter_m=0.30, roughness_n=0.0))
+    ds.subcatchments.append(
+        SubcatchmentIn(name="S_BAD", outlet_node="J2", area_ha=1.0, pct_imperv=30.0,
+                       width_m=0.0, pct_slope=1.0, n_imperv=0.0, n_perv=0.0, polygon=None))
+    return ds
+
+
+def test_dirty_data_survives_with_warnings(tmp_path):
+    result = MikePlusExporter().export(_dirty_datastore(), tmp_path)
+
+    # The export completed — every file still written.
+    for name in ("nodes.shp", "links.shp", "catchments.shp", "rain.csv"):
+        assert (tmp_path / name).exists()
+
+    # Each bad value produced a named warning instead of a crash.
+    text = "\n".join(result.warnings)
+    assert "link C_BAD" in text                      # roughness_n = 0
+    assert "catchment S_BAD" in text                 # width_m = 0
+    assert "(imperv)" in text and "(perv)" in text   # n_imperv = n_perv = 0
+
+
+def test_dirty_data_fallback_values(tmp_path):
+    MikePlusExporter().export(_dirty_datastore(), tmp_path)
+
+    links = gpd.read_file(tmp_path / "links.shp")
+    bad_link = links[links["MUID"] == "C_BAD"].iloc[0]
+    assert bad_link["ManningM"] == pytest.approx(75.0)           # stated default M
+
+    cats = gpd.read_file(tmp_path / "catchments.shp")
+    bad = cats[cats["MUID"] == "S_BAD"].iloc[0]
+    assert bad["Length"] == pytest.approx((1.0 * 10000.0) ** 0.5)  # sqrt(area) fallback
+    assert bad["ManMImp"] == pytest.approx(100.0)                # 1/0.01 SWMM default
+    assert bad["ManMPrv"] == pytest.approx(10.0)                 # 1/0.10 SWMM default
+
+    # Clean rows are untouched.
+    s1 = cats[cats["MUID"] == "S1"].iloc[0]
+    assert s1["ManMImp"] == pytest.approx(100.0) and s1["Length"] == pytest.approx(200.0)
+
+
+def test_clean_data_produces_no_warnings(tmp_path):
+    assert MikePlusExporter().export(_datastore(), tmp_path).warnings == []

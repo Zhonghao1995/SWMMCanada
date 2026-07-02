@@ -40,6 +40,15 @@ def _horton_fmin(cn: float) -> float:
     return mm_per_h / 3.6e6  # mm/h → m/s
 
 
+def _recip(n, fallback: float, what: str, warnings: List[str]) -> float:
+    """Manning's M = 1/n, defended: non-positive n (dirty upstream data) falls back to a
+    stated default M with a warning, instead of a ZeroDivisionError killing the export."""
+    if n and float(n) > 0:
+        return 1.0 / float(n)
+    warnings.append(f"{what}: non-positive Manning n ({n!r}); ManningM defaulted to {fallback}")
+    return fallback
+
+
 class MikePlusExporter:
     """Write a MIKE+ CS import package from the datastore (ADR 0008 Option B)."""
 
@@ -53,17 +62,18 @@ class MikePlusExporter:
         node_xy = _node_lookup(ds.network)  # name → (lon, lat) over junctions + outfalls
 
         lossy: List[LossyMapping] = list(_hydrology_lossy())
+        warnings: List[str] = []
         files: List[Path] = []
 
         files.append(_write_nodes(out / "nodes.shp", ds.network, crs))
-        files.append(_write_links(out / "links.shp", ds.network, node_xy, crs))
-        files.append(_write_catchments(out / "catchments.shp", ds, node_xy, crs, lossy))
+        files.append(_write_links(out / "links.shp", ds.network, node_xy, crs, warnings))
+        files.append(_write_catchments(out / "catchments.shp", ds, node_xy, crs, lossy, warnings))
         files.append(_write_rain(out / "rain.csv", ds.rain))
         files.append(_write_field_mapping(out / "field_mapping.md", lossy))
         files.append(_write_readme(out / "README.md"))
 
         return ExportResult(
-            target=self.target, out_dir=out, files=files, lossy=lossy, warnings=[]
+            target=self.target, out_dir=out, files=files, lossy=lossy, warnings=warnings
         )
 
 
@@ -119,7 +129,7 @@ def _write_nodes(path: Path, network, crs: Optional[str]) -> Path:
     return path
 
 
-def _write_links(path: Path, network, node_xy, crs: Optional[str]) -> Path:
+def _write_links(path: Path, network, node_xy, crs: Optional[str], warnings: List[str]) -> Path:
     muid, frm, to, length, diam, mann, geom = [], [], [], [], [], [], []
     for c in network.conduits:
         muid.append(c.name)
@@ -127,7 +137,7 @@ def _write_links(path: Path, network, node_xy, crs: Optional[str]) -> Path:
         to.append(c.to_node)
         length.append(float(c.length_m))  # authoritative length, not geometry-derived
         diam.append(float(c.diameter_m))
-        mann.append(1.0 / float(c.roughness_n))  # Manning's M = 1/n
+        mann.append(_recip(c.roughness_n, 75.0, f"link {c.name}", warnings))  # M = 1/n
         a = node_xy.get(c.from_node)
         b = node_xy.get(c.to_node)
         geom.append(LineString([a, b]) if a and b else None)
@@ -142,7 +152,7 @@ def _write_links(path: Path, network, node_xy, crs: Optional[str]) -> Path:
 
 
 def _write_catchments(path: Path, ds, node_xy, crs: Optional[str],
-                      lossy: List[LossyMapping]) -> Path:
+                      lossy: List[LossyMapping], warnings: List[str]) -> Path:
     cols: Dict[str, list] = {
         "MUID": [], "NodeID": [], "Area": [], "ImpervPct": [], "Length": [],
         "Slope": [], "ManMImp": [], "ManMPrv": [], "StorImp": [], "StorPrv": [],
@@ -156,10 +166,18 @@ def _write_catchments(path: Path, ds, node_xy, crs: Optional[str],
         cols["NodeID"].append(s.outlet_node)
         cols["Area"].append(area_m2)
         cols["ImpervPct"].append(float(s.pct_imperv))
-        cols["Length"].append(area_m2 / float(s.width_m))
+        # Length = area/width; a non-positive width (dirty data) falls back to √area
+        # (square catchment) with a warning rather than a ZeroDivisionError.
+        if s.width_m and float(s.width_m) > 0:
+            cols["Length"].append(area_m2 / float(s.width_m))
+        else:
+            warnings.append(
+                f"catchment {s.name}: non-positive width_m ({s.width_m!r}); "
+                f"Length defaulted to sqrt(area)")
+            cols["Length"].append(area_m2 ** 0.5)
         cols["Slope"].append(float(s.pct_slope) / 100.0)
-        cols["ManMImp"].append(1.0 / float(s.n_imperv))
-        cols["ManMPrv"].append(1.0 / float(s.n_perv))
+        cols["ManMImp"].append(_recip(s.n_imperv, 100.0, f"catchment {s.name} (imperv)", warnings))
+        cols["ManMPrv"].append(_recip(s.n_perv, 10.0, f"catchment {s.name} (perv)", warnings))
         cols["StorImp"].append(float(s.s_imperv_mm) / 1000.0)
         cols["StorPrv"].append(float(s.s_perv_mm) / 1000.0)
         cols["HortMax"].append(_HORTON_F0)
