@@ -14,6 +14,7 @@ from pathlib import Path
 from swmmcanada.sources.cities.regina import (
     _PIPES_WHERE,
     STORM_CATCHBASINS,
+    STORM_MANHOLES,
     STORM_OUTFALLS,
     STORM_PIPES,
     build_regina_network,
@@ -35,6 +36,7 @@ def _load(name):
 PIPES = _load("storm_pipes.geojson")
 OUTFALLS = _load("outfalls.geojson")
 CATCHBASINS = _load("catchbasins.geojson")
+MANHOLES = _load("manholes.geojson")
 
 
 def _layer_id(url):
@@ -68,7 +70,8 @@ class FakeClient:
             ]
             return {"type": "FeatureCollection", "features": feats}
 
-        src = {STORM_PIPES: PIPES, STORM_OUTFALLS: OUTFALLS, STORM_CATCHBASINS: CATCHBASINS}.get(layer, [])
+        src = {STORM_PIPES: PIPES, STORM_OUTFALLS: OUTFALLS, STORM_CATCHBASINS: CATCHBASINS,
+               STORM_MANHOLES: MANHOLES}.get(layer, [])
         offset = int(params.get("resultOffset", 0) or 0)
         count = params.get("resultRecordCount")
         page = src[offset:] if count is None else src[offset : offset + int(count)]
@@ -80,8 +83,8 @@ class FakeClient:
 
 def test_storm_returns_pipes_and_outfalls_as_features():
     res = fetch_regina_storm(BBOX, client=FakeClient())
-    assert set(res) == {"pipes", "outfalls"}
-    assert res["pipes"] and res["outfalls"]
+    assert set(res) == {"pipes", "outfalls", "manholes"}   # manholes -> rim depths (refs #53)
+    assert res["pipes"] and res["outfalls"] and res["manholes"]
     for f in res["pipes"]:
         assert f["type"] == "Feature"
         assert "properties" in f and "geometry" in f

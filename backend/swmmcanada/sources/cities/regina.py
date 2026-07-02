@@ -25,6 +25,7 @@ STORM = f"{ARC}/StormSewerNetwork/MapServer"
 STORM_PIPES = 5        # Storm Sewer Line (polyline); STARTELEVATION/ENDELEVATION, DIAMETER (mm)
 STORM_OUTFALLS = 4     # Outfall (point)
 STORM_CATCHBASINS = 3  # Catch Basin (point); RIMELEVATION, SUMPELEVATION
+STORM_MANHOLES = 2     # Manhole (point); RIMELEVATION (~88% populated) -> node ground/max-depth
 # Parcels + building footprints live on their own OpenData services.
 PARCELS = f"{ARC}/Parcels/MapServer/0"                  # ASSESSMENT_REGIONS (lot polygons)
 BUILDINGS = f"{ARC}/BuildingFootprint/MapServer/0"      # BUILDING FOOTPRINT (polygons)
@@ -58,13 +59,15 @@ def _as_geojson(feat: dict) -> dict:
 
 def fetch_regina_storm(bbox, *, client=None) -> dict:
     """Storm network intersecting ``bbox`` (EPSG:4326 tuple, or object with ``.bbox``): active
-    gravity Storm Sewer Lines + Outfalls. Returns ``{"pipes": [...], "outfalls": [...]}``."""
+    gravity Storm Sewer Lines + Outfalls + Manholes (rim elevations for node depths).
+    Returns ``{"pipes": [...], "outfalls": [...], "manholes": [...]}``."""
     if hasattr(bbox, "bbox"):
         bbox = bbox.bbox
     client = client or ReginaClient()
     return {
         "pipes": _fetch(f"{STORM}/{STORM_PIPES}", bbox, client, where=_PIPES_WHERE),
         "outfalls": _fetch(f"{STORM}/{STORM_OUTFALLS}", bbox, client),
+        "manholes": _fetch(f"{STORM}/{STORM_MANHOLES}", bbox, client),
     }
 
 
@@ -188,12 +191,20 @@ def build_regina_network(storm, *, config: base.AssembleConfig = _REGINA_ASSEMBL
         if c and len(c) >= 2:
             outfall_points.append((c[0], c[1]))
 
-    # Manholes (layer 2) do publish RIMELEVATION (~88% populated), but this adapter mirrors the
-    # other geometry-inferred cities (Ottawa/Calgary/Kelowna) and does not fetch them: node
-    # inverts are back-filled from the connected pipe STARTELEVATION/ENDELEVATION ends and max
-    # depth uses the config default. (Passing manhole rims as ground_points is a possible
-    # refinement.)
-    result = base.assemble_network(pipes, outfall_points=outfall_points, config=config)
+    # Manhole RIMELEVATION (~88% populated) -> node ground elevation, so max depth becomes
+    # rim - invert instead of the 2 m default. The same plausibility band screens rims as
+    # inverts (a bad rim would poison every depth on that node).
+    ground_points = []
+    manholes_f = _features(storm.get("manholes")) if isinstance(storm, dict) else []
+    for f in manholes_f:
+        c = (f.get("geometry") or {}).get("coordinates")
+        rim = _invert((f.get("properties") or {}).get("RIMELEVATION"))
+        if c and len(c) >= 2 and rim is not None:
+            ground_points.append(((c[0], c[1]), rim))
+
+    result = base.assemble_network(pipes, outfall_points=outfall_points,
+                                   ground_points=ground_points, config=config)
     diag = {**result.diagnostics, "city": "regina", "n_pipes_in": len(pipes_f),
-            "n_no_geom": n_no_geom, "n_outfall_points": len(outfall_points)}
+            "n_no_geom": n_no_geom, "n_outfall_points": len(outfall_points),
+            "n_ground_points": len(ground_points)}
     return base.NetworkResult(network=result.network, diagnostics=diag)

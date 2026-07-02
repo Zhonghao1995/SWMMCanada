@@ -269,3 +269,34 @@ def test_line_ends_empty_or_degenerate():
     assert _line_ends(None) == (None, None)
     assert _line_ends({"type": "LineString", "coordinates": []}) == (None, None)
     assert _line_ends({"type": "LineString", "coordinates": [[-104.618, 50.445]]}) == (None, None)
+
+
+# --- manhole rims -> real node max-depths (refs #53) ------------------------------
+
+def test_manhole_rims_set_real_max_depths():
+    """With the manholes layer, junctions coinciding with a manhole get
+    max_depth = RIMELEVATION - invert instead of the 2 m assembler default."""
+    with_rims = build_regina_network({
+        "pipes": _load("storm_pipes.geojson"), "outfalls": _load("outfalls.geojson"),
+        "manholes": _load("manholes.geojson"),
+    })
+    without = build_regina_network({
+        "pipes": _load("storm_pipes.geojson"), "outfalls": _load("outfalls.geojson"),
+    })
+    assert with_rims.diagnostics["n_ground_points"] > 100      # 113 plausible rims in the bbox
+    assert without.diagnostics["n_ground_points"] == 0
+
+    depth_with = {j.name: j.max_depth_m for j in with_rims.network.junctions}
+    depth_without = {j.name: j.max_depth_m for j in without.network.junctions}
+    changed = [n for n in depth_with if depth_with[n] != depth_without[n]]
+    assert changed, "no junction picked up a rim-based depth"
+    for n in changed:
+        assert 0 < depth_with[n] < 15.0                        # physically plausible depths
+    # Junctions with no matching manhole keep the assembler default.
+    assert any(depth_with[n] == depth_without[n] for n in depth_with)
+
+
+def test_implausible_rims_are_screened():
+    """A placeholder rim (e.g. 1.0) must be dropped by the plausibility band, not turned
+    into a bogus depth."""
+    assert _invert(1.0) is None and _invert(57.23) is None and _invert(571.0) == 571.0
