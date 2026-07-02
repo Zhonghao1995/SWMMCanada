@@ -497,6 +497,49 @@ def _impervious_fraction(cell_poly, parcels_gdf, parcels_sidx, buildings_gdf, bu
     return max(config.min_imperv, min(config.max_imperv, 100.0 * area / cell_poly.area)), True
 
 
+def _outlet_resolver(network: NetworkIn, crs: str):
+    """``(lon, lat) -> node name``: the nearer endpoint of the NEAREST conduit, measured in
+    the city's metric CRS. A catch basin's lead taps the closest main, so its outlet must
+    sit on that pipe — the globally nearest node can belong to a parallel branch and
+    mis-route the whole cell (the outlet_distance diagnostic exists for exactly this).
+    Falls back to nearest node when the network has no usable conduits."""
+    import numpy as np
+
+    from swmmcanada.geo.crs import lonlat_projector
+
+    to_m = lonlat_projector(crs)
+    nodes = {n.name: to_m(n.x, n.y) for n in list(network.junctions) + list(network.outfalls)}
+
+    ends = [(nodes[c.from_node], nodes[c.to_node], c.from_node, c.to_node)
+            for c in network.conduits if c.from_node in nodes and c.to_node in nodes]
+    if not ends:
+        names = list(nodes)
+        coords = np.array([nodes[n] for n in names])
+
+        def nearest_node(xy):
+            p = np.asarray(to_m(*xy))
+            return names[int(((coords - p) ** 2).sum(axis=1).argmin())]
+
+        return nearest_node
+
+    A = np.array([e[0] for e in ends])
+    B = np.array([e[1] for e in ends])
+    AB = B - A
+    L2 = (AB ** 2).sum(axis=1)
+    L2[L2 == 0] = 1e-12
+    end_names = [(e[2], e[3]) for e in ends]
+
+    def resolver(xy):
+        p = np.asarray(to_m(*xy))
+        t = np.clip(((p - A) * AB).sum(axis=1) / L2, 0.0, 1.0)
+        d2 = ((A + t[:, None] * AB - p) ** 2).sum(axis=1)
+        k = int(d2.argmin())
+        fa, fb = end_names[k]
+        return fa if ((A[k] - p) ** 2).sum() <= ((B[k] - p) ** 2).sum() else fb
+
+    return resolver
+
+
 def delineate_catchbasin_subcatchments(
     network: NetworkIn, catchbasins, parcels, buildings, aoi, *, crs: str = "EPSG:32610",
     config: CatchbasinSubcatchmentConfig = CatchbasinSubcatchmentConfig(),
@@ -525,12 +568,7 @@ def delineate_catchbasin_subcatchments(
 
     cells, shape_method, n_dropped = _shape_cells(seeds, parcels, aoi, crs)
 
-    jnames = [j.name for j in network.junctions]
-    jcoord = np.array([[j.x, j.y] for j in network.junctions])
-
-    def nearest_node(xy):
-        d = (jcoord[:, 0] - xy[0]) ** 2 + (jcoord[:, 1] - xy[1]) ** 2
-        return jnames[int(d.argmin())]
+    outlet_of = _outlet_resolver(network, crs)
 
     def gdf(geoms):
         s = gpd.GeoSeries(geoms, crs="EPSG:4326") if geoms else gpd.GeoSeries([], crs="EPSG:4326")
@@ -552,7 +590,7 @@ def delineate_catchbasin_subcatchments(
             imperv_map[name] = imperv
             n_parcel += 1
         subs.append(SubcatchmentIn(
-            name=name, outlet_node=nearest_node(seeds[cb_id]), area_ha=area_m2 / 1e4,
+            name=name, outlet_node=outlet_of(seeds[cb_id]), area_ha=area_m2 / 1e4,
             pct_imperv=imperv, width_m=math.sqrt(area_m2),
             pct_slope=config.default_slope_pct, polygon=exterior))
     diag = {"method": f"catchbasin+parcel/building ({shape_method}-shaped)", "n_catchbasins": len(seeds),
