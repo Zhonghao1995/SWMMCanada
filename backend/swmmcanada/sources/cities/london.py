@@ -77,7 +77,9 @@ def fetch_london_storm(bbox, *, client=None) -> dict:
     if hasattr(bbox, "bbox"):
         bbox = bbox.bbox
     client = client or LondonMapClient()
-    return _fetch_network(bbox, client, "FlowType='STM'")
+    # Built only: the layer also carries ~1,270 Abandoned/Proposed/Removed lines
+    # city-wide that must not enter the gravity graph (same filter as sanitary).
+    return _fetch_network(bbox, client, "FlowType='STM' AND ConstructedStatus='Built'")
 
 
 # The SAME Sewer Pipes layer carries the sanitary system (FlowType='SAN'); unlike the storm
