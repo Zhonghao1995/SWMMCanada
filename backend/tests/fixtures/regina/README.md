@@ -44,5 +44,5 @@ were stripped to keep the fixtures small.)
   aliases RCP->concrete, VCT/TILE->clay, PRELOAD->concrete before the shared roughness lookup.
 - `GISID` — integer asset id, unique per layer (0 nulls city-wide) -> conduit names.
 - NO node ids -> topology inferred from polyline endpoints (snap_decimals=5).
-- Manholes (layer **2**) publish RIMELEVATION (~88% populated) but are not fetched, mirroring
+- Manholes (layer **2**) publish RIMELEVATION (~88% populated) and ARE fetched as node ground elevations (max depth = rim − invert), like
   the other geometry-inferred adapters.
