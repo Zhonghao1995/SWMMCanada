@@ -30,3 +30,34 @@ def test_contract_covers_the_handoff_essentials():
     assert rp.PREVIEW_GEOJSON in rp.REQUIRED
     # mikeplus/ is deliberately NOT required (ADR 0008 graceful degradation).
     assert not any(r.startswith(rp.MIKEPLUS_DIR) for r in rp.REQUIRED)
+
+
+def test_observed_flow_exports_when_hydat_present(tmp_path, monkeypatch):
+    """North star: the promised calibration target ships when HYDAT + a station exist,
+    and its absence is a note, never a failure."""
+    import sys
+    from datetime import date
+    from pathlib import Path
+
+    sys.path.insert(0, str(Path(__file__).parent / "acquire"))
+    from test_hydro import _make_hydat  # reuse the recorded-fixture builder
+
+    from swmmcanada.geo import aoi_from_geojson
+    from swmmcanada.pipeline import _export_observed_safe
+
+    aoi = aoi_from_geojson({"type": "Polygon", "coordinates": [[
+        [-75.70, 45.41], [-75.68, 45.41], [-75.68, 45.43], [-75.70, 45.43], [-75.70, 45.41]]]})
+    hydat = tmp_path / "hydat.sqlite"
+    _make_hydat(hydat)
+
+    ws = tmp_path / "ws"; ws.mkdir()
+    monkeypatch.setenv("SWMMCANADA_HYDAT_PATH", str(hydat))
+    _export_observed_safe(ws, aoi, date(2022, 6, 1), date(2022, 6, 30))
+    assert (ws / "observed_flow.csv").exists()
+    head = (ws / "observed_flow.csv").read_text().splitlines()[0]
+    assert "station_number" in head and "discharge" in head
+
+    ws2 = tmp_path / "ws2"; ws2.mkdir()
+    monkeypatch.delenv("SWMMCANADA_HYDAT_PATH")
+    _export_observed_safe(ws2, aoi, date(2022, 6, 1), date(2022, 6, 30))
+    assert not list(ws2.iterdir())                      # no HYDAT → silent no-op
