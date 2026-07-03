@@ -147,6 +147,27 @@ def _design_intensity_fn(aoi):
             "return_period_yr": 5, "reason": "idf_unavailable"}
 
 
+def _export_observed_safe(ws: Path, aoi, start: date, end: date) -> None:
+    """CONTEXT deliverable: observed streamflow CSV (the calibration/validation target),
+    written when the offline HYDAT database is present (SWMMCANADA_HYDAT_PATH) and a WSC
+    station falls inside the AOI. Real data when available, a recorded absence otherwise
+    (north star) — and never load-bearing: any failure leaves a note, not a dead build."""
+    hydat = os.environ.get("SWMMCANADA_HYDAT_PATH")
+    if not hydat or not Path(hydat).exists():
+        return
+    try:
+        from swmmcanada.acquire.hydro import fetch_hydro
+
+        res = fetch_hydro(aoi, start, end, hydat_path=hydat)
+        if res.flows.empty:
+            (ws / "observed_flow_NOTE.txt").write_text(
+                "HYDAT present but no hydrometric station with data inside this AOI/period.\n")
+            return
+        res.flows.to_csv(ws / "observed_flow.csv", index=False)
+    except Exception as exc:  # noqa: BLE001 — optional deliverable, degrade with a note
+        (ws / "observed_flow_NOTE.txt").write_text(f"HYDAT observed-flow export failed: {exc!r}\n")
+
+
 def _export_mikeplus_safe(ws: Path) -> None:
     """Emit the MIKE+ CS import package into ``ws/mikeplus`` alongside the .inp (ADR 0008).
 
@@ -206,6 +227,7 @@ def _finish_build(
     )
     result = build_from_datastore(ws / result_package.DATASTORE_DIR, ws)
     _export_mikeplus_safe(ws)  # ADR 0008: MIKE+ CS package — every build, graceful
+    _export_observed_safe(ws, aoi, start, end)  # observed flow (HYDAT) — real data when present
 
     # Map preview: GeoJSON of the model geometry for the frontend's layers.
     preview_path = ws / result_package.PREVIEW_GEOJSON
