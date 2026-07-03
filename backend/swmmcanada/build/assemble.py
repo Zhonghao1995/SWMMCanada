@@ -199,9 +199,10 @@ def assemble_inp(
         elev = _mean_invert(network)
         temp_sec = TemperatureSection()
         temp_sec["TIMESERIES"] = "temperature"
-        temp_sec["SNOWMELT"] = (
-            _SNOW_TEMP_DIVIDE_C, _ATI_WEIGHT, _NEG_MELT_RATIO, round(elev, 1), round(lat, 4), 0.0,
-        )
+        temp_sec["SNOWMELT"] = [       # a LIST: the generic section joins list items with
+            _SNOW_TEMP_DIVIDE_C,       # spaces (a tuple reprs, a string gets quoted)
+            _ATI_WEIGHT, _NEG_MELT_RATIO, round(elev, 1), round(lat, 4), 0.0,
+        ]
         inp[SEC.TEMPERATURE] = temp_sec
 
         pack = SnowPack(SNOWPACK_NAME)
