@@ -12,12 +12,16 @@ import re
 from pathlib import Path
 
 from swmmcanada.sources.cities.surrey import (
+    _SAN_WHERE,
     BUILDINGS,
     CATCHBASINS,
     DRAINAGE_DEVICES,
     LAND_PARCELS,
+    MANHOLES,
+    SAN_MAINS,
     STORM_MAINS,
     fetch_surrey_land,
+    fetch_surrey_sanitary,
     fetch_surrey_storm,
 )
 
@@ -32,6 +36,8 @@ def _load(name):
 PIPES = _load("storm_pipes")
 OUTFALLS = _load("outfalls")
 CATCHBASIN_FEATS = _load("catchbasins")
+MANHOLE_FEATS = _load("manholes")
+SAN_PIPES = _load("sanitary_mains")
 
 
 def _layer_id(url):
@@ -74,6 +80,17 @@ class FakeClient:
             return self._page(feats, params)
         if layer == CATCHBASINS:
             return self._page(CATCHBASIN_FEATS, params)
+        if layer == MANHOLES:
+            return self._page(MANHOLE_FEATS, params)
+        if layer == SAN_MAINS:
+            feats = SAN_PIPES
+            if "MAIN_TYPE2" in where:
+                want = re.search(r"MAIN_TYPE2\s*=\s*'([^']+)'", where).group(1)
+                feats = [f for f in feats if f["properties"].get("MAIN_TYPE2") == want]
+            if "STATUS" in where:
+                want = re.search(r"STATUS\s*=\s*'([^']+)'", where).group(1)
+                feats = [f for f in feats if f["properties"].get("STATUS") == want]
+            return self._page(feats, params)
         if layer in (LAND_PARCELS, BUILDINGS):
             return {"type": "FeatureCollection", "features": []}
         return {"type": "FeatureCollection", "features": []}
@@ -81,11 +98,18 @@ class FakeClient:
 
 # --- storm fetch ---------------------------------------------------------------
 
-def test_storm_returns_two_keys_as_geojson_features():
+def test_storm_returns_three_keys_as_geojson_features():
     res = fetch_surrey_storm(BBOX, client=FakeClient())
-    assert set(res) == {"pipes", "outfalls"}
+    assert set(res) == {"pipes", "outfalls", "manholes"}   # manholes -> rim depths
     for f in res["pipes"]:
         assert f["type"] == "Feature" and "properties" in f and "geometry" in f
+
+
+def test_storm_manholes_carry_rim_elevation():
+    res = fetch_surrey_storm(BBOX, client=FakeClient())
+    assert res["manholes"], "expected drainage manholes from the fixture"
+    assert all(f["geometry"]["type"] == "Point" for f in res["manholes"])
+    assert any("RIM_ELEVATION" in f["properties"] for f in res["manholes"])
 
 
 def test_mains_filtered_to_gravity():
@@ -127,6 +151,22 @@ def test_accepts_object_with_bbox_attribute():
 
     res = fetch_surrey_storm(AOI(), client=FakeClient())
     assert res["pipes"] and res["outfalls"]
+
+
+# --- sanitary fetch (second tagged system, ADR 0011) -----------------------------
+
+def test_sanitary_returns_in_service_gravity_mains():
+    """San Mains (41) must be queried with the Gravity + In Service where-clause: the layer
+    also carries Force/Stub and Abandoned/Proposed lines that are not part of the skeleton."""
+    client = FakeClient()
+    res = fetch_surrey_sanitary(BBOX, client=client)
+    assert set(res) == {"pipes"}
+    assert res["pipes"], "expected in-service gravity san mains from the fixture"
+    assert all(f["properties"]["MAIN_TYPE2"] == "Gravity" for f in res["pipes"])
+    san_calls = [p for (layer, p) in client.calls if layer == SAN_MAINS]
+    assert san_calls, "san mains layer was never queried"
+    assert all(p.get("where", "") == _SAN_WHERE for p in san_calls)
+    assert "Gravity" in _SAN_WHERE and "In Service" in _SAN_WHERE
 
 
 # --- land fetch ----------------------------------------------------------------

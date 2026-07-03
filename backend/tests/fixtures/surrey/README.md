@@ -21,8 +21,26 @@ ids on mains**, so topology is inferred from polyline endpoints (mirrors Ottawa)
 | `storm_pipes.geojson` | 18 | Drn Mains | `MAIN_TYPE2='Gravity'` | polyline |
 | `outfalls.geojson`    | 25 | Drainage Devices | `DEVICE_CLASSIFICATION='Outlet'` | point |
 | `catchbasins.geojson` | 24 | Drainage Catch Basins | `1=1` | point |
+| `manholes.geojson`    | 23 | Drainage Manholes | `1=1` | point |
+| `sanitary_mains.geojson` | 41 | San Mains | `MAIN_TYPE2='Gravity' AND STATUS='In Service'` | polyline |
 
-Counts: 35 gravity mains, 4 outfalls, 31 catch basins.
+Counts: 35 gravity mains, 4 outfalls, 31 catch basins, 23 manholes, 16 sanitary mains
+(manholes + sanitary captured **2026-07-03**, volatile audit fields stripped).
+
+## Manholes (layer 23) → node max depths
+
+`RIM_ELEVATION` (m AMSL, double) is 100% populated over this bbox (17.7–23.7 m) → node
+ground elevation, so junction max depth becomes rim − invert instead of the 2 m assembler
+default. Plausibility band 0.5–200 m (sea-level lowlands to ~134 m): unlike pipe inverts —
+where 0 = sea level is a legitimate value — a 0.0 RIM is a missing-data placeholder, so the
+band's lower edge screens it.
+
+## San Mains (layer 41) → sanitary skeleton (ADR 0011)
+
+Same publication schema as Drn Mains (`UP/DOWN_ELEVATION`, `MAIN_SIZE`, `MATERIAL`,
+`SHAPE.LEN`, no node ids), so `build_surrey_network` assembles it unchanged as the second
+tagged system. Unlike the storm layer, San Mains also carries `STATUS` Abandoned/Proposed
+lines — the where-clause keeps only in-service gravity mains.
 
 ## Field mapping (Drn Mains, layer 18)
 

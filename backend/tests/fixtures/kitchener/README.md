@@ -16,6 +16,7 @@ fixtures are plain GeoJSON FeatureCollections — no Esri-JSON conversion needed
 | `outlets.geojson` | `Storm_Outlets/FeatureServer/0` | keyed by `STMOUTLETID`; `PIPE_INVERT`. Used as outfall points. |
 | `catchbasins.geojson` | `Storm_Catchbasins/FeatureServer/0` | keyed by `STMCATCHBASINID` (subcatchment seeds). |
 | `buildings.geojson` | `Building_Outlines/FeatureServer/0` | polygons (impervious roofs for ADR 0005). |
+| `sanitary_pipes.geojson` | `Sanitary_Pipes/FeatureServer/0` | captured **2026-07-03**, `where=STATUS='ACTIVE' AND CATEGORY='GRAVITY'` (drops FORCEMAIN / SLUDGE FORCEMAIN / STUB / SYPHON). 128 lines, audit fields stripped. Same schema as `Storm_Pipes` but keyed `UP_SANMANHOLEID`/`DN_SANMANHOLEID`, so the sanitary fetch passes NO manholes/outlets — endpoints take the polyline-vertex fallback (line geometry coincides with node points in this org). Second tagged system (ADR 0011). |
 
 ## Sub-bbox (EPSG:4326)
 

@@ -18,6 +18,7 @@ STORM_MAINS = 18        # Drn Mains (polyline) — UP/DOWN_ELEVATION, MAIN_SIZE,
 MANHOLES = 23           # Drainage Manholes — NODE_NO, RIM_ELEVATION, OUTFLOW_ELEVATION
 CATCHBASINS = 24        # Drainage Catch Basins
 DRAINAGE_DEVICES = 25   # Drainage Devices — filter DEVICE_CLASSIFICATION='Outlet' for outfalls
+SAN_MAINS = 41          # San Mains (polyline) — same schema as Drn Mains (UP/DOWN_ELEVATION, ...)
 LAND_PARCELS = 148      # Lot (polygon)
 BUILDINGS = 155         # Buildings (polygon)
 SURREY_CRS = "EPSG:32610"  # UTM 10N (metric ops) — same zone as Victoria
@@ -27,6 +28,9 @@ _PAGE = 2000               # layer maxRecordCount
 # (Culvert, Stub, Foundation Drain, Forcemain, ...) are not part of the gravity storm graph.
 _GRAVITY_WHERE = "MAIN_TYPE2='Gravity'"
 _OUTLET_WHERE = "DEVICE_CLASSIFICATION='Outlet'"
+# The sanitary layer additionally carries Abandoned/Proposed lines (STATUS), unlike the storm
+# adapter's gravity filter alone; only in-service gravity mains join the sanitary skeleton.
+_SAN_WHERE = "MAIN_TYPE2='Gravity' AND STATUS='In Service'"
 
 
 # Shared ArcGIS client + Esri-JSON->GeoJSON converter live in cities.base (Phase 0).
@@ -50,15 +54,28 @@ def _as_geojson(feat: dict) -> dict:
 
 def fetch_surrey_storm(bbox, *, client=None) -> dict:
     """Storm network intersecting ``bbox`` (EPSG:4326 tuple, or object with ``.bbox``):
-    gravity Drn Mains + 'Outlet' Drainage Devices. Returns
-    ``{"pipes": [...], "outfalls": [...]}`` (lists of GeoJSON Features)."""
+    gravity Drn Mains + 'Outlet' Drainage Devices + Drainage Manholes (RIM_ELEVATION for
+    node ground/max-depth). Returns ``{"pipes": [...], "outfalls": [...], "manholes": [...]}``
+    (lists of GeoJSON Features)."""
     if hasattr(bbox, "bbox"):
         bbox = bbox.bbox
     client = client or SurreyClient()
     return {
         "pipes": _fetch(STORM_MAINS, bbox, client, where=_GRAVITY_WHERE),
         "outfalls": _fetch(DRAINAGE_DEVICES, bbox, client, where=_OUTLET_WHERE),
+        "manholes": _fetch(MANHOLES, bbox, client),
     }
+
+
+def fetch_surrey_sanitary(bbox, *, client=None) -> dict:
+    """Separated sanitary (San Mains) sewer lines intersecting ``bbox`` — the second tagged
+    system (ADR 0011). Layer 41 shares the Drn Mains publication schema, so
+    :func:`build_surrey_network` assembles it unchanged (per-component sinks stand in for
+    the treatment-bound trunk exits)."""
+    if hasattr(bbox, "bbox"):
+        bbox = bbox.bbox
+    client = client or SurreyClient()
+    return {"pipes": _fetch(SAN_MAINS, bbox, client, where=_SAN_WHERE)}
 
 
 def fetch_surrey_land(bbox, *, client=None) -> dict:
@@ -84,6 +101,19 @@ def _num(v):
         return float(v)
     except (TypeError, ValueError):
         return None
+
+
+# Plausible rim band for Surrey (m AMSL): the city rises from the diked Fraser/Mud Bay
+# lowlands (~1 m) to ~134 m. Unlike pipe inverts (where 0 = sea level is legitimate), a
+# manhole RIM sits on the ground surface, so a 0.0 rim is a missing-data placeholder — the
+# band's lower edge screens it out along with any other implausible value.
+_RIM_MIN, _RIM_MAX = 0.5, 200.0
+
+
+def _rim(v):
+    """RIM_ELEVATION -> float m AMSL, or None when missing OR implausible."""
+    f = _num(v)
+    return f if (f is not None and _RIM_MIN <= f <= _RIM_MAX) else None
 
 
 def _line_ends(geom):
@@ -150,7 +180,19 @@ def build_surrey_network(storm, *, config: base.AssembleConfig = _SURREY_ASSEMBL
         if c and len(c) >= 2:
             outfall_points.append((c[0], c[1]))
 
-    result = base.assemble_network(pipes, outfall_points=outfall_points, config=config)
+    # Manhole RIM_ELEVATION (100% populated on the fixture bbox, verified 2026-07-03) -> node
+    # ground elevation, so max depth becomes rim - invert instead of the 2 m default.
+    ground_points = []
+    manholes_f = _features(storm.get("manholes")) if isinstance(storm, dict) else []
+    for f in manholes_f:
+        c = (f.get("geometry") or {}).get("coordinates")
+        rim = _rim((f.get("properties") or {}).get("RIM_ELEVATION"))
+        if c and len(c) >= 2 and rim is not None:
+            ground_points.append(((c[0], c[1]), rim))
+
+    result = base.assemble_network(pipes, outfall_points=outfall_points,
+                                   ground_points=ground_points, config=config)
     diag = {**result.diagnostics, "city": "surrey", "n_pipes_in": len(pipes_f),
-            "n_no_geom": n_no_geom, "shape_histogram": shape_hist}
+            "n_no_geom": n_no_geom, "shape_histogram": shape_hist,
+            "n_ground_points": len(ground_points)}
     return base.NetworkResult(network=result.network, diagnostics=diag)

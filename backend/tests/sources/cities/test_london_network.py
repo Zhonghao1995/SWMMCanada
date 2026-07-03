@@ -284,3 +284,22 @@ def _point(key, xy, lid=None):
         props["LidElevation"] = lid
     return {"type": "Feature", "properties": props,
             "geometry": {"type": "Point", "coordinates": list(xy)}}
+
+
+# --- sanitary tracer (second tagged system, ADR 0011) ------------------------------
+
+def test_sanitary_skeleton_assembles_from_fixture():
+    """The recorded FlowType='SAN' + ConstructedStatus='Built' fixture (with its joined
+    node layers) must assemble into a routable skeleton: junctions/conduits > 0 and every
+    endpoint resolves (per-component sinks stand in for the treatment-bound exits)."""
+    res = build_london_network(
+        _load("sanitary_mains"), _load("sanitary_manholes"),
+        _load("sanitary_other_nodes"), _load("sanitary_outfalls"))
+    net = res.network
+    assert len(net.junctions) > 0 and len(net.conduits) > 0
+    assert len(net.outfalls) >= 1
+    node_names = {j.name for j in net.junctions} | {o.name for o in net.outfalls}
+    assert all(c.from_node in node_names and c.to_node in node_names for c in net.conduits)
+    assert all(f["properties"]["FlowType"] == "SAN" and
+               f["properties"]["ConstructedStatus"] == "Built"
+               for f in _load("sanitary_mains"))

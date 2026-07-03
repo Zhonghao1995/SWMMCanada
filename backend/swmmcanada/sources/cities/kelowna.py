@@ -19,6 +19,10 @@ ARC = "https://geoportal.kelowna.ca/arcgis/rest/services/ArcGISOnline/OpenData_U
 STORM_PIPES = 22       # Storm Main (polyline); INVERT_IN_Z/OUT_Z, DIAMETER/LENGTH (strings)
 STORM_OUTFALLS = 4     # Storm Outfall (point)
 STORM_CATCHBASINS = 19  # Storm Catchbasin (point); SUMP_ELEVATION, CB_TYPE
+# Sanitary utilities service — Sanitary Main shares the storm schema (INVERT_IN_Z/OUT_Z,
+# string DIAMETER/LENGTH); force mains live on their own layer (12) and are not fetched.
+SAN_ARC = "https://geoportal.kelowna.ca/arcgis/rest/services/ArcGISOnline/OpenData_Utilities_Sanitary/MapServer"
+SAN_MAINS = 11         # Sanitary Main (polyline)
 # Planning service hosts parcels + building outlines.
 PLANNING = "https://geoportal.kelowna.ca/arcgis/rest/services/ArcGISOnline/OpenData_Planning_and_other/MapServer"
 PARCELS = 3            # Legal Parcel (polygon)
@@ -26,6 +30,9 @@ BUILDINGS = 17         # Building Outlines (polygon)
 
 KELOWNA_CRS = "EPSG:32611"  # UTM 11N (metric ops)
 _PAGE = 1000
+
+# Active sanitary gravity mains only (STATUS also holds B / I inactive-ish codes).
+_SANITARY_WHERE = "STATUS = 'A'"
 
 
 # Shared ArcGIS client + Esri-JSON->GeoJSON converter live in cities.base (Phase 0).
@@ -48,6 +55,17 @@ def fetch_kelowna_storm(bbox, *, client=None) -> dict:
         "pipes": _fetch(ARC, STORM_PIPES, bbox, client),
         "outfalls": _fetch(ARC, STORM_OUTFALLS, bbox, client),
     }
+
+
+def fetch_kelowna_sanitary(bbox, *, client=None) -> dict:
+    """Separated sanitary (Sanitary Main) sewer lines intersecting ``bbox`` — the second
+    tagged system (ADR 0011). Same publication schema as the storm layer, so
+    :func:`build_kelowna_network` assembles it unchanged (per-component sinks stand in for
+    the treatment-bound trunk exits)."""
+    if hasattr(bbox, "bbox"):
+        bbox = bbox.bbox
+    client = client or KelownaClient()
+    return {"pipes": _fetch(SAN_ARC, SAN_MAINS, bbox, client, where=_SANITARY_WHERE)}
 
 
 def fetch_kelowna_land(bbox, *, client=None) -> dict:

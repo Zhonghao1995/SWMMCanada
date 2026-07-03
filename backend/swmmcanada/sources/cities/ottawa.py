@@ -5,6 +5,12 @@ Ottawa publishes inverts (INVERT_UPSTREAM/DOWNSTREAM), WIDTH, MATERIAL, LENGTHAS
 (coordinate snapping). A ``0`` invert/width/length means "missing". Parcels/buildings are not
 published, so subcatchments seed on catch basins (Storm Inlets, layer 21) and take
 imperviousness from land cover (no parcel/building override).
+
+The same WastewaterInfrastructure service publishes the separated Sanitary Pipes (layer 7)
+with the identical invert/width schema, so ``fetch_ottawa_sanitary`` + the unchanged builder
+give the second tagged system (ADR 0011). Storm Manholes (layer 23) carry NO rim/ground
+elevation field (only STRUCT_ID/status, verified 2026-07-03) — so, like Kelowna, no
+ground_points are passed and node max depths keep the assembler default.
 """
 from swmmcanada.sources.cities import base
 
@@ -12,8 +18,14 @@ ARC = "https://maps.ottawa.ca/arcgis/rest/services/WastewaterInfrastructure/MapS
 STORM_PIPES = 26
 STORM_OUTFALLS = 22
 STORM_INLETS = 21  # catch basins / inlets
+SANITARY_PIPES = 7  # Sanitary Pipes — same schema as storm (inverts/width/material)
 OTTAWA_CRS = "EPSG:32618"  # UTM 18N (metric ops)
 _PAGE = 1000
+
+# The sanitary layer is published all-SANP/IN_SERVICE today; the explicit filter keeps the
+# gravity skeleton clean if abandoned/proposed lines ever appear. (No force-main indicator is
+# published on this layer.)
+_SANITARY_WHERE = "LIFE_CYCLE_STATUS = 'IN_SERVICE'"
 
 
 # Shared ArcGIS client + Esri-JSON->GeoJSON converter now live in cities.base (Phase 0).
@@ -32,6 +44,17 @@ def fetch_ottawa_storm(bbox, *, client=None) -> dict:
         bbox = bbox.bbox
     client = client or OttawaClient()
     return {"pipes": _fetch(STORM_PIPES, bbox, client), "outfalls": _fetch(STORM_OUTFALLS, bbox, client)}
+
+
+def fetch_ottawa_sanitary(bbox, *, client=None) -> dict:
+    """Separated sanitary sewer lines intersecting ``bbox`` — the second tagged system
+    (ADR 0011). Same publication schema as the storm layer, so :func:`build_ottawa_network`
+    assembles it unchanged (per-component sinks stand in for the treatment-bound trunk
+    exits)."""
+    if hasattr(bbox, "bbox"):
+        bbox = bbox.bbox
+    client = client or OttawaClient()
+    return {"pipes": _fetch(SANITARY_PIPES, bbox, client, where=_SANITARY_WHERE)}
 
 
 def fetch_ottawa_land(bbox, *, client=None) -> dict:

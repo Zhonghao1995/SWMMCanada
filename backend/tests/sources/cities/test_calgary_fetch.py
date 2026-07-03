@@ -14,12 +14,16 @@ import re
 from pathlib import Path
 
 from swmmcanada.sources.cities.calgary import (
+    _SANITARY_WHERE,
     BUILDINGS,
     PARCELS,
+    SANITARY_PIPES,
     STORM_CATCHBASINS,
     STORM_INLET_OUTFALL,
+    STORM_MANHOLES,
     STORM_PIPES,
     fetch_calgary_land,
+    fetch_calgary_sanitary,
     fetch_calgary_storm,
 )
 
@@ -34,6 +38,8 @@ def _load(name):
 PIPES = _load("storm_pipes.geojson")
 OUTFALLS = _load("outfalls.geojson")
 CATCHBASINS = _load("catchbasins.geojson")
+MANHOLES = _load("manholes.geojson")
+SAN_PIPES = _load("sanitary_pipes.geojson")
 
 
 def _service(url):
@@ -65,8 +71,12 @@ class FakeClient:
             return self._paginate(PIPES, params)
         if svc == STORM_INLET_OUTFALL:
             return self._paginate(OUTFALLS, params)
+        if svc == STORM_MANHOLES:
+            return self._paginate(MANHOLES, params)
         if svc == STORM_CATCHBASINS:
             return self._paginate(CATCHBASINS, params)
+        if svc == SANITARY_PIPES:
+            return self._paginate(SAN_PIPES, params)
         if svc in (PARCELS, BUILDINGS):
             return {"type": "FeatureCollection", "features": []}
         return {"type": "FeatureCollection", "features": []}
@@ -74,14 +84,20 @@ class FakeClient:
 
 # --- storm fetch ----------------------------------------------------------------
 
-def test_storm_returns_pipes_and_outfalls_as_geojson():
+def test_storm_returns_pipes_outfalls_and_manholes_as_geojson():
     res = fetch_calgary_storm(BBOX, client=FakeClient())
-    assert set(res) == {"pipes", "outfalls"}
-    assert res["pipes"] and res["outfalls"]
+    assert set(res) == {"pipes", "outfalls", "manholes"}   # manholes -> rim depths
+    assert res["pipes"] and res["outfalls"] and res["manholes"]
     for f in res["pipes"]:
         assert f["type"] == "Feature"
         assert "properties" in f and "geometry" in f
         assert f["geometry"]["type"] in ("LineString", "MultiLineString")
+
+
+def test_storm_manholes_carry_rim_elevation():
+    res = fetch_calgary_storm(BBOX, client=FakeClient())
+    assert all(f["geometry"]["type"] == "Point" for f in res["manholes"])
+    assert any("RIM_ELEV" in f["properties"] for f in res["manholes"])
 
 
 def test_storm_requests_use_envelope_and_geojson():
@@ -112,6 +128,20 @@ def test_accepts_object_with_bbox_attribute():
 
     res = fetch_calgary_storm(AOI(), client=FakeClient())
     assert res["pipes"] and res["outfalls"]
+
+
+# --- sanitary fetch (second tagged system, ADR 0011) ------------------------------
+
+def test_sanitary_returns_pipes_filtered_to_active_gravity():
+    """The sanitary query must hit SANITARY_PIPE with the ACTIVE + MAIN/TL where-clause
+    (force mains, syphons and service laterals are not part of the gravity skeleton)."""
+    client = FakeClient()
+    res = fetch_calgary_sanitary(BBOX, client=client)
+    assert set(res) == {"pipes"}
+    assert res["pipes"]
+    san_wheres = [p.get("where", "") for (svc, p) in client.calls if svc == SANITARY_PIPES]
+    assert san_wheres and all(w == _SANITARY_WHERE for w in san_wheres)
+    assert "STATUS_IND = 'ACTIVE'" in _SANITARY_WHERE and "'MAIN'" in _SANITARY_WHERE
 
 
 # --- pagination -----------------------------------------------------------------

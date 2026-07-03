@@ -23,7 +23,9 @@ from swmmcanada.sources.cities import base
 ORG = "https://services1.arcgis.com/AVP60cs0Q9PEA8rH/arcgis/rest/services"
 STORM_PIPES = "Storm_pipe_DMAP"               # layer STORM_PIPE (polyline)
 STORM_INLET_OUTFALL = "Storm_Inlet_Outfall_DMAP"  # OUT_INLET names water body for outfalls
+STORM_MANHOLES = "Storm_Manholes_DMAP"        # RIM_ELEV (m AMSL) -> node ground/max-depth
 STORM_CATCHBASINS = "Storm_catch_basin_DMAP"  # ASSET_ID
+SANITARY_PIPES = "Sanitary_pipes_DMAP"        # layer SANITARY_PIPE — same invert/size schema
 PARCELS = "Parcel_with_Roll_2026"             # ROLL_CPID_2026 polygons (full coverage)
 BUILDINGS = "Buildings_from_Digital_Aerial_Survey"  # DAS_BUILDING polygons
 CALGARY_CRS = "EPSG:32611"                    # UTM 11N (metric ops)
@@ -57,13 +59,33 @@ _OUTFALL_WHERE = "OUT_INLET IS NOT NULL"
 
 
 def fetch_calgary_storm(bbox, *, client=None) -> dict:
+    """Storm network intersecting ``bbox``: pipes + outfalls + manholes (RIM_ELEV for node
+    ground/max-depth). Returns ``{"pipes": [...], "outfalls": [...], "manholes": [...]}``."""
     if hasattr(bbox, "bbox"):
         bbox = bbox.bbox
     client = client or CalgaryClient()
     return {
         "pipes": _fetch(STORM_PIPES, bbox, client),
         "outfalls": _fetch(STORM_INLET_OUTFALL, bbox, client, where=_OUTFALL_WHERE),
+        "manholes": _fetch(STORM_MANHOLES, bbox, client),
     }
+
+
+# Gravity sanitary graph only: MAIN (local/collector) + TL (trunk) carry the routable gravity
+# skeleton; FM (force mains), SYP (syphons), SL / "C/MF SERV" (service laterals), DCT and
+# SUBDRAIN are not part of it. STATUS_IND drops INACTIVE lines (the ACTIVE field is unpopulated).
+_SANITARY_WHERE = "STATUS_IND = 'ACTIVE' AND P_FUNCTION IN ('MAIN', 'TL')"
+
+
+def fetch_calgary_sanitary(bbox, *, client=None) -> dict:
+    """Separated sanitary sewer lines intersecting ``bbox`` — the second tagged system
+    (ADR 0011). SANITARY_PIPE shares STORM_PIPE's invert/size schema (UP_INVERT/DN_INVERT,
+    WIDTH/HEIGHT mm, MATERIAL, LENGTH), so :func:`build_calgary_network` assembles it
+    unchanged (per-component sinks stand in for the treatment-bound trunk exits)."""
+    if hasattr(bbox, "bbox"):
+        bbox = bbox.bbox
+    client = client or CalgaryClient()
+    return {"pipes": _fetch(SANITARY_PIPES, bbox, client, where=_SANITARY_WHERE)}
 
 
 def fetch_calgary_land(bbox, *, client=None) -> dict:
@@ -90,6 +112,18 @@ def _num(v):
     # 0 is Calgary's missing-data sentinel for inverts/length (real inverts are ~1040 m AMSL),
     # mirroring Ottawa. Treat it as missing so node inverts gap-fill instead of sinking to 0.
     return f if f != 0 else None
+
+
+# Plausible rim band for Calgary (m AMSL): the city's terrain sits ~975–1300 m (Bow River
+# valley to the western edge). A rim outside the band is treated as missing so a placeholder
+# value cannot poison the rim-derived max depth on that node (mirrors Regina's invert band).
+_RIM_MIN, _RIM_MAX = 900.0, 1400.0
+
+
+def _rim(v):
+    """RIM_ELEV -> float m AMSL, or None when missing OR implausible."""
+    f = _num(v)
+    return f if (f is not None and _RIM_MIN <= f <= _RIM_MAX) else None
 
 
 def _line_ends(geom):
@@ -166,7 +200,20 @@ def build_calgary_network(storm, *, config: base.AssembleConfig = _CALGARY_ASSEM
         ))
 
     outfall_points = _outfall_points(outfalls_f)
-    result = base.assemble_network(pipes, outfall_points=outfall_points, config=config)
+
+    # Manhole RIM_ELEV (100% populated on the fixture bbox, verified 2026-07-03) -> node
+    # ground elevation, so max depth becomes rim - invert instead of the 2 m default.
+    ground_points = []
+    manholes_f = _features(storm.get("manholes")) if isinstance(storm, dict) else []
+    for f in manholes_f:
+        c = (f.get("geometry") or {}).get("coordinates")
+        rim = _rim((f.get("properties") or {}).get("RIM_ELEV"))
+        if c and len(c) >= 2 and rim is not None:
+            ground_points.append(((c[0], c[1]), rim))
+
+    result = base.assemble_network(pipes, outfall_points=outfall_points,
+                                   ground_points=ground_points, config=config)
     diag = {**result.diagnostics, "city": "calgary", "n_pipes_in": len(pipes_f),
-            "n_no_geom": n_no_geom, "n_outfall_points": len(outfall_points)}
+            "n_no_geom": n_no_geom, "n_outfall_points": len(outfall_points),
+            "n_ground_points": len(ground_points)}
     return base.NetworkResult(network=result.network, diagnostics=diag)
