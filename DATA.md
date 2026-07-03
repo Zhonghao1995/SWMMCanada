@@ -115,6 +115,8 @@ Each supported city has its own adapter under `backend/swmmcanada/sources/cities
 - **Endpoints (ArcGIS REST):**
   - Storm Drain — `https://maps.victoria.ca/server/rest/services/OpenData/OpenData_StormDrain/MapServer`
     layers: `10` Gravity Mains · `4` Manholes · `3` Fittings · `5` Outfalls · `1` Catch Basins
+  - Sewer — `https://maps.victoria.ca/server/rest/services/OpenData/OpenData_Sewer/MapServer`
+    layer: `4` Sewer Gravity Mains, `WaterType='SEW'` + `LifecycleStatus='ACT'` (separated **sanitary** skeleton, second tagged system)
   - Land — `https://maps.victoria.ca/server/rest/services/OpenData/OpenData_Land/MapServer`
     layers: `5` Parcels (Folio) · `1` Buildings
 - **How SWMMCanada uses it:** Victoria publishes explicit pipe topology (upstream/downstream node IDs), so the network is the real pipes with real inverts and diameters. Parcels and buildings drive **parcel-shaped subcatchments** with building-based imperviousness.
@@ -126,8 +128,8 @@ Each supported city has its own adapter under `backend/swmmcanada/sources/cities
 - **Provider:** City of Ottawa Open Data.
 - **Browse:** <https://open.ottawa.ca>
 - **Endpoint (ArcGIS REST):** `https://maps.ottawa.ca/arcgis/rest/services/WastewaterInfrastructure/MapServer`
-  layers: `26` Storm Pipes · `22` Storm Outfalls · `21` Storm Inlets (catch basins). Served as Esri JSON.
-- **How SWMMCanada uses it:** Ottawa publishes no explicit node IDs, so topology is inferred from pipe geometry; subcatchments seed on catch basins (Ottawa publishes no parcels, so a catch-basin tessellation is used).
+  layers: `26` Storm Pipes · `22` Storm Outfalls · `21` Storm Inlets (catch basins) · `7` Sanitary Pipes, `LIFE_CYCLE_STATUS='IN_SERVICE'` (separated **sanitary** skeleton, second tagged system). Served as Esri JSON.
+- **How SWMMCanada uses it:** Ottawa publishes no explicit node IDs, so topology is inferred from pipe geometry; subcatchments seed on catch basins (Ottawa publishes no parcels, so a catch-basin tessellation is used). Storm Manholes (`23`) carry no rim/ground elevation field, so node max depths keep the assembler default.
 - **Licence:** Open Government Licence – City of Ottawa.
 
 #### More real-network cities (BC · ON · AB · SK)
@@ -140,11 +142,11 @@ storm pipes **with invert elevations** plus resolvable topology. All endpoints v
 
 | City | ArcGIS REST service | Key storm layers (invert field) | Topology | Parcels / buildings | Licence |
 |---|---|---|---|---|---|
-| **Calgary, AB** | `services1.arcgis.com/AVP60cs0Q9PEA8rH/.../FeatureServer` | `Storm_pipe_DMAP` (UP/DN_INVERT) · Manholes · Inlet/Outfall · Catch basin | geometry-inferred | `Parcel_with_Roll_2026` · `Buildings_from_Digital_Aerial_Survey` | OGL – Calgary |
-| **Surrey, BC** | `gisservices.surrey.ca/arcgis/rest/services/OpenData/MapServer` | `18` Drn Mains (UP/DOWN_ELEVATION) · `23` Manholes · `25` Devices=Outlet · `24` Catch Basins | geometry-inferred | `148` Lot · `155` Buildings | OGL – Surrey |
-| **London, ON** | `maps.london.ca/server/rest/services/OpenData/OpenData_Environment/MapServer` | `5` Sewer Pipes `FlowType='STM'` (Upstream/DownstreamInvert) · `2/3` Nodes · `4` Outfalls · `1` Catch Basins | explicit node IDs | BaseMaps `53` Parcels · `3` Buildings | City of London ToU |
-| **Kitchener–Waterloo, ON** | `services1.arcgis.com/qAo1OsXi67t7XgmS/.../FeatureServer` | `Storm_Pipes` (UP/DN_INVERT) · `Storm_Manholes` · `Storm_Outlets` · `Storm_Catchbasins` | explicit integer node IDs | `Building_Outlines` only (no parcel polygons) | OGL – Kitchener |
-| **Kelowna, BC** | `geoportal.kelowna.ca/arcgis/rest/services/ArcGISOnline/OpenData_Utilities_Storm/MapServer` | `22` Storm Main (INVERT_IN_Z/OUT_Z) · `7` Manholes · `4` Outfalls · `19` Catch Basins | geometry-inferred | Planning `3` Legal Parcel · `17` Building Outlines | OGL – Kelowna |
+| **Calgary, AB** | `services1.arcgis.com/AVP60cs0Q9PEA8rH/.../FeatureServer` | `Storm_pipe_DMAP` (UP/DN_INVERT) · `Storm_Manholes_DMAP` (RIM_ELEV → node max depths) · Inlet/Outfall · Catch basin · `Sanitary_pipes_DMAP`, ACTIVE `MAIN`/`TL` (separated **sanitary** skeleton, second tagged system) | geometry-inferred | `Parcel_with_Roll_2026` · `Buildings_from_Digital_Aerial_Survey` | OGL – Calgary |
+| **Surrey, BC** | `gisservices.surrey.ca/arcgis/rest/services/OpenData/MapServer` | `18` Drn Mains (UP/DOWN_ELEVATION) · `23` Manholes (RIM_ELEVATION → node max depths) · `25` Devices=Outlet · `24` Catch Basins · `41` San Mains, Gravity + In Service (separated **sanitary** skeleton, second tagged system) | geometry-inferred | `148` Lot · `155` Buildings | OGL – Surrey |
+| **London, ON** | `maps.london.ca/server/rest/services/OpenData/OpenData_Environment/MapServer` | `5` Sewer Pipes `FlowType='STM'` (Upstream/DownstreamInvert) · `2/3` Nodes · `4` Outfalls · `1` Catch Basins · same layer `FlowType='SAN'` + `ConstructedStatus='Built'` (separated **sanitary** skeleton, second tagged system) | explicit node IDs | BaseMaps `53` Parcels · `3` Buildings | City of London ToU |
+| **Kitchener–Waterloo, ON** | `services1.arcgis.com/qAo1OsXi67t7XgmS/.../FeatureServer` | `Storm_Pipes` (UP/DN_INVERT) · `Storm_Manholes` · `Storm_Outlets` · `Storm_Catchbasins` · `Sanitary_Pipes`, ACTIVE GRAVITY (separated **sanitary** skeleton, second tagged system) | explicit integer node IDs | `Building_Outlines` only (no parcel polygons) | OGL – Kitchener |
+| **Kelowna, BC** | `geoportal.kelowna.ca/arcgis/rest/services/ArcGISOnline/OpenData_Utilities_Storm/MapServer` | `22` Storm Main (INVERT_IN_Z/OUT_Z) · `7` Manholes · `4` Outfalls · `19` Catch Basins · `OpenData_Utilities_Sanitary` `11` Sanitary Main, `STATUS='A'` (separated **sanitary** skeleton, second tagged system) | geometry-inferred | Planning `3` Legal Parcel · `17` Building Outlines | OGL – Kelowna |
 | **Regina, SK** | `opengis.regina.ca/arcgis/rest/services/OpenData` ([open.regina.ca](https://open.regina.ca)) | StormSewerNetwork `5` Storm Sewer Line, `STATUS='ACTIVE'` non-Force (START/ENDELEVATION) · `2` Manholes · `4` Outfalls · `3` Catch Basins · DomesticSewerNetwork `3` Domestic Sewer Line (separated **sanitary** skeleton, second tagged system) | geometry-inferred | `Parcels` (ASSESSMENT_REGIONS lots) · `BuildingFootprint` | [OGL – Regina](https://www.regina.ca/city-government/open-data/open-government-licence/) |
 
 One feed covers the whole **Region of Waterloo** (Kitchener / Waterloo / Cambridge). How each

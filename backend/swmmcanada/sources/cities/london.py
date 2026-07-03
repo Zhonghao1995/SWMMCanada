@@ -56,6 +56,19 @@ def _fetch_layer_bbox(base_url, layer, bbox, client, where="1=1") -> list:
                             where=where, page_size=_PAGE_SIZE)
 
 
+def _fetch_network(bbox, client, where: str) -> dict:
+    """Pipes matching ``where`` by envelope, then referenced nodes BY GIS_FeatureKey from the
+    manhole / other-node / outfall layers (the node layers are shared across flow types)."""
+    mains = _fetch_layer_bbox(BASE, PIPES, bbox, client, where=where)
+    node_ids = _referenced_node_ids(mains)
+    return {
+        "mains": mains,
+        "manholes": _fetch_nodes_by_key(MANHOLES, node_ids, client),
+        "other_nodes": _fetch_nodes_by_key(OTHER_NODES, node_ids, client),
+        "outfalls": _fetch_nodes_by_key(OUTFALLS, node_ids, client),
+    }
+
+
 def fetch_london_storm(bbox, *, client=None) -> dict:
     """Storm network intersecting ``bbox`` (EPSG:4326 tuple, or object with ``.bbox``):
     STM pipes by envelope, then referenced nodes BY GIS_FeatureKey from the manhole /
@@ -64,14 +77,24 @@ def fetch_london_storm(bbox, *, client=None) -> dict:
     if hasattr(bbox, "bbox"):
         bbox = bbox.bbox
     client = client or LondonMapClient()
-    mains = _fetch_layer_bbox(BASE, PIPES, bbox, client, where="FlowType='STM'")
-    node_ids = _referenced_node_ids(mains)
-    return {
-        "mains": mains,
-        "manholes": _fetch_nodes_by_key(MANHOLES, node_ids, client),
-        "other_nodes": _fetch_nodes_by_key(OTHER_NODES, node_ids, client),
-        "outfalls": _fetch_nodes_by_key(OUTFALLS, node_ids, client),
-    }
+    return _fetch_network(bbox, client, "FlowType='STM'")
+
+
+# The SAME Sewer Pipes layer carries the sanitary system (FlowType='SAN'); unlike the storm
+# where-clause, ConstructedStatus matters here — the layer also holds Abandoned / Proposed /
+# Removed sanitary lines (~40% over the fixture bbox), which are not part of the built graph.
+_SANITARY_WHERE = "FlowType='SAN' AND ConstructedStatus='Built'"
+
+
+def fetch_london_sanitary(bbox, *, client=None) -> dict:
+    """Separated sanitary sewer network intersecting ``bbox`` — the second tagged system
+    (ADR 0011). Same layers and join as the storm fetch (SAN pipes reference the same
+    manhole/other-node/outfall layers), so :func:`build_london_network` assembles it
+    unchanged (per-component sinks stand in for the treatment-bound trunk exits)."""
+    if hasattr(bbox, "bbox"):
+        bbox = bbox.bbox
+    client = client or LondonMapClient()
+    return _fetch_network(bbox, client, _SANITARY_WHERE)
 
 
 def _referenced_node_ids(mains) -> List[str]:

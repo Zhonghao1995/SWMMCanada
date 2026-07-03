@@ -1,0 +1,1 @@
+{"type": "FeatureCollection", "features": [{"type": "Feature", "id": 2294, "geometry": {"type": "Point", "coordinates": [-81.25651473860918, 42.98168546334047]}, "properties": {"OBJECTID": 2294, "GIS_ID": 29951686, "GIS_FeatureKey": "CV5003", "FlowType": "SAN", "StructureType": "OF", "PipeInvert": 0, "ConstructedStatus": "Built"}}]}

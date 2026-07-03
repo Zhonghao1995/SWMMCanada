@@ -206,3 +206,49 @@ def test_line_ends_handles_linestring_and_multilinestring():
 
     assert _line_ends({"type": "LineString", "coordinates": []}) == (None, None)
     assert _line_ends({"type": "LineString", "coordinates": [[-114.08, 51.05]]}) == (None, None)
+
+
+# --- manhole rims -> real node max-depths ------------------------------------------
+
+def test_manhole_rims_set_real_max_depths(storm):
+    """With the manholes layer, junctions coinciding with a manhole get
+    max_depth = RIM_ELEV - invert instead of the 2 m assembler default."""
+    with_rims = build_calgary_network({**storm, "manholes": _load("manholes.geojson")})
+    without = build_calgary_network(storm)
+    assert with_rims.diagnostics["n_ground_points"] == 20   # all 20 fixture rims plausible
+    assert without.diagnostics["n_ground_points"] == 0
+
+    depth_with = {j.name: j.max_depth_m for j in with_rims.network.junctions}
+    depth_without = {j.name: j.max_depth_m for j in without.network.junctions}
+    changed = [n for n in depth_with if depth_with[n] != depth_without[n]]
+    assert changed, "no junction picked up a rim-based depth"
+    for n in changed:
+        assert 0 < depth_with[n] < 15.0                     # physically plausible depths
+    # Junctions with no matching manhole keep the assembler default.
+    assert any(depth_with[n] == depth_without[n] for n in depth_with)
+
+
+def test_implausible_rims_are_screened():
+    """A placeholder rim (0 sentinel, a dropped-digit typo) must be dropped by the
+    plausibility band (~975-1300 m Calgary terrain), not turned into a bogus depth."""
+    from swmmcanada.sources.cities.calgary import _rim
+
+    assert _rim(1046.2) == 1046.2
+    assert _rim(0) is None
+    assert _rim(1.0) is None
+    assert _rim(104.6) is None            # dropped-digit style typo
+    assert _rim(None) is None
+
+
+# --- sanitary tracer (second tagged system, ADR 0011) ------------------------------
+
+def test_sanitary_skeleton_assembles_from_fixture():
+    """The recorded SANITARY_PIPE fixture (ACTIVE gravity MAIN/TL lines) must assemble into
+    a routable skeleton: junctions/conduits > 0 and every endpoint resolves (per-component
+    sinks stand in for the treatment-bound exits)."""
+    res = build_calgary_network({"pipes": _load("sanitary_pipes.geojson")})
+    net = res.network
+    assert len(net.junctions) > 0 and len(net.conduits) > 0
+    assert len(net.outfalls) >= 1                           # per-component sinks exist
+    node_names = {j.name for j in net.junctions} | {o.name for o in net.outfalls}
+    assert all(c.from_node in node_names and c.to_node in node_names for c in net.conduits)

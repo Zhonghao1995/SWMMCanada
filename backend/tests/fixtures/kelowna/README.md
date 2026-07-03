@@ -35,3 +35,12 @@ were stripped to keep the fixtures small.)
   adapter strips PERF/RIB prefixes and aliases RCP->concrete, VIT->clay before the shared
   material->roughness lookup.
 - NO node ids -> topology inferred from polyline endpoints (snap_decimals=5).
+
+## Sanitary skeleton (ADR 0011) — `sanitary_mains.geojson`
+Captured **2026-07-03** from the sanitary utilities service
+(`.../ArcGISOnline/OpenData_Utilities_Sanitary/MapServer`, layer **11** Sanitary Main) over
+the same sub-bbox with the adapter's where-clause `STATUS = 'A'` (active only; STATUS also
+holds B / I codes city-wide, and force mains live on their own layer 12, not fetched).
+47 mains; same schema as the storm layer (INVERT_IN_Z/OUT_Z doubles, string DIAMETER/LENGTH),
+volatile audit fields stripped, so `build_kelowna_network` assembles it unchanged as the
+second tagged system.

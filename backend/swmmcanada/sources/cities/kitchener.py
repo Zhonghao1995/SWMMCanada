@@ -42,10 +42,15 @@ MANHOLES = f"{ORG}/Storm_Manholes/FeatureServer/0"
 OUTLETS = f"{ORG}/Storm_Outlets/FeatureServer/0"
 CATCHBASINS = f"{ORG}/Storm_Catchbasins/FeatureServer/0"
 BUILDINGS = f"{ORG}/Building_Outlines/FeatureServer/0"
+SAN_PIPES = f"{ORG}/Sanitary_Pipes/FeatureServer/0"   # same schema, SAN-prefixed id fields
 # Property_Ownership_Public is POINT geometry (no parcel polygons published) -> none.
 PARCELS = None
 
 _PAGE_SIZE, _ID_CHUNK = 1000, 80
+
+# Gravity sanitary skeleton only: CATEGORY also holds FORCEMAIN / SLUDGE FORCEMAIN / STUB /
+# SYPHON, which are not part of the routable gravity graph.
+_SANITARY_WHERE = "STATUS = 'ACTIVE' AND CATEGORY = 'GRAVITY'"
 
 
 # The thin GET-as-JSON client lives in cities.base (Phase 0); keep a local alias.
@@ -108,6 +113,20 @@ def fetch_kitchener_storm(bbox, *, client=None) -> dict:
     manholes = _fetch_manholes_by_id(_referenced_manhole_ids(pipes), client)
     outlets = _fetch_layer_bbox(OUTLETS, bbox, client)
     return {"pipes": pipes, "manholes": manholes, "outlets": outlets}
+
+
+def fetch_kitchener_sanitary(bbox, *, client=None) -> dict:
+    """Separated sanitary sewer lines intersecting ``bbox`` — the second tagged system
+    (ADR 0011). ``Sanitary_Pipes`` shares the storm schema but keys its joins on
+    ``UP_SANMANHOLEID``/``DN_SANMANHOLEID`` (a different manhole layer), so no manholes are
+    fetched: every endpoint takes the documented polyline-vertex fallback (this org's line
+    geometry coincides exactly with its node points), and per-component sinks stand in for
+    the treatment-bound trunk exits."""
+    if hasattr(bbox, "bbox"):
+        bbox = bbox.bbox
+    client = client or KitchenerMapClient()
+    return {"pipes": _fetch_layer_bbox(SAN_PIPES, bbox, client, where=_SANITARY_WHERE),
+            "manholes": [], "outlets": []}
 
 
 def fetch_kitchener_land(bbox, *, client=None) -> dict:

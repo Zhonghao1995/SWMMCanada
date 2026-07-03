@@ -22,3 +22,15 @@ CrossSectionShape (CIR/BOX/ARCH/IEGG/HSH/UNK/None), Material, Slope, Length_2D (
 
 ## Node fields
 Manholes/Outfalls: AssetID, Elevation (m, ground), Depth (m), geometry Point.  Fittings: AssetID, geometry Point.
+
+## Sanitary skeleton (ADR 0011) — `sanitary_mains.geojson`
+Captured **2026-07-03** from the separate Sewer service
+(`.../OpenData/OpenData_Sewer/MapServer`, layer **4** Sewer Gravity Mains) over the fixture
+bbox `-123.380, 48.415, -123.360, 48.430` with the adapter's where-clause
+`WaterType='SEW' AND LifecycleStatus='ACT'` (drops the two CWW combined relics and ABD
+abandoned lines; pressurized mains live on layer 2 and are not fetched). 528 mains; same
+schema as the storm mains (UpstreamNodeID/DownstreamNodeID, Upstream/DownstreamInvert,
+Diameter mm, Material, Length_2D), volatile audit fields stripped. The sewer node layers use
+a different id scheme than the storm DMH/DFG/DOF join, so `fetch_victoria_sanitary` fetches
+NO node layers — every endpoint takes the documented polyline-vertex fallback, and
+per-component sinks stand in for the treatment-bound exits.

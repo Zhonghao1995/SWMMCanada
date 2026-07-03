@@ -255,3 +255,19 @@ def test_accepts_featurecollection_dict(kitchener_inputs):
 
 def test_crs_is_utm17n():
     assert KITCHENER_CRS == "EPSG:32617"
+
+
+# --- sanitary tracer (second tagged system, ADR 0011) ------------------------------
+
+def test_sanitary_skeleton_assembles_from_fixture():
+    """The recorded Sanitary_Pipes fixture (ACTIVE GRAVITY lines) must assemble into a
+    routable skeleton with NO manholes/outlets: the SAN-prefixed ids all dangle, so every
+    endpoint takes the polyline-vertex fallback (this org's line geometry coincides with its
+    node points); junctions/conduits > 0 and every endpoint resolves."""
+    res = build_kitchener_network(_load("sanitary_pipes"), [], [])
+    net = res.network
+    assert len(net.junctions) > 0 and len(net.conduits) > 0
+    assert len(net.outfalls) >= 1                           # per-component sinks exist
+    node_names = {j.name for j in net.junctions} | {o.name for o in net.outfalls}
+    assert all(c.from_node in node_names and c.to_node in node_names for c in net.conduits)
+    assert all(f["properties"]["CATEGORY"] == "GRAVITY" for f in _load("sanitary_pipes"))

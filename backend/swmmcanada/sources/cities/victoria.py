@@ -26,8 +26,14 @@ BASE = "https://maps.victoria.ca/server/rest/services/OpenData/OpenData_StormDra
 MAINS, MANHOLES, FITTINGS, OUTFALLS, CATCHBASINS = 10, 4, 3, 5, 1
 LAND_BASE = "https://maps.victoria.ca/server/rest/services/OpenData/OpenData_Land/MapServer"
 LAND_PARCELS, LAND_BUILDINGS = 5, 1            # Parcels (Folio based), Buildings
+SEWER_BASE = "https://maps.victoria.ca/server/rest/services/OpenData/OpenData_Sewer/MapServer"
+SEWER_MAINS = 4                                # Sewer Gravity Mains — same schema as storm mains
 _PREFIX_LAYER = {"DMH": MANHOLES, "DFG": FITTINGS, "DOF": OUTFALLS}
 _PAGE_SIZE, _ID_CHUNK = 1000, 80
+
+# Separated sanitary gravity mains only: WaterType SEW (not the two CWW combined relics) and
+# LifecycleStatus ACT (not ABD); pressurized mains live on their own layer and are not fetched.
+_SANITARY_WHERE = "WaterType='SEW' AND LifecycleStatus='ACT'"
 
 
 # The thin GET-as-JSON client now lives in cities.base (Phase 0); keep the name as an alias.
@@ -93,6 +99,20 @@ def _fetch_nodes_by_assetid(layer: int, asset_ids, client) -> list:
             seen.add(asset_id)
             features.append(feat)
     return features
+
+
+def fetch_victoria_sanitary(bbox, *, client=None) -> dict:
+    """Separated sanitary (Sewer Gravity Mains) lines intersecting ``bbox`` — the second
+    tagged system (ADR 0011). Same publication schema as the storm mains, so
+    :func:`build_victoria_network` assembles it unchanged. The sewer node layers use a
+    different id scheme than the storm DMH/DFG/DOF join, so no node layers are fetched:
+    every endpoint takes the documented polyline-vertex fallback, and per-component sinks
+    stand in for the treatment-bound trunk exits."""
+    if hasattr(bbox, "bbox"):
+        bbox = bbox.bbox
+    client = client or VicMapClient()
+    mains = _fetch_layer_bbox(SEWER_BASE, SEWER_MAINS, bbox, client, where=_SANITARY_WHERE)
+    return {"mains": mains, "manholes": [], "fittings": [], "outfalls": []}
 
 
 def fetch_victoria_land(bbox, *, client=None) -> dict:

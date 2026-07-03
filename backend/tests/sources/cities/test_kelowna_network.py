@@ -250,3 +250,19 @@ def test_line_ends_empty_or_degenerate():
     assert _line_ends(None) == (None, None)
     assert _line_ends({"type": "LineString", "coordinates": []}) == (None, None)
     assert _line_ends({"type": "LineString", "coordinates": [[-119.47, 49.89]]}) == (None, None)
+
+
+# --- sanitary tracer (second tagged system, ADR 0011) ------------------------------
+
+def test_sanitary_skeleton_assembles_from_fixture():
+    """The recorded Sanitary Main fixture (STATUS='A' gravity lines; force mains live on
+    their own unfetched layer) must assemble into a routable skeleton: junctions/conduits
+    > 0 and every endpoint resolves (per-component sinks stand in for the treatment-bound
+    exits)."""
+    res = build_kelowna_network({"pipes": _load("sanitary_mains.geojson")})
+    net = res.network
+    assert len(net.junctions) > 0 and len(net.conduits) > 0
+    assert len(net.outfalls) >= 1                           # per-component sinks exist
+    node_names = {j.name for j in net.junctions} | {o.name for o in net.outfalls}
+    assert all(c.from_node in node_names and c.to_node in node_names for c in net.conduits)
+    assert all(f["properties"]["STATUS"] == "A" for f in _load("sanitary_mains.geojson"))

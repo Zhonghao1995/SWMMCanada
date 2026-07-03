@@ -24,6 +24,17 @@ chosen so the network drains to real STM outfalls (the 6G/7M/8K outfall cluster 
 - `buildings.geojson`   — 89 buildings (BaseMaps layer 3, Polygon).
 - `raw_arcgis_mains_query.json` — one raw ArcGIS `f=json` mains response (Esri JSON; for the fetch-client parse test).
 
+### Sanitary skeleton (ADR 0011), captured 2026-07-03 over the same bbox
+The SAME Sewer Pipes layer carries the sanitary system; unlike the storm where-clause,
+`ConstructedStatus` matters here — the layer also holds Abandoned/Proposed/Removed SAN lines
+(~40% over this bbox). Captured with the adapter's where-clause
+`FlowType='SAN' AND ConstructedStatus='Built'`, plus the joined node layers (same
+`GIS_FeatureKey` join as storm); volatile audit fields stripped.
+- `sanitary_mains.geojson`       — 54 built SAN sewer pipes (LineString).
+- `sanitary_manholes.geojson`    — 54 referenced manholes (Point, `LidElevation`).
+- `sanitary_other_nodes.geojson` — 3 referenced other nodes (Point).
+- `sanitary_outfalls.geojson`    — 1 referenced outfall (Point).
+
 ## Join / topology contract
 - **EXPLICIT topology.** A pipe's `UpstreamID` / `DownstreamID` (string, e.g. `8G24`) match a node's **`GIS_FeatureKey`**.
 - A node may live in any of three layers: Manholes(2), Sewer Other Nodes(3), Sewer Outfalls(4). The adapter

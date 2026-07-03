@@ -45,35 +45,46 @@ from swmmcanada.sources.soil_hysogs import HysogsSoilSource
 from swmmcanada.sources.soil_soilgrids import SoilGridsSource
 from swmmcanada.sources.streets_osm import fetch_street_graph, sample_elevations
 from swmmcanada.sources.cities import base
-from swmmcanada.sources.cities.ottawa import build_ottawa_network, fetch_ottawa_land, fetch_ottawa_storm
+from swmmcanada.sources.cities.ottawa import (
+    build_ottawa_network,
+    fetch_ottawa_land,
+    fetch_ottawa_sanitary,
+    fetch_ottawa_storm,
+)
 from swmmcanada.sources.cities.victoria import (
     build_victoria_network,
     fetch_victoria_land,
+    fetch_victoria_sanitary,
     fetch_victoria_storm,
 )
 from swmmcanada.sources.cities.london import (
     build_london_network,
     fetch_london_land,
+    fetch_london_sanitary,
     fetch_london_storm,
 )
 from swmmcanada.sources.cities.kitchener import (
     build_kitchener_network,
     fetch_kitchener_land,
+    fetch_kitchener_sanitary,
     fetch_kitchener_storm,
 )
 from swmmcanada.sources.cities.calgary import (
     build_calgary_network,
     fetch_calgary_land,
+    fetch_calgary_sanitary,
     fetch_calgary_storm,
 )
 from swmmcanada.sources.cities.surrey import (
     build_surrey_network,
     fetch_surrey_land,
+    fetch_surrey_sanitary,
     fetch_surrey_storm,
 )
 from swmmcanada.sources.cities.kelowna import (
     build_kelowna_network,
     fetch_kelowna_land,
+    fetch_kelowna_sanitary,
     fetch_kelowna_storm,
 )
 from swmmcanada.sources.cities.regina import (
@@ -415,6 +426,7 @@ def build_from_victoria(aoi, start: date, end: date, workspace, *, victoria_clie
         land_fn=lambda a: fetch_victoria_land(tuple(a.bbox), client=victoria_client),
         sub_crs="EPSG:32610", city="victoria",
         network_source="City of Victoria storm drain (real municipal network)",
+        sanitary_fn=lambda a: build_victoria_network(**fetch_victoria_sanitary(tuple(a.bbox), client=victoria_client)),
         subcatchment_method=subcatchment_method, report=report, **kwargs)
 
 
@@ -429,6 +441,7 @@ def build_from_ottawa(aoi, start: date, end: date, workspace, *, ottawa_client=N
         land_fn=lambda a: fetch_ottawa_land(tuple(a.bbox), client=ottawa_client),
         sub_crs="EPSG:32618", city="ottawa",
         network_source="City of Ottawa storm sewer (real municipal network)",
+        sanitary_fn=lambda a: build_ottawa_network(fetch_ottawa_sanitary(tuple(a.bbox), client=ottawa_client)),
         subcatchment_method=subcatchment_method, report=report, **kwargs)
 
 
@@ -442,6 +455,7 @@ def build_from_london(aoi, start: date, end: date, workspace, *, london_client=N
         land_fn=lambda a: fetch_london_land(tuple(a.bbox), client=london_client),
         sub_crs="EPSG:32617", city="london",
         network_source="City of London storm sewer (real municipal network)",
+        sanitary_fn=lambda a: build_london_network(**fetch_london_sanitary(tuple(a.bbox), client=london_client)),
         subcatchment_method=subcatchment_method, report=report, **kwargs)
 
 
@@ -456,6 +470,7 @@ def build_from_kitchener(aoi, start: date, end: date, workspace, *, kitchener_cl
         land_fn=lambda a: fetch_kitchener_land(tuple(a.bbox), client=kitchener_client),
         sub_crs="EPSG:32617", city="kitchener",
         network_source="Region of Waterloo storm sewer (real municipal network)",
+        sanitary_fn=lambda a: build_kitchener_network(**fetch_kitchener_sanitary(tuple(a.bbox), client=kitchener_client)),
         subcatchment_method=subcatchment_method, report=report, **kwargs)
 
 
@@ -469,6 +484,7 @@ def build_from_calgary(aoi, start: date, end: date, workspace, *, calgary_client
         land_fn=lambda a: fetch_calgary_land(tuple(a.bbox), client=calgary_client),
         sub_crs="EPSG:32611", city="calgary",
         network_source="City of Calgary storm sewer (real municipal network)",
+        sanitary_fn=lambda a: build_calgary_network(fetch_calgary_sanitary(tuple(a.bbox), client=calgary_client)),
         subcatchment_method=subcatchment_method, report=report, **kwargs)
 
 
@@ -482,6 +498,7 @@ def build_from_surrey(aoi, start: date, end: date, workspace, *, surrey_client=N
         land_fn=lambda a: fetch_surrey_land(tuple(a.bbox), client=surrey_client),
         sub_crs="EPSG:32610", city="surrey",
         network_source="City of Surrey storm drainage (real municipal network)",
+        sanitary_fn=lambda a: build_surrey_network(fetch_surrey_sanitary(tuple(a.bbox), client=surrey_client)),
         subcatchment_method=subcatchment_method, report=report, **kwargs)
 
 
@@ -495,6 +512,7 @@ def build_from_kelowna(aoi, start: date, end: date, workspace, *, kelowna_client
         land_fn=lambda a: fetch_kelowna_land(tuple(a.bbox), client=kelowna_client),
         sub_crs="EPSG:32611", city="kelowna",
         network_source="City of Kelowna storm sewer (real municipal network)",
+        sanitary_fn=lambda a: build_kelowna_network(fetch_kelowna_sanitary(tuple(a.bbox), client=kelowna_client)),
         subcatchment_method=subcatchment_method, report=report, **kwargs)
 
 

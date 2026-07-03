@@ -40,3 +40,19 @@ def test_ottawa_network_from_fixtures(tmp_path):
                       config=BuildConfig(out_dir=tmp_path, start=date(2022, 6, 1), end=date(2022, 6, 2)))
     assert out.inp_path.exists()
     assert res.diagnostics["city"] == "ottawa"
+
+
+# --- sanitary tracer (second tagged system, ADR 0011) ------------------------------
+
+def test_sanitary_skeleton_assembles_from_fixture():
+    """The recorded Sanitary Pipes fixture (layer 7, IN_SERVICE; same schema as storm) must
+    assemble into a routable skeleton via the unchanged builder: junctions/conduits > 0 and
+    every endpoint resolves (per-component sinks stand in for the treatment-bound exits)."""
+    res = build_ottawa_network({"pipes": _load("sanitary_pipes.geojson")})
+    net = res.network
+    assert len(net.junctions) > 0 and len(net.conduits) > 0
+    assert len(net.outfalls) >= 1                           # per-component sinks exist
+    node_names = {j.name for j in net.junctions} | {o.name for o in net.outfalls}
+    assert all(c.from_node in node_names and c.to_node in node_names for c in net.conduits)
+    assert all(f["properties"]["LIFE_CYCLE_STATUS"] == "IN_SERVICE"
+               for f in _load("sanitary_pipes.geojson"))

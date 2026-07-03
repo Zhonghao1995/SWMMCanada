@@ -240,3 +240,19 @@ def test_blank_node_ids_never_produce_empty_names():
     assert len(net.conduits) == 2          # both blank-id pipes survive
     assert len(net.junctions) == 2         # DMH1 + one shared synthesized node
     assert any(o.name == "DOF1" for o in net.outfalls)
+
+
+# --- sanitary tracer (second tagged system, ADR 0011) ------------------------------
+
+def test_sanitary_skeleton_assembles_from_fixture():
+    """The recorded Sewer Gravity Mains fixture (WaterType SEW, LifecycleStatus ACT) must
+    assemble into a routable skeleton with NO node layers: every endpoint takes the
+    polyline-vertex fallback, junctions/conduits > 0, every endpoint resolves, and
+    per-component sinks stand in for the treatment-bound exits."""
+    res = build_victoria_network(_load("sanitary_mains"), [], [], [])
+    net = res.network
+    assert len(net.junctions) > 0 and len(net.conduits) > 0
+    assert len(net.outfalls) >= 1                           # per-component sinks exist
+    node_names = {j.name for j in net.junctions} | {o.name for o in net.outfalls}
+    assert all(c.from_node in node_names and c.to_node in node_names for c in net.conduits)
+    assert all(f["properties"]["WaterType"] == "SEW" for f in _load("sanitary_mains"))

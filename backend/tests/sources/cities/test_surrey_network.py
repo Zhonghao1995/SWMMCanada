@@ -206,3 +206,48 @@ def test_zero_elevation_is_kept_not_treated_as_missing():
     assert _num(None) is None
     assert _num("") is None
     assert _num("nope") is None
+
+
+# --- manhole rims -> real node max-depths ------------------------------------------
+
+def test_manhole_rims_set_real_max_depths():
+    """With the manholes layer, junctions coinciding with a manhole get
+    max_depth = RIM_ELEVATION - invert instead of the 2 m assembler default."""
+    storm = {"pipes": _load("storm_pipes"), "outfalls": _load("outfalls")}
+    with_rims = build_surrey_network({**storm, "manholes": _load("manholes")})
+    without = build_surrey_network(storm)
+    assert with_rims.diagnostics["n_ground_points"] == 23   # all 23 fixture rims plausible
+    assert without.diagnostics["n_ground_points"] == 0
+
+    depth_with = {j.name: j.max_depth_m for j in with_rims.network.junctions}
+    depth_without = {j.name: j.max_depth_m for j in without.network.junctions}
+    changed = [n for n in depth_with if depth_with[n] != depth_without[n]]
+    assert changed, "no junction picked up a rim-based depth"
+    for n in changed:
+        assert 0 < depth_with[n] < 15.0                     # physically plausible depths
+
+
+def test_zero_rim_is_screened_unlike_zero_invert():
+    """A 0 invert is real (sea level) but a 0.0 RIM is a placeholder: a manhole rim sits on
+    the ground surface, so the plausibility band (0.5-200 m) must drop it."""
+    from swmmcanada.sources.cities.surrey import _rim
+
+    assert _rim(17.71) == 17.71
+    assert _rim(0) is None
+    assert _rim(0.0) is None
+    assert _rim(999.0) is None            # far above Surrey's ~134 m maximum
+    assert _rim(None) is None
+
+
+# --- sanitary tracer (second tagged system, ADR 0011) ------------------------------
+
+def test_sanitary_skeleton_assembles_from_fixture():
+    """The recorded San Mains fixture (in-service gravity lines) must assemble into a
+    routable skeleton: junctions/conduits > 0 and every endpoint resolves (per-component
+    sinks stand in for the treatment-bound exits)."""
+    res = build_surrey_network({"pipes": _load("sanitary_mains")})
+    net = res.network
+    assert len(net.junctions) > 0 and len(net.conduits) > 0
+    assert len(net.outfalls) >= 1                           # per-component sinks exist
+    node_names = {j.name for j in net.junctions} | {o.name for o in net.outfalls}
+    assert all(c.from_node in node_names and c.to_node in node_names for c in net.conduits)

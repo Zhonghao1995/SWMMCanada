@@ -24,10 +24,26 @@ bbox (min_lon, min_lat, max_lon, max_lat) = (-114.083, 51.051, -114.077, 51.055)
   "OUTFALL STRUCTURE" / "FLOOD GATE OUTFALL". Inlets have a null `OUT_INLET`.
 - **Catch basins**: `Storm_catch_basin_DMAP/FeatureServer/0` (id `ASSET_ID`, point).
 
+- **Manholes**: `Storm_Manholes_DMAP/FeatureServer/0` (layer `STORM_MANHOLE`, point).
+  Captured **2026-07-03**. `RIM_ELEV` (m AMSL, double) is 100% populated over this bbox
+  (1046.2–1049.1 m) → node ground elevation, so junction max depth becomes rim − invert
+  instead of the 2 m assembler default. Plausibility band 900–1400 m (Calgary terrain
+  ~975–1300 m) screens placeholder rims. `STATUS_IND` = ACTIVE/INACTIVE; the unfiltered
+  layer is fetched (an inactive manhole's rim is still a real ground elevation).
+- **Sanitary pipes**: `Sanitary_pipes_DMAP/FeatureServer/0` (layer `SANITARY_PIPE`, polyline).
+  Captured **2026-07-03** with the adapter's where-clause
+  `STATUS_IND = 'ACTIVE' AND P_FUNCTION IN ('MAIN', 'TL')` (gravity skeleton only: drops
+  FM force mains, SYP syphons, SL / "C/MF SERV" service laterals, DCT, SUBDRAIN). Same
+  invert/size schema as STORM_PIPE (`UP_INVERT`/`DN_INVERT` m AMSL with 0 = missing,
+  `WIDTH`/`HEIGHT` mm, `MATERIAL`, `LENGTH`), so `build_calgary_network` assembles it
+  unchanged as the second tagged system (ADR 0011).
+
 ## Files (GeoJSON FeatureCollections; `properties` = raw ArcGIS attributes)
 - `storm_pipes.geojson` — 38 STORM_PIPE polylines (source of truth for topology + hydraulics).
 - `outfalls.geojson`    — 4 outfall points (all to BOW RIVER); each snaps onto a pipe endpoint.
 - `catchbasins.geojson` — 16 catch basins.
+- `manholes.geojson`    — 20 STORM_MANHOLE points (volatile audit fields stripped).
+- `sanitary_pipes.geojson` — 29 active gravity SANITARY_PIPE polylines (audit fields stripped).
 
 ## Parcels / buildings (fetched live by `fetch_calgary_land`, not checked in)
 Real **polygon** layers in the same org (verified 2026-06-22):
