@@ -18,8 +18,7 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
-import requests
-
+from swmmcanada.sources import _http
 from swmmcanada.build.models import ConduitIn, JunctionIn, NetworkIn, OutfallIn
 
 Coord = Tuple[float, float]
@@ -34,9 +33,7 @@ class ArcGISClient:
         self.timeout = timeout
 
     def get_json(self, url: str, params: dict) -> dict:
-        resp = requests.get(url, params=params, timeout=self.timeout)
-        resp.raise_for_status()
-        return resp.json()
+        return _http.request_with_retry("GET", url, params=params, timeout=self.timeout).json()
 
 
 def esri_to_geojson(feat: dict) -> dict:

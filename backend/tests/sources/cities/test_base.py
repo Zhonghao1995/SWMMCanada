@@ -39,23 +39,27 @@ def test_esri_empty_geometry_to_none():
 
 
 def test_arcgis_client_get_json(monkeypatch):
-    """get_json GETs with params+timeout, raises for status, returns parsed JSON."""
-    import swmmcanada.sources.cities.base as base
+    """get_json requests GET with params+timeout, raises for status, returns parsed JSON —
+    now through the shared retry helper (base.ArcGISClient no longer touches requests directly)."""
+    from swmmcanada.sources import _http
 
     seen = {}
 
     class _Resp:
+        status_code = 200
+
         def raise_for_status(self):
             seen["raised"] = True
 
         def json(self):
             return {"ok": True}
 
-    def fake_get(url, params=None, timeout=None):
-        seen.update(url=url, params=params, timeout=timeout)
+    def fake_request(method, url, params=None, timeout=None, **kw):
+        seen.update(method=method, url=url, params=params, timeout=timeout)
         return _Resp()
 
-    monkeypatch.setattr(base.requests, "get", fake_get)
+    monkeypatch.setattr(_http.requests, "request", fake_request)
     out = ArcGISClient(timeout=12.0).get_json("http://x/query", {"f": "json"})
     assert out == {"ok": True}
-    assert seen == {"url": "http://x/query", "params": {"f": "json"}, "timeout": 12.0, "raised": True}
+    assert seen == {"method": "GET", "url": "http://x/query",
+                    "params": {"f": "json"}, "timeout": 12.0, "raised": True}

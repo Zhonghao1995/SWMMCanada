@@ -44,7 +44,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Optional, Sequence, Tuple, Protocol
 
-import requests
+from swmmcanada.sources import _http
 
 IDF_RETURN_PERIODS = (2, 5, 10, 25, 50, 100)
 
@@ -77,9 +77,8 @@ class RequestsRangeClient:
 
     def get_bytes(self, url: str, start: Optional[int], end: int) -> bytes:
         rng = f"bytes=-{end}" if start is None else f"bytes={start}-{end}"
-        resp = requests.get(url, headers={"Range": rng}, timeout=self.timeout)
-        resp.raise_for_status()
-        return resp.content
+        return _http.request_with_retry(
+            "GET", url, headers={"Range": rng}, timeout=self.timeout).content
 
 
 @dataclass(frozen=True)
