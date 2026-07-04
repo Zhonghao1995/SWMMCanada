@@ -104,6 +104,34 @@ def material_roughness(material: Optional[str], default: float = 0.013) -> float
     return MATERIAL_ROUGHNESS.get(str(material).strip().upper(), default)
 
 
+def num(v, *, zero_missing: bool = False) -> Optional[float]:
+    """Parse a (possibly string) numeric field to float; ``""``/None/non-numeric -> None.
+    ``zero_missing=True`` also maps 0 to None — for cities whose schema uses 0 as the
+    missing-data sentinel (their inverts are real elevations far above 0, so a stored 0
+    means "not recorded"; cities at sea level keep 0 as a legitimate elevation)."""
+    if v in (None, ""):
+        return None
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return None
+    return None if (zero_missing and f == 0) else f
+
+
+def line_ends(geom) -> Tuple[Optional[Coord], Optional[Coord]]:
+    """First/last vertex of a GeoJSON LineString/MultiLineString -> ``((x, y), (x, y))``,
+    or ``(None, None)`` for empty/degenerate geometry. MultiLineString parts are flattened
+    in order (city layers publish single-part lines; rare multiparts stay contiguous)."""
+    coords = (geom or {}).get("coordinates") or []
+    if not coords:
+        return None, None
+    if isinstance(coords[0][0], (list, tuple)):   # MultiLineString -> flatten
+        coords = [pt for part in coords for pt in part]
+    if len(coords) < 2:
+        return None, None
+    return tuple(coords[0][:2]), tuple(coords[-1][:2])
+
+
 # --- canonical pipe + config + result ---------------------------------------------------
 @dataclass(frozen=True)
 class RawPipe:

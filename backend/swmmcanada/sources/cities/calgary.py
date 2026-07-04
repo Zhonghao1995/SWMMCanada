@@ -103,15 +103,7 @@ def fetch_calgary_land(bbox, *, client=None) -> dict:
 
 
 def _num(v):
-    if v in (None, ""):
-        return None
-    try:
-        f = float(v)
-    except (TypeError, ValueError):
-        return None
-    # 0 is Calgary's missing-data sentinel for inverts/length (real inverts are ~1040 m AMSL),
-    # mirroring Ottawa. Treat it as missing so node inverts gap-fill instead of sinking to 0.
-    return f if f != 0 else None
+    return base.num(v, zero_missing=True)     # 0 is Calgary's missing-data sentinel (real inverts ~1040 m AMSL)
 
 
 # Plausible rim band for Calgary (m AMSL): the city's terrain sits ~975–1300 m (Bow River
@@ -126,17 +118,7 @@ def _rim(v):
     return f if (f is not None and _RIM_MIN <= f <= _RIM_MAX) else None
 
 
-def _line_ends(geom):
-    """First and last (lon, lat) of a (Multi)LineString geometry; MultiLineString is flattened
-    so endpoint snapping sees the polyline's true ends."""
-    coords = (geom or {}).get("coordinates") or []
-    if not coords:
-        return None, None
-    if isinstance(coords[0][0], (list, tuple)):   # MultiLineString -> flatten
-        coords = [pt for part in coords for pt in part]
-    if len(coords) < 2:
-        return None, None
-    return tuple(coords[0][:2]), tuple(coords[-1][:2])
+_line_ends = base.line_ends
 
 
 def _diameter_m(props):

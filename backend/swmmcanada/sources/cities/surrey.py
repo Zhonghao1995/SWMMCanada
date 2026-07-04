@@ -93,14 +93,7 @@ def fetch_surrey_land(bbox, *, client=None) -> dict:
 
 
 def _num(v):
-    """Float or None. Unlike Ottawa, ``0`` is a legitimate elevation in Surrey (sea level), so
-    only blank/None/unparseable is treated as missing — never a real zero."""
-    if v in (None, ""):
-        return None
-    try:
-        return float(v)
-    except (TypeError, ValueError):
-        return None
+    return base.num(v)     # 0 is a legitimate elevation in Surrey (sea level) — only blank/unparseable is missing
 
 
 # Plausible rim band for Surrey (m AMSL): the city rises from the diked Fraser/Mud Bay
@@ -116,15 +109,7 @@ def _rim(v):
     return f if (f is not None and _RIM_MIN <= f <= _RIM_MAX) else None
 
 
-def _line_ends(geom):
-    coords = (geom or {}).get("coordinates") or []
-    if not coords:
-        return None, None
-    if isinstance(coords[0][0], (list, tuple)):   # MultiLineString -> flatten parts
-        coords = [pt for part in coords for pt in part]
-    if len(coords) < 2:
-        return None, None
-    return tuple(coords[0][:2]), tuple(coords[-1][:2])
+_line_ends = base.line_ends
 
 
 # Surrey has no node ids on mains, so topology is snapped from polyline endpoints: a coarser

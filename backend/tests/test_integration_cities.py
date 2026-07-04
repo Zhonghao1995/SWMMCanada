@@ -9,18 +9,15 @@ import pytest
 import requests
 
 from swmmcanada.geo import aoi_from_geojson
-from swmmcanada.pipeline import (
-    build_from_calgary, build_from_kelowna, build_from_kitchener,
-    build_from_london, build_from_surrey,
-)
+from swmmcanada.pipeline import build_city
 
-# city -> (builder, centre lon, centre lat); small dense-urban AOIs inside each coverage box.
+# city registry key -> AOI centre; small dense-urban AOIs inside each coverage box.
 CITIES = {
-    "london": (build_from_london, -81.250, 42.984),
-    "kitchener": (build_from_kitchener, -80.490, 43.451),
-    "calgary": (build_from_calgary, -114.075, 51.050),
-    "surrey": (build_from_surrey, -122.845, 49.106),
-    "kelowna": (build_from_kelowna, -119.470, 49.884),
+    "london": (-81.250, 42.984),
+    "kitchener": (-80.490, 43.451),
+    "calgary": (-114.075, 51.050),
+    "surrey": (-122.845, 49.106),
+    "kelowna": (-119.470, 49.884),
 }
 
 
@@ -32,9 +29,9 @@ def _aoi(lon, lat, d=0.0025):
 @pytest.mark.integration
 @pytest.mark.parametrize("city", list(CITIES))
 def test_city_builds_real_inp(city, tmp_path):
-    fn, lon, lat = CITIES[city]
+    lon, lat = CITIES[city]
     try:
-        res = fn(_aoi(lon, lat), date(2022, 6, 1), date(2022, 6, 7), tmp_path)
+        res = build_city(city, _aoi(lon, lat), date(2022, 6, 1), date(2022, 6, 7), tmp_path)
     except requests.HTTPError as e:
         code = getattr(e.response, "status_code", None)
         if code and code >= 500:

@@ -179,13 +179,8 @@ def _sanitize(name) -> str:
     return "_".join(str(name).split())
 
 
-def _num(value) -> Optional[float]:
-    if value is None or value == "":
-        return None
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
+def _num(v):
+    return base.num(v)
 
 
 def resolve_endpoints(up_id, dn_id, line, coords, *, snap_tol):

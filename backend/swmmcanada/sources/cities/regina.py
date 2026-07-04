@@ -99,16 +99,7 @@ def fetch_regina_land(bbox, *, client=None) -> dict:
 
 
 def _num(v):
-    """Float or None; ``""``/None/0/non-numeric count as missing. Regina's inverts are real
-    elevations (~570+ m AMSL) and DIAMETER/SURVEYLENGTH are never legitimately zero, so 0 is a
-    missing-data sentinel here (mirrors Kelowna/Calgary)."""
-    if v in (None, ""):
-        return None
-    try:
-        f = float(v)
-    except (TypeError, ValueError):
-        return None
-    return f if f != 0 else None
+    return base.num(v, zero_missing=True)     # 0 == missing (Regina inverts ~570+ m; DIAMETER/SURVEYLENGTH never 0)
 
 
 # Plausible invert band for Regina (m AMSL): the city's terrain sits ~545–595 m. The data has
@@ -143,15 +134,7 @@ def _regina_roughness(material, default):
     return base.material_roughness(code, default)
 
 
-def _line_ends(geom):
-    coords = (geom or {}).get("coordinates") or []
-    if not coords:
-        return None, None
-    if isinstance(coords[0][0], (list, tuple)):   # MultiLineString -> flatten parts
-        coords = [pt for part in coords for pt in part]
-    if len(coords) < 2:
-        return None, None
-    return tuple(coords[0][:2]), tuple(coords[-1][:2])
+_line_ends = base.line_ends
 
 
 # Regina has no node ids, so topology is snapped from polyline endpoints: a coarser tolerance

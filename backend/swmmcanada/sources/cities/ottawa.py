@@ -66,24 +66,10 @@ def fetch_ottawa_land(bbox, *, client=None) -> dict:
 
 
 def _num(v):
-    if v in (None, ""):
-        return None
-    try:
-        f = float(v)
-    except (TypeError, ValueError):
-        return None
-    return f if f != 0 else None          # 0 == missing in Ottawa's data
+    return base.num(v, zero_missing=True)     # 0 == missing in Ottawa's data
 
 
-def _line_ends(geom):
-    coords = (geom or {}).get("coordinates") or []
-    if not coords:
-        return None, None
-    if isinstance(coords[0][0], (list, tuple)):   # MultiLineString -> flatten
-        coords = [pt for part in coords for pt in part]
-    if len(coords) < 2:
-        return None, None
-    return tuple(coords[0][:2]), tuple(coords[-1][:2])
+_line_ends = base.line_ends
 
 
 # Ottawa has no node ids, so topology is snapped from polyline endpoints: a coarser tolerance

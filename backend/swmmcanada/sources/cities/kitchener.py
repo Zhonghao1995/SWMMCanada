@@ -172,13 +172,8 @@ def _features(layer) -> List[dict]:
     return list(layer)
 
 
-def _num(value) -> Optional[float]:
-    if value is None or value == "":
-        return None
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
+def _num(v):
+    return base.num(v)
 
 
 def _int_id(value) -> Optional[int]:
