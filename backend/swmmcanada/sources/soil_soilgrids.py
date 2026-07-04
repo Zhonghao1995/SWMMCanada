@@ -11,9 +11,9 @@ import tempfile
 
 import numpy as np
 import rasterio
-import requests
 
 from swmmcanada.acquire.soil import SoilAsset
+from swmmcanada.sources import _http
 
 _WCS = "https://maps.isric.org/mapserv?map=/map/{prop}.map"
 
@@ -49,8 +49,7 @@ class SoilGridsSource:
             "SUBSETTINGCRS": "http://www.opengis.net/def/crs/EPSG/0/4326",
             "OUTPUTCRS": "http://www.opengis.net/def/crs/EPSG/0/4326",
         }
-        r = requests.get(_WCS.format(prop=prop), params=params, timeout=self.timeout)
-        r.raise_for_status()
+        r = _http.request_with_retry("GET", _WCS.format(prop=prop), params=params, timeout=self.timeout)
         with rasterio.open(io.BytesIO(r.content)) as src:
             return src.read(1), src.profile
 

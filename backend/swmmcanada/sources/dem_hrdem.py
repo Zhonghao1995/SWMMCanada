@@ -31,14 +31,13 @@ class HrdemLidarSource:
         self._search = search or self._search_stac   # injectable for offline tests
 
     def _search_stac(self, bbox_wgs84) -> list:
-        import requests
+        from swmmcanada.sources import _http
 
-        resp = requests.post(
-            self._url,
+        resp = _http.request_with_retry(
+            "POST", self._url,
             json={"collections": [HRDEM_COLLECTION], "bbox": list(bbox_wgs84), "limit": 50},
             timeout=self._timeout,
         )
-        resp.raise_for_status()
         return resp.json().get("features", [])
 
     def select(self, bbox_wgs84, prefer: str) -> Optional[DemAsset]:
