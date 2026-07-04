@@ -82,15 +82,7 @@ def fetch_kelowna_land(bbox, *, client=None) -> dict:
 
 
 def _num(v):
-    """Cast a (possibly string) numeric field to float; treat ""/None/0/non-numeric as
-    missing. Kelowna stores DIAMETER and LENGTH as strings, so this also parses "300"/"47.46"."""
-    if v in (None, ""):
-        return None
-    try:
-        f = float(v)
-    except (TypeError, ValueError):
-        return None
-    return f if f != 0 else None          # 0 == missing in Kelowna's data
+    return base.num(v, zero_missing=True)     # 0 == missing; also parses Kelowna's string-typed DIAMETER/LENGTH
 
 
 def _kelowna_roughness(material, default):
@@ -106,15 +98,7 @@ def _kelowna_roughness(material, default):
     return base.material_roughness(code, default)
 
 
-def _line_ends(geom):
-    coords = (geom or {}).get("coordinates") or []
-    if not coords:
-        return None, None
-    if isinstance(coords[0][0], (list, tuple)):   # MultiLineString -> flatten
-        coords = [pt for part in coords for pt in part]
-    if len(coords) < 2:
-        return None, None
-    return tuple(coords[0][:2]), tuple(coords[-1][:2])
+_line_ends = base.line_ends
 
 
 # Kelowna has no node ids, so topology is snapped from polyline endpoints: a coarser tolerance

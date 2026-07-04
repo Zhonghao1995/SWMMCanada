@@ -15,7 +15,7 @@ swmmcanada/
   datastore/   model-ready datastore (GeoPackage + netCDF + JSON)
   sources/     live data-source adapters (+ cities/ for real municipal networks)
   api/         FastAPI async tasks API
-  pipeline.py  build_from_aoi · build_from_victoria · build_from_ottawa
+  pipeline.py  build_from_aoi · build_city (cities wired in sources/cities/registry.py)
 ```
 
 ## Dev

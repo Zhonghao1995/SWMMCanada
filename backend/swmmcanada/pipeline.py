@@ -10,6 +10,7 @@ import json
 import os
 from dataclasses import replace
 from datetime import date
+from functools import partial
 from pathlib import Path
 from typing import Optional
 
@@ -45,54 +46,7 @@ from swmmcanada.sources.soil_hysogs import HysogsSoilSource
 from swmmcanada.sources.soil_soilgrids import SoilGridsSource
 from swmmcanada.sources.streets_osm import fetch_street_graph, sample_elevations
 from swmmcanada.sources.cities import base
-from swmmcanada.sources.cities.ottawa import (
-    build_ottawa_network,
-    fetch_ottawa_land,
-    fetch_ottawa_sanitary,
-    fetch_ottawa_storm,
-)
-from swmmcanada.sources.cities.victoria import (
-    build_victoria_network,
-    fetch_victoria_land,
-    fetch_victoria_sanitary,
-    fetch_victoria_storm,
-)
-from swmmcanada.sources.cities.london import (
-    build_london_network,
-    fetch_london_land,
-    fetch_london_sanitary,
-    fetch_london_storm,
-)
-from swmmcanada.sources.cities.kitchener import (
-    build_kitchener_network,
-    fetch_kitchener_land,
-    fetch_kitchener_sanitary,
-    fetch_kitchener_storm,
-)
-from swmmcanada.sources.cities.calgary import (
-    build_calgary_network,
-    fetch_calgary_land,
-    fetch_calgary_sanitary,
-    fetch_calgary_storm,
-)
-from swmmcanada.sources.cities.surrey import (
-    build_surrey_network,
-    fetch_surrey_land,
-    fetch_surrey_sanitary,
-    fetch_surrey_storm,
-)
-from swmmcanada.sources.cities.kelowna import (
-    build_kelowna_network,
-    fetch_kelowna_land,
-    fetch_kelowna_sanitary,
-    fetch_kelowna_storm,
-)
-from swmmcanada.sources.cities.regina import (
-    build_regina_network,
-    fetch_regina_land,
-    fetch_regina_sanitary,
-    fetch_regina_storm,
-)
+from swmmcanada.sources.cities.registry import CitySpec, city_for_point, city_spec
 
 
 def _method_descriptor(sub_diag: Optional[dict]) -> MethodDescriptor:
@@ -322,18 +276,20 @@ def build_from_aoi(
     )
 
 
-def _build_real_network(
-    aoi, start: date, end: date, workspace, *,
-    network_fn, land_fn, sub_crs: str, city: str, network_source: str,
+def build_city(
+    city, aoi, start: date, end: date, workspace, *,
+    client=None,
     dem_source=None, climate_client=None, climate_buffer_deg: float = 0.3, derive: bool = True,
     landcover_source=None, soil_source=None, subcatchment_method: str = "parcel", report=None,
-    sanitary_fn=None,
 ) -> BuildResult:
-    """Shared real-municipal-network pipeline (ADR 0006). ``network_fn(aoi)`` assembles the
-    city's real pipes (returns an object with ``.network`` + ``.diagnostics``); ``land_fn(aoi)``
-    supplies ``{catchbasins, parcels, buildings}``. Everything else — subcatchments
-    (catch-basin + parcel/building, Voronoi-of-nodes fallback), derive, climate, build,
-    datastore — is city-agnostic. ``sub_crs`` is the city's metric CRS."""
+    """Build a SWMM model from a real municipal network (ADR 0004/0005/0006). ``city`` is a
+    registry key ("victoria") or a ``CitySpec``; the spec supplies the city's fetch/build
+    composition, metric CRS and provenance. Everything else — subcatchments (catch-basin +
+    parcel/building, Voronoi-of-nodes fallback), derive, climate, build, datastore — is
+    city-agnostic. ``client`` is passed to the spec's fetchers (tests inject fixtures here)."""
+    spec: CitySpec = city_spec(city) if isinstance(city, str) else city
+    bbox = tuple(aoi.bbox)
+
     def _r(stage: str, pct: int):
         if report:
             report(stage, pct)
@@ -344,7 +300,7 @@ def _build_real_network(
     ws.mkdir(parents=True, exist_ok=True)
 
     _r("FETCH_NETWORK", 15)
-    netres = network_fn(aoi)
+    netres = spec.storm(bbox, client)
     network = netres.network
 
     # Subcatchments: catch-basin + parcel/building (ADR 0005), else Voronoi-of-nodes fallback.
@@ -352,9 +308,9 @@ def _build_real_network(
     imperv_map: dict = {}
     sub_diag: dict = {}
     if subcatchment_method == "parcel":
-        land = land_fn(aoi)
+        land = spec.land(bbox, client)
         subcatchments, imperv_map, sub_diag = base.delineate_catchbasin_subcatchments(
-            network, land["catchbasins"], land["parcels"], land["buildings"], aoi, crs=sub_crs
+            network, land["catchbasins"], land["parcels"], land["buildings"], aoi, crs=spec.sub_crs
         )
     else:
         subcatchments = []
@@ -387,10 +343,10 @@ def _build_real_network(
     # as a tagged, disconnected subgraph — AFTER subcatchments (they are storm-seeded) and
     # with graceful degradation (a sanitary fetch failure never blocks the storm build).
     san_diag = {"included": False, "reason": "not_published"}
-    if sanitary_fn is not None:
+    if spec.sanitary is not None:
         _r("SANITARY", 78)
         try:
-            sanres = sanitary_fn(aoi)
+            sanres = spec.sanitary(bbox, client)
             network = base.merge_secondary_system(
                 network, sanres.network, prefix="SAN_", system="sanitary")
             san_diag = {"included": True,
@@ -401,13 +357,14 @@ def _build_real_network(
 
     # Head done (network producer = the city adapter); the shared build spine does the rest.
     method = _method_descriptor(sub_diag)
-    config = BuildConfig(out_dir=ws, start=start, end=end, title=f"SWMMCanada ({city} real network)",
-                         coordinate_crs=sub_crs)
+    config = BuildConfig(out_dir=ws, start=start, end=end,
+                         title=f"SWMMCanada ({spec.key} real network)",
+                         coordinate_crs=spec.sub_crs)
     return _finish_build(
         ws, aoi, network, subcatchments,
         start=start, end=end, method=method, config=config,
         extra_provenance={
-            "city": city, "network_source": network_source,
+            "city": spec.key, "network_source": spec.network_source,
             "network_diagnostics": netres.diagnostics,
             "subcatchment_diagnostics": sub_diag,
             "sanitary": san_diag,
@@ -417,143 +374,14 @@ def _build_real_network(
     )
 
 
-def build_from_victoria(aoi, start: date, end: date, workspace, *, victoria_client=None,
-                        subcatchment_method: str = "parcel", report=None, **kwargs) -> BuildResult:
-    """Build a SWMM model from the REAL City of Victoria storm network (ADR 0004/0005)."""
-    return _build_real_network(
-        aoi, start, end, workspace,
-        network_fn=lambda a: build_victoria_network(**fetch_victoria_storm(tuple(a.bbox), client=victoria_client)),
-        land_fn=lambda a: fetch_victoria_land(tuple(a.bbox), client=victoria_client),
-        sub_crs="EPSG:32610", city="victoria",
-        network_source="City of Victoria storm drain (real municipal network)",
-        sanitary_fn=lambda a: build_victoria_network(**fetch_victoria_sanitary(tuple(a.bbox), client=victoria_client)),
-        subcatchment_method=subcatchment_method, report=report, **kwargs)
-
-
-def build_from_ottawa(aoi, start: date, end: date, workspace, *, ottawa_client=None,
-                      subcatchment_method: str = "parcel", report=None, **kwargs) -> BuildResult:
-    """Build a SWMM model from the REAL City of Ottawa storm network (ADR 0006). Ottawa has no
-    public parcels/buildings, so subcatchments seed on real catch basins with land-cover
-    imperviousness (the parcel/building override is unavailable there)."""
-    return _build_real_network(
-        aoi, start, end, workspace,
-        network_fn=lambda a: build_ottawa_network(fetch_ottawa_storm(tuple(a.bbox), client=ottawa_client)),
-        land_fn=lambda a: fetch_ottawa_land(tuple(a.bbox), client=ottawa_client),
-        sub_crs="EPSG:32618", city="ottawa",
-        network_source="City of Ottawa storm sewer (real municipal network)",
-        sanitary_fn=lambda a: build_ottawa_network(fetch_ottawa_sanitary(tuple(a.bbox), client=ottawa_client)),
-        subcatchment_method=subcatchment_method, report=report, **kwargs)
-
-
-def build_from_london(aoi, start: date, end: date, workspace, *, london_client=None,
-                      subcatchment_method: str = "parcel", report=None, **kwargs) -> BuildResult:
-    """Build a SWMM model from the REAL City of London (ON) storm network (ADR 0004/0005/0006).
-    Explicit node-id topology (UpstreamID/DownstreamID -> GIS_FeatureKey); parcels + buildings."""
-    return _build_real_network(
-        aoi, start, end, workspace,
-        network_fn=lambda a: build_london_network(**fetch_london_storm(tuple(a.bbox), client=london_client)),
-        land_fn=lambda a: fetch_london_land(tuple(a.bbox), client=london_client),
-        sub_crs="EPSG:32617", city="london",
-        network_source="City of London storm sewer (real municipal network)",
-        sanitary_fn=lambda a: build_london_network(**fetch_london_sanitary(tuple(a.bbox), client=london_client)),
-        subcatchment_method=subcatchment_method, report=report, **kwargs)
-
-
-def build_from_kitchener(aoi, start: date, end: date, workspace, *, kitchener_client=None,
-                         subcatchment_method: str = "parcel", report=None, **kwargs) -> BuildResult:
-    """Build a SWMM model from the REAL Region of Waterloo storm network (Kitchener/Waterloo/
-    Cambridge, ADR 0006). Explicit integer manhole-id topology; no parcel polygons published, so
-    subcatchments fall back to catch-basin Voronoi (buildings are available)."""
-    return _build_real_network(
-        aoi, start, end, workspace,
-        network_fn=lambda a: build_kitchener_network(**fetch_kitchener_storm(tuple(a.bbox), client=kitchener_client)),
-        land_fn=lambda a: fetch_kitchener_land(tuple(a.bbox), client=kitchener_client),
-        sub_crs="EPSG:32617", city="kitchener",
-        network_source="Region of Waterloo storm sewer (real municipal network)",
-        sanitary_fn=lambda a: build_kitchener_network(**fetch_kitchener_sanitary(tuple(a.bbox), client=kitchener_client)),
-        subcatchment_method=subcatchment_method, report=report, **kwargs)
-
-
-def build_from_calgary(aoi, start: date, end: date, workspace, *, calgary_client=None,
-                       subcatchment_method: str = "parcel", report=None, **kwargs) -> BuildResult:
-    """Build a SWMM model from the REAL City of Calgary storm network (ADR 0006). Geometry-inferred
-    topology; parcels + buildings published."""
-    return _build_real_network(
-        aoi, start, end, workspace,
-        network_fn=lambda a: build_calgary_network(fetch_calgary_storm(tuple(a.bbox), client=calgary_client)),
-        land_fn=lambda a: fetch_calgary_land(tuple(a.bbox), client=calgary_client),
-        sub_crs="EPSG:32611", city="calgary",
-        network_source="City of Calgary storm sewer (real municipal network)",
-        sanitary_fn=lambda a: build_calgary_network(fetch_calgary_sanitary(tuple(a.bbox), client=calgary_client)),
-        subcatchment_method=subcatchment_method, report=report, **kwargs)
-
-
-def build_from_surrey(aoi, start: date, end: date, workspace, *, surrey_client=None,
-                      subcatchment_method: str = "parcel", report=None, **kwargs) -> BuildResult:
-    """Build a SWMM model from the REAL City of Surrey storm network (ADR 0006). Geometry-inferred
-    topology (gravity mains); parcels (Lot) + buildings published."""
-    return _build_real_network(
-        aoi, start, end, workspace,
-        network_fn=lambda a: build_surrey_network(fetch_surrey_storm(tuple(a.bbox), client=surrey_client)),
-        land_fn=lambda a: fetch_surrey_land(tuple(a.bbox), client=surrey_client),
-        sub_crs="EPSG:32610", city="surrey",
-        network_source="City of Surrey storm drainage (real municipal network)",
-        sanitary_fn=lambda a: build_surrey_network(fetch_surrey_sanitary(tuple(a.bbox), client=surrey_client)),
-        subcatchment_method=subcatchment_method, report=report, **kwargs)
-
-
-def build_from_kelowna(aoi, start: date, end: date, workspace, *, kelowna_client=None,
-                       subcatchment_method: str = "parcel", report=None, **kwargs) -> BuildResult:
-    """Build a SWMM model from the REAL City of Kelowna storm network (ADR 0006). Geometry-inferred
-    topology (node inverts back-filled from pipe ends); parcels + buildings published."""
-    return _build_real_network(
-        aoi, start, end, workspace,
-        network_fn=lambda a: build_kelowna_network(fetch_kelowna_storm(tuple(a.bbox), client=kelowna_client)),
-        land_fn=lambda a: fetch_kelowna_land(tuple(a.bbox), client=kelowna_client),
-        sub_crs="EPSG:32611", city="kelowna",
-        network_source="City of Kelowna storm sewer (real municipal network)",
-        sanitary_fn=lambda a: build_kelowna_network(fetch_kelowna_sanitary(tuple(a.bbox), client=kelowna_client)),
-        subcatchment_method=subcatchment_method, report=report, **kwargs)
-
-
-def build_from_regina(aoi, start: date, end: date, workspace, *, regina_client=None,
-                      subcatchment_method: str = "parcel", report=None, **kwargs) -> BuildResult:
-    """Build a SWMM model from the REAL City of Regina storm network (ADR 0006). Geometry-inferred
-    topology (active gravity lines; node inverts back-filled from pipe ends); parcels + building
-    footprints published."""
-    return _build_real_network(
-        aoi, start, end, workspace,
-        network_fn=lambda a: build_regina_network(fetch_regina_storm(tuple(a.bbox), client=regina_client)),
-        land_fn=lambda a: fetch_regina_land(tuple(a.bbox), client=regina_client),
-        sub_crs="EPSG:32613", city="regina",
-        network_source="City of Regina storm sewer (real municipal network)",
-        sanitary_fn=lambda a: build_regina_network(fetch_regina_sanitary(tuple(a.bbox), client=regina_client)),
-        subcatchment_method=subcatchment_method, report=report, **kwargs)
-
-
-# Cities with a real-network adapter, gated by a coarse coverage bbox
-# (min_lon, min_lat, max_lon, max_lat). Order: first match wins; boxes must not overlap.
-_REAL_NETWORK_CITIES = [
-    ("Victoria, BC", (-123.43, 48.40, -123.33, 48.47), build_from_victoria),
-    ("Ottawa, ON", (-76.05, 45.15, -75.40, 45.55), build_from_ottawa),
-    ("London, ON", (-81.38, 42.86, -81.12, 43.06), build_from_london),
-    ("Kitchener–Waterloo, ON", (-80.70, 43.30, -80.20, 43.60), build_from_kitchener),
-    ("Calgary, AB", (-114.32, 50.84, -113.86, 51.21), build_from_calgary),
-    ("Surrey, BC", (-123.00, 49.00, -122.69, 49.22), build_from_surrey),
-    ("Kelowna, BC", (-119.60, 49.77, -119.28, 50.05), build_from_kelowna),
-    ("Regina, SK", (-104.80, 50.35, -104.45, 50.55), build_from_regina),
-]
-
-
 def pipeline_for_aoi(aoi):
     """Pick the build pathway for an AOI: a real-municipal-network city adapter when the AOI
-    centre falls inside a supported city's coverage, else synthesize a network from open data.
-    Returns ``(build_fn, mode_label)``."""
+    centre falls inside a supported city's coverage (the city registry decides), else
+    synthesize a network from open data. Returns ``(build_fn, mode_label)``."""
     min_lon, min_lat, max_lon, max_lat = aoi.bbox
-    clon, clat = (min_lon + max_lon) / 2, (min_lat + max_lat) / 2
-    for name, (lo1, la1, lo2, la2), build in _REAL_NETWORK_CITIES:
-        if lo1 <= clon <= lo2 and la1 <= clat <= la2:
-            return build, f"Real municipal network — {name}"
+    spec = city_for_point((min_lon + max_lon) / 2, (min_lat + max_lat) / 2)
+    if spec is not None:
+        return partial(build_city, spec), f"Real municipal network — {spec.label}"
     return build_from_aoi, "Synthesized from open data"
 
 

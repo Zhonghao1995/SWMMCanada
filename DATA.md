@@ -138,7 +138,7 @@ Six more cities have been added via the same adapter pattern (read the
 city's ArcGIS REST layers → shared `cities/base.py` assembler). Each clears the bar: published
 storm pipes **with invert elevations** plus resolvable topology. All endpoints verified live
 2026-06-22 (Regina: 2026-07-02); coverage is gated by a non-overlapping per-city bbox in
-`pipeline._REAL_NETWORK_CITIES`.
+the city registry (`sources/cities/registry.py`).
 
 | City | ArcGIS REST service | Key storm layers (invert field) | Topology | Parcels / buildings | Licence |
 |---|---|---|---|---|---|

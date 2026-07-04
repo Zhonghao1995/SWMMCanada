@@ -149,15 +149,15 @@ propagation and real outlet matching are the next fidelity steps.
 ```python
 from datetime import date
 from swmmcanada.geo import aoi_from_geojson
-from swmmcanada.pipeline import build_from_victoria, build_from_ottawa
+from swmmcanada.pipeline import build_city
 
 vic = aoi_from_geojson({"type": "Polygon", "coordinates": [[
     [-123.375, 48.418], [-123.360, 48.418], [-123.360, 48.429], [-123.375, 48.429], [-123.375, 48.418]]]})
-build_from_victoria(vic, date(2022, 6, 1), date(2022, 6, 7), "victoria_out/")
+build_city("victoria", vic, date(2022, 6, 1), date(2022, 6, 7), "victoria_out/")
 
 ott = aoi_from_geojson({"type": "Polygon", "coordinates": [[
     [-75.705, 45.41], [-75.685, 45.41], [-75.685, 45.425], [-75.705, 45.425], [-75.705, 45.41]]]})
-build_from_ottawa(ott, date(2022, 6, 1), date(2022, 6, 7), "ottawa_out/")
+build_city("ottawa", ott, date(2022, 6, 1), date(2022, 6, 7), "ottawa_out/")
 ```
 
 Each writes `model.inp` (plus the model-ready datastore); open it in EPA SWMM 5 to run it.
