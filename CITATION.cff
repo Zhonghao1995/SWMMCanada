@@ -32,6 +32,20 @@ keywords:
   - open data
   - GIS
   - urban drainage
+preferred-citation:
+  type: article
+  title: "SWMMCanada: An Open-Source Service for Generating Ready-to-Run Urban Drainage Models Across Canada"
+  authors:
+    - family-names: Zhang
+      given-names: Zhonghao
+      orcid: "https://orcid.org/0009-0002-6253-6380"
+      affiliation: "University of Victoria"
+  year: 2026
+  doi: "10.31223/X5NR31"
+  url: "https://doi.org/10.31223/X5NR31"
+  publisher:
+    name: "EarthArXiv"
+  notes: "Preprint describing SWMMCanada."
 references:
   - type: article
     title: "Agentic SWMM: Auditable and Reproducible Stormwater Modelling Workflow with Agent Skills and Model Context Protocol"

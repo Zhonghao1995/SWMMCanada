@@ -8,6 +8,7 @@
   <a href="https://codecov.io/gh/Zhonghao1995/SWMMCanada"><img src="https://codecov.io/gh/Zhonghao1995/SWMMCanada/branch/main/graph/badge.svg" alt="codecov" /></a>
   <a href="https://github.com/Zhonghao1995/SWMMCanada/releases/latest"><img src="https://img.shields.io/github/v/release/Zhonghao1995/SWMMCanada?label=rel&color=1F6FEB" alt="latest release" /></a>
   <a href="https://doi.org/10.5281/zenodo.21058544"><img src="https://img.shields.io/badge/DOI-Zenodo-1F6FEB" alt="DOI 10.5281/zenodo.21058544" /></a>
+  <a href="https://doi.org/10.31223/X5NR31"><img src="https://img.shields.io/badge/preprint-EarthArXiv-4c9a2a" alt="Preprint on EarthArXiv (DOI 10.31223/X5NR31)" /></a>
   <a href="https://github.com/Zhonghao1995/SWMMCanada/pkgs/container/swmmcanada"><img src="https://img.shields.io/badge/ghcr.io-image-2496ED?logo=docker&logoColor=white" alt="Container image on GHCR" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT license" /></a>
   <a href="https://zhonghaoz.ca"><img src="https://img.shields.io/badge/built%20by-Zhonghao-FF7139" alt="Built by Zhonghao" /></a>
@@ -126,11 +127,15 @@ SWMMCanada is the **first half** of a closed loop: it turns an area into a compl
 
 ## Citation
 
-If you use SWMMCanada in your work, please cite it (APA):
+If you use SWMMCanada in your work, please cite the preprint (APA):
+
+> Zhang, Z. (2026). *SWMMCanada: An open-source service for generating ready-to-run urban drainage models across Canada* [Preprint]. EarthArXiv. https://doi.org/10.31223/X5NR31
+
+To cite a specific version of the software itself, also cite the archived release:
 
 > Zhang, Z. (2026). *SWMMCanada: ready-to-run EPA SWMM models anywhere in Canada from open data* (Version 0.1.1) [Computer software]. Zenodo. https://doi.org/10.5281/zenodo.21058544
 
-BibTeX and other formats are available via **Cite this repository** in the GitHub sidebar (generated from [`CITATION.cff`](CITATION.cff)). The DOI above is the *concept DOI* — it always resolves to the latest version.
+BibTeX and other formats are available via **Cite this repository** in the GitHub sidebar (generated from [`CITATION.cff`](CITATION.cff)) — it resolves to the preprint above. The Zenodo DOI is the *concept DOI* — it always resolves to the latest software version.
 
 ## License
 
