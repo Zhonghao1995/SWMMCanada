@@ -178,13 +178,22 @@ def main():
     out_root.mkdir(parents=True, exist_ok=True)
     todo = [(k, t, b) for (k, t, b) in CITIES if not args.only or k in args.only]
 
-    rows = []
+    # A partial re-run (--only, e.g. retrying one city after an upstream outage) merges
+    # into the existing table instead of clobbering the other cities' rows.
+    existing: dict = {}
+    csv_path = out_root / "city_table.csv"
+    if args.only and csv_path.exists():
+        with csv_path.open() as f:
+            existing = {r["city"]: r for r in csv.DictReader(f)}
+
     for i, (key, topology, bbox) in enumerate(todo, 1):
         print(f"[{i}/{len(todo)}] building {key} ...", flush=True)
         row = build_one(key, topology, bbox, out_root)
         print(f"    -> {row['status']} | J/C/O={row['junctions']}/{row['conduits']}/{row['outfalls']}"
               f" | cont={row['runoff_continuity_pct']}/{row['routing_continuity_pct']}", flush=True)
-        rows.append(row)
+        existing[key] = row
+
+    rows = [existing[k] for (k, _, _) in CITIES if k in existing]
 
     with (out_root / "city_table.csv").open("w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=COLUMNS)
