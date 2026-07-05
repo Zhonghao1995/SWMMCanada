@@ -106,6 +106,40 @@ exactly today's warning set (Ottawa's >50 m outlet-distance tail stays surfaced)
 future delineation change (DEM refinement, outlet rerouting) must move these baselines in a
 reviewed diff — it cannot silently degrade coverage.
 
+## Eight-city engine validation
+
+All eight real-network cities, built end-to-end from live open data on one fixed week
+(1–7 June 2022, ~1–2.6 km² fixed downtown AOIs) and run in EPA SWMM 5.2.4 — **zero engine
+errors in all eight**. One pinned script produces the whole table:
+`backend/.venv/bin/python backend/scripts/city_table.py` (figure:
+`backend/scripts/city_figure.py`).
+
+![Eight built storm networks](results/eight_city_networks.png)
+
+| City | Topology | km² | Junctions / conduits / outfalls | Subcatchments | Inverts gap-filled | Runoff / routing continuity (%) |
+|---|---|--:|:--:|--:|--:|:--:|
+| Victoria, BC | explicit node IDs | 1.36 | 508 / 514 / 30 | 767 | 7.5% | −0.001 / −0.59 |
+| Ottawa, ON | geometry-inferred | 2.61 | 619 / 630 / 73 | 2,461 | 15.9% | −0.027 / −0.20 |
+| London, ON | explicit node IDs | 0.91 | 187 / 188 / 14 | 352 | 3.6% | −0.023 / +0.05 |
+| Kitchener–Waterloo, ON | explicit manhole IDs | 0.90 | 454 / 456 / 23 | 341 | 0.4% | −0.085 / +0.99 |
+| Calgary, AB | geometry-inferred | 0.78 | 371 / 383 / 75 | 171 | 38.7% | −0.085 / +0.29 |
+| Surrey, BC | geometry-inferred | 0.81 | 159 / 160 / 23 | 243 | 1.2% | −0.006 / −0.01 |
+| Kelowna, BC | geometry-inferred | 0.80 | 144 / 145 / 20 | 161 | 9.3% | −0.009 / −20.6¹ |
+| Regina, SK | geometry-inferred | 0.79 | 247 / 247 / 17 | 428 | 14.2% | 0.0 / 0.0² |
+
+¹ Kelowna's routing imbalance is dominated by a single junction (−54% node continuity):
+the city publishes no node inverts (back-filled from pipe ends) and no rim elevations, and
+that structure floods a third of the wet inflow. Zero engine errors — reported as-is as a
+data-quality signal; an automatic adverse-invert validation check is future work.
+² The fixed week was dry at Regina's nearest ECCC station (0 mm), so continuity is
+trivially exact; engine execution is still verified.
+
+Runoff depths across all cities are systematically low for the rain received: daily-average
+forcing (a day's rain spread at ~0.1–0.5 mm/h) often falls below the continuous Hargreaves
+evaporation demand, so little reaches the pipes between events. That is the documented
+daily-forcing limitation, not a network defect — sub-daily forcing is a data increment, and
+design flows already use the minute-scale IDF curves.
+
 ## Victoria — fidelity to the source data
 
 Victoria publishes storm mains with explicit topology, invert elevations, diameters and
