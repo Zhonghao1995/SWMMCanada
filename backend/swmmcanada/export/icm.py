@@ -146,7 +146,11 @@ def _write_subcatchments(path: Path, ds, network, node_xy, crs: Optional[str],
                          lossy: List[LossyMapping], warnings: List[str]) -> Path:
     keep = {n.name for n in list(network.junctions) + list(network.outfalls)}
     cols: dict = {"sub_id": [], "node_id": [], "total_area": [], "slope": [],
-                  "dimension": [], "cn": [], "imp_pct": [], "prv_pct": [], "system_typ": []}
+                  "dimension": [], "cn": [], "imp_pct": [], "prv_pct": [], "system_typ": [],
+                  # ADR 0013 superset: Horton + Green-Ampt parameter sets ride along so any
+                  # ICM runoff-volume choice (SCS / Horton / GreenAmpt) has its numbers.
+                  "hort_f0": [], "hort_fc": [], "hort_decay": [],
+                  "ga_psi_mm": [], "ga_ksat": [], "ga_imd": []}
     geom = []
     placeholders = 0
     for s in ds.subcatchments:
@@ -164,6 +168,12 @@ def _write_subcatchments(path: Path, ds, network, node_xy, crs: Optional[str],
         cols["imp_pct"].append(float(s.pct_imperv))
         cols["prv_pct"].append(100.0 - float(s.pct_imperv))
         cols["system_typ"].append("storm")
+        cols["hort_f0"].append(float(s.horton_f0_mm_h))      # mm/h
+        cols["hort_fc"].append(float(s.horton_fc_mm_h))      # mm/h
+        cols["hort_decay"].append(float(s.horton_decay_1_h)) # 1/h
+        cols["ga_psi_mm"].append(float(s.ga_psi_mm))         # mm
+        cols["ga_ksat"].append(float(s.ga_ksat_mm_h))        # mm/h
+        cols["ga_imd"].append(float(s.ga_imd))               # fraction
         if s.polygon:
             geom.append(Polygon([(float(x), float(y)) for x, y in s.polygon]))
         else:
@@ -281,7 +291,11 @@ def _write_field_mapping(path: Path, lossy: List[LossyMapping]) -> Path:
         ("`total_area`", "`total_area` + `contributing_area`", "as-is (ha)"),
         ("`slope`", "`catchment_slope`", "already ÷100 (% → m/m)"),
         ("`dimension`", "`catchment_dimension`", "√(area/π), ICM's own convention (m)"),
-        ("`cn`", "`curve_number`", "**as-is — lossless** (unlike the MIKE+ Horton mapping)"),
+        ("`cn`", "`curve_number`", "**as-is — lossless** (SCS runoff volume model)"),
+        ("`hort_f0` / `hort_fc` / `hort_decay`", "Horton runoff-volume parameters",
+         "as-is (mm/h, mm/h, 1/h) — assign when choosing ICM's Horton model"),
+        ("`ga_psi_mm` / `ga_ksat` / `ga_imd`", "Green-Ampt runoff-volume parameters",
+         "as-is (mm, mm/h, fraction) — assign when choosing ICM's Green-Ampt model"),
         ("`imp_pct` / `prv_pct`", "`area_percent_1` / `area_percent_2`", "as-is (%)"),
         ("`system_typ`", "`system_type`", "as-is (`storm`)"),
     ]
@@ -324,7 +338,7 @@ classic InfoWorks toolchain).
 
 - `nodes.csv` — manholes + outfalls (`x,y` in the package CRS; levels m AD)
 - `conduits.csv` — circular conduits (**width/height in mm**, Manning `roughness_type=N`)
-- `subcatchments.shp` — subcatchment polygons + attributes (`cn` → `curve_number`, lossless)
+- `subcatchments.shp` — subcatchment polygons + attributes (`cn` → `curve_number`, lossless; Horton + Green-Ampt parameter sets included for those runoff-volume models)
 - `rain_infoworks.csv` — rainfall event in InfoWorks CSV format (one-click import)
 - `rain.csv` — plain `datetime,rainfall_mm` fallback
 - `field_mapping.md` — the mapping receipt **and** the lossy report

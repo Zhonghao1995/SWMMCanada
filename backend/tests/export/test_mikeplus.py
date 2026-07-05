@@ -43,6 +43,7 @@ def _datastore() -> ModelReadyDatastore:
     subcatchments = [
         SubcatchmentIn(name="S1", outlet_node="J1", area_ha=1.0, pct_imperv=40.0,
                        width_m=50.0, pct_slope=1.5, cn=80.0, n_imperv=0.01, n_perv=0.10,
+                       horton_f0_mm_h=127.0, horton_fc_mm_h=9.5, horton_decay_1_h=4.14,
                        polygon=_POLY),
         SubcatchmentIn(name="S2", outlet_node="J2", area_ha=2.0, pct_imperv=25.0,
                        width_m=80.0, pct_slope=2.0, cn=70.0, polygon=None),
@@ -89,6 +90,10 @@ def test_catchments_layer(tmp_path):
     s1 = gdf[gdf["MUID"] == "S1"].iloc[0]
     assert s1["ManMImp"] == pytest.approx(1.0 / 0.01)          # M = 1/n
     assert s1["Length"] == pytest.approx((1.0 * 10000.0) / 50.0)  # area_m2 / width
+    # ADR 0013: Horton parameters transfer DIRECTLY from the build's derived set
+    assert s1["HortMax"] == pytest.approx(127.0 / 3.6e6)       # mm/h -> m/s
+    assert s1["HortMin"] == pytest.approx(9.5 / 3.6e6)
+    assert s1["HortWet"] == pytest.approx(4.14 / 3600.0)       # 1/h -> 1/s
 
 
 def test_rain_csv_rows(tmp_path):
@@ -102,8 +107,11 @@ def test_rain_csv_rows(tmp_path):
 def test_lossy_reported(tmp_path):
     result = MikePlusExporter().export(_datastore(), tmp_path)
 
-    cn = [m for m in result.lossy if m.source == "cn"]
-    assert cn and cn[0].kind == "approximated"
+    method = [m for m in result.lossy if m.source.startswith("infiltration method")]
+    assert method and method[0].kind == "restructured"
+    dry = [m for m in result.lossy if m.target == "HortDry"]
+    assert dry and dry[0].kind == "approximated"
+    assert not [m for m in result.lossy if m.source == "cn"]   # CN heuristic is GONE
 
     zero = [m for m in result.lossy if m.source == "pct_zero"]
     assert zero and zero[0].kind == "dropped"
