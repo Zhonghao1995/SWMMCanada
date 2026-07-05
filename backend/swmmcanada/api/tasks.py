@@ -81,8 +81,9 @@ def run_task(task_id: str, aoi, start: date, end: date, store: TaskStore, workdi
 
 
 def _zip_package(result, ws: Path) -> Path:
+    # One zip, three formats: model.inp (SWMM) + mikeplus/ + icm/ ride along (ADR 0008/0012).
     pkg = Path(getattr(result, "package_dir", ws))
-    zip_path = Path(ws) / "swmm_model.zip"
+    zip_path = Path(ws) / "model_package.zip"
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
         for f in pkg.rglob("*"):
             if f.is_file() and f.name != zip_path.name:

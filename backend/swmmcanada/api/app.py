@@ -103,7 +103,7 @@ def create_app(*, pipeline=None, workdir=None, run_inline: bool = False) -> Fast
             raise HTTPException(404, "Unknown task.")
         if task.state != "SUCCEEDED" or not task.result_zip:
             raise HTTPException(409, "Result not ready.")
-        return FileResponse(str(task.result_zip), media_type="application/zip", filename="swmm_model.zip")
+        return FileResponse(str(task.result_zip), media_type="application/zip", filename="model_package.zip")
 
     @app.get("/api/v1/tasks/{task_id}/preview")
     def preview(task_id: str):

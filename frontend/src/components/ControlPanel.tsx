@@ -43,7 +43,8 @@ export default function ControlPanel() {
           <h1 className="text-lg font-semibold text-slate-800">SWMMCanada</h1>
         </div>
         <p className="mt-1 text-xs text-slate-500">
-          Draw or upload an area → build a SWMM model from Canadian open data.
+          Draw or upload an area. Get a ready-to-run drainage model from Canadian open data,
+          in SWMM, MIKE+ and InfoWorks ICM formats.
         </p>
       </header>
 
@@ -162,7 +163,7 @@ export default function ControlPanel() {
           className="flex w-full items-center justify-center gap-2 rounded-md bg-slate-800 px-3 py-2 text-sm font-medium text-white hover:bg-slate-900 disabled:opacity-40"
         >
           {busy ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} />}
-          {busy ? (job.stage ?? 'Building…') : 'Build SWMM model'}
+          {busy ? (job.stage ?? 'Building…') : 'Build model'}
         </button>
         {job.status !== 'idle' && (
           <div className="rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-600">
@@ -186,7 +187,7 @@ export default function ControlPanel() {
             {job.message && <div className="mt-1 text-slate-500">{job.message}</div>}
             {job.status === 'succeeded' && job.resultUrl && (
               <a href={job.resultUrl} className="mt-2 flex items-center gap-1 font-medium text-blue-600">
-                <Download size={14} /> Download model
+                <Download size={14} /> Download model package (SWMM, MIKE+, ICM)
               </a>
             )}
           </div>
@@ -217,7 +218,7 @@ export default function ControlPanel() {
       )}
 
       <footer className="mt-auto text-[10px] leading-relaxed text-slate-400">
-        SWMMCanada — the data-prep & serving layer for{' '}
+        SWMMCanada is the data-prep and model-building layer for{' '}
         <a
           href="https://github.com/Zhonghao1995/agentic-swmm-workflow"
           target="_blank"

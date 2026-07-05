@@ -157,7 +157,7 @@ export async function checkRainfall(bbox: Bbox, startDate: string, endDate: stri
       spanDays,
       station: best.name,
       daysWithData: best.days,
-      message: `${best.days} of ${spanDays} day(s) have ECCC rain records — gauge: ${best.name}.`,
+      message: `${best.days} of ${spanDays} day(s) have ECCC rain records (gauge: ${best.name}).`,
     }
   }
 
