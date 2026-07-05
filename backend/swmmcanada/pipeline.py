@@ -61,6 +61,16 @@ def _method_descriptor(sub_diag: Optional[dict]) -> MethodDescriptor:
     return MethodDescriptor("junction_voronoi", "nearest node service area", "low")
 
 
+def _infiltration_kwargs(infiltration) -> dict:
+    """BuildConfig kwargs for an optional infiltration override (ADR 0013): accepts an
+    InfiltrationModel or its string value; None keeps the config default (Horton)."""
+    if infiltration is None:
+        return {}
+    from swmmcanada.build.config import InfiltrationModel
+
+    return {"infiltration": InfiltrationModel(str(infiltration).upper())}
+
+
 def _validate_or_raise(network, subcatchments, aoi, method: MethodDescriptor, ws: Path,
                        delineation: Optional[dict] = None):
     """Validate the subcatchment model, always write validation.json into the package, and
@@ -230,6 +240,7 @@ def build_from_aoi(
     derive: bool = True,
     landcover_source=None,
     soil_source=None,
+    infiltration=None,
     report=None,
 ) -> BuildResult:
     def _r(stage: str, pct: int):
@@ -273,7 +284,8 @@ def build_from_aoi(
 
     # Head done (network producer = OSM synthesis); the shared build spine does the rest.
     method = _method_descriptor(sub_diag)
-    config = BuildConfig(out_dir=ws, start=start, end=end, coordinate_crs=utm_crs_for(aoi))
+    config = BuildConfig(out_dir=ws, start=start, end=end, coordinate_crs=utm_crs_for(aoi),
+                         **_infiltration_kwargs(infiltration))
     return _finish_build(
         ws, aoi, network, subcatchments,
         start=start, end=end, method=method, config=config,
@@ -295,7 +307,8 @@ def build_city(
     city, aoi, start: date, end: date, workspace, *,
     client=None,
     dem_source=None, climate_client=None, climate_buffer_deg: float = 0.3, derive: bool = True,
-    landcover_source=None, soil_source=None, subcatchment_method: str = "parcel", report=None,
+    landcover_source=None, soil_source=None, subcatchment_method: str = "parcel",
+    infiltration=None, report=None,
 ) -> BuildResult:
     """Build a SWMM model from a real municipal network (ADR 0004/0005/0006). ``city`` is a
     registry key ("victoria") or a ``CitySpec``; the spec supplies the city's fetch/build
@@ -374,7 +387,7 @@ def build_city(
     method = _method_descriptor(sub_diag)
     config = BuildConfig(out_dir=ws, start=start, end=end,
                          title=f"SWMMCanada ({spec.key} real network)",
-                         coordinate_crs=spec.sub_crs)
+                         coordinate_crs=spec.sub_crs, **_infiltration_kwargs(infiltration))
     return _finish_build(
         ws, aoi, network, subcatchments,
         start=start, end=end, method=method, config=config,

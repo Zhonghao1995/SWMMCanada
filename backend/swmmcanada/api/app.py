@@ -14,6 +14,7 @@ import os
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date
+from functools import partial
 from pathlib import Path
 from typing import Optional
 
@@ -23,6 +24,7 @@ from fastapi.responses import FileResponse
 from shapely.geometry import mapping as shp_mapping
 
 from swmmcanada.api.tasks import TaskStore, run_task
+from swmmcanada.build.config import InfiltrationModel
 from swmmcanada.geo import aoi_from_geojson, aoi_from_shapefile
 from swmmcanada.geo.errors import AOIOversizeError, GeoError
 from swmmcanada.pipeline import pipeline_for_aoi
@@ -84,6 +86,7 @@ def create_app(*, pipeline=None, workdir=None, run_inline: bool = False) -> Fast
         end_date: str = Form(...),
         polygon: Optional[str] = Form(None),
         file: Optional[UploadFile] = File(None),
+        infiltration: Optional[str] = Form(None),
     ):
         aoi = await _aoi_from_request(polygon, file)
         try:
@@ -93,12 +96,21 @@ def create_app(*, pipeline=None, workdir=None, run_inline: bool = False) -> Fast
             raise HTTPException(422, f"Bad date: {exc}")
         if end < start:
             raise HTTPException(422, "end_date is before start_date.")
+        if infiltration is not None:               # ADR 0013: build-time method choice
+            try:
+                infiltration = InfiltrationModel(infiltration.upper()).value
+            except ValueError:
+                raise HTTPException(
+                    422, f"Unknown infiltration method {infiltration!r} — "
+                         f"one of: {', '.join(m.value for m in InfiltrationModel)}")
 
         task_id = store.create()
         if pipeline is None:                       # auto-select the pathway by AOI location
             build_fn, mode = pipeline_for_aoi(aoi)
         else:                                      # explicit pipeline (tests / override)
             build_fn, mode = pipeline, "injected"
+        if infiltration is not None:               # bind only when asked, so injected test
+            build_fn = partial(build_fn, infiltration=infiltration)  # pipelines stay as-is
         args = (task_id, aoi, start, end, store, work_root, build_fn, mode)
         if run_inline:
             run_task(*args)

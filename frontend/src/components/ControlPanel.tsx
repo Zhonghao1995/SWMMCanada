@@ -1,6 +1,7 @@
 import { useMemo, useRef } from 'react'
 import { AlertTriangle, Check, CloudRain, Download, Loader2, MapPin, Play, Trash2, Upload } from 'lucide-react'
 import { useStore } from '../store'
+import type { InfiltrationMethod } from '../lib/api'
 import logoMark from '../assets/logo-mark.png'
 
 export default function ControlPanel() {
@@ -17,6 +18,8 @@ export default function ControlPanel() {
   const clearAoi = useStore((s) => s.clearAoi)
   const setUpload = useStore((s) => s.setUpload)
   const setDates = useStore((s) => s.setDates)
+  const infiltration = useStore((s) => s.infiltration)
+  const setInfiltration = useStore((s) => s.setInfiltration)
   const rainfall = useStore((s) => s.rainfall)
   const uploadError = useStore((s) => s.uploadError)
   const checkRainfall = useStore((s) => s.checkRainfall)
@@ -164,6 +167,18 @@ export default function ControlPanel() {
 
       <section className="space-y-2">
         <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-400">3 · Build</h2>
+        <label className="block text-sm text-slate-600">
+          <span className="mb-1 block text-[11px] text-slate-400">Infiltration method</span>
+          <select
+            value={infiltration}
+            onChange={(e) => setInfiltration(e.target.value as InfiltrationMethod)}
+            className="w-full rounded-md border border-slate-300 px-2 py-1"
+          >
+            <option value="HORTON">Horton (default — municipal practice)</option>
+            <option value="CURVE_NUMBER">SCS Curve Number</option>
+            <option value="GREEN_AMPT">Green-Ampt (soil-texture based)</option>
+          </select>
+        </label>
         <button
           onClick={submit}
           disabled={!aoi || busy}

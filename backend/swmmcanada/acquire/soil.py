@@ -35,6 +35,10 @@ class SoilResult:
     hsg_raster: Path            # GeoTIFF of HSG codes (1=A, 2=B, 3=C, 4=D), clipped to bbox
     crs: str                   # CRS of the written raster (default "EPSG:3979")
     hsg_to_cn: Dict[str, int]  # {"A": .., "B": .., "C": .., "D": ..} default urban CNs
+    # USDA texture-class codes (derive.infiltration.TEXTURE_CODE), clipped like the HSG
+    # raster. None when the source publishes only HSG (HYSOGs / constant fallback) — the
+    # Green-Ampt derivation then uses the HSG-representative tier (ADR 0013).
+    texture_raster: Optional[Path] = None
 
 
 @dataclass(frozen=True)
@@ -42,6 +46,7 @@ class SoilAsset:
     """A chosen HSG COG to read, returned by a SoilSource."""
     hsg_cog_href: str
     crs: str                   # the COG's native CRS (e.g. "EPSG:3979")
+    texture_cog_href: Optional[str] = None   # optional USDA texture-code raster (ADR 0013)
 
 
 class SoilSource(Protocol):
@@ -70,10 +75,16 @@ def acquire_soil(
     hsg_path = ws / "hsg.tif"
     _clip_cog_to_bbox(asset.hsg_cog_href, aoi_bbox_wgs84, hsg_path, out_crs)
 
+    texture_path = None
+    if asset.texture_cog_href:   # same categorical clip as HSG (codes must not interpolate)
+        texture_path = ws / "soil_texture.tif"
+        _clip_cog_to_bbox(asset.texture_cog_href, aoi_bbox_wgs84, texture_path, out_crs)
+
     return SoilResult(
         hsg_raster=hsg_path,
         crs=out_crs,
         hsg_to_cn=dict(DEFAULT_HSG_TO_CN),
+        texture_raster=texture_path,
     )
 
 

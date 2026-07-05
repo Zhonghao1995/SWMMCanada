@@ -322,6 +322,10 @@ def _read_subcatchments(gpkg: Path) -> List[SubcatchmentIn]:
                 pct_zero=float(r["pct_zero"]),
                 polygon=polygon,
                 system=str(r.get("system") or "storm_minor"),
+                # ADR 0013 superset columns; older datastores lack them -> model defaults
+                **{f: float(r[f]) for f in (
+                    "horton_f0_mm_h", "horton_fc_mm_h", "horton_decay_1_h",
+                    "ga_psi_mm", "ga_ksat_mm_h", "ga_imd") if r.get(f) is not None},
             )
         )
     return subs

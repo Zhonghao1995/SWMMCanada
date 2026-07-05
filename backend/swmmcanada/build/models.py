@@ -52,6 +52,15 @@ class SubcatchmentIn:
     pct_zero: float = 25.0
     polygon: Optional[List[Tuple[float, float]]] = None
     system: str = "storm_minor"
+    # Infiltration superset (ADR 0013): derive fills all three parameter sets; the writer
+    # emits whichever the build's InfiltrationModel switch asks for. Defaults = HSG-B /
+    # loam rows so a no-derive build still writes a valid model under any method.
+    horton_f0_mm_h: float = 101.6
+    horton_fc_mm_h: float = 5.7
+    horton_decay_1_h: float = 4.14
+    ga_psi_mm: float = 88.9
+    ga_ksat_mm_h: float = 6.6
+    ga_imd: float = 0.434
 
 
 @dataclass(frozen=True)

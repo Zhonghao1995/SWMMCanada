@@ -36,6 +36,10 @@ CONDUIT_FIELDS = ["name", "from_node", "to_node", "length_m", "diameter_m", "rou
 SUBCATCHMENT_FIELDS = [
     "name", "outlet_node", "area_ha", "pct_imperv", "width_m", "pct_slope", "cn",
     "n_imperv", "n_perv", "s_imperv_mm", "s_perv_mm", "pct_zero", "system",
+    # Infiltration superset (ADR 0013) — all three methods' parameters ride along so
+    # switching method is a re-export, not a rebuild.
+    "horton_f0_mm_h", "horton_fc_mm_h", "horton_decay_1_h",
+    "ga_psi_mm", "ga_ksat_mm_h", "ga_imd",
 ]
 
 # netCDF (CF) names. Rainfall, temperature, and evaporation are the climate-forcing triad

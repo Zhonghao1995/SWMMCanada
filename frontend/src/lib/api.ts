@@ -14,7 +14,11 @@ export interface SubmitParams {
   aoi: Aoi
   startDate: string
   endDate: string
+  infiltration: InfiltrationMethod
 }
+
+// ADR 0013: build-time infiltration choice; Horton is the default (municipal practice).
+export type InfiltrationMethod = 'HORTON' | 'CURVE_NUMBER' | 'GREEN_AMPT'
 
 const API = `${import.meta.env.VITE_API_URL ?? ''}/api/v1`
 
@@ -63,6 +67,7 @@ export async function submitTask(params: SubmitParams): Promise<{ taskId: string
   const body = new FormData()
   body.append('start_date', params.startDate)
   body.append('end_date', params.endDate)
+  body.append('infiltration', params.infiltration)
   if (params.aoi.source === 'upload') body.append('file', params.aoi.file)
   else body.append('polygon', JSON.stringify(params.aoi.polygon))
 

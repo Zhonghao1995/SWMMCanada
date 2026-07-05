@@ -36,6 +36,7 @@ from shapely.ops import transform as shp_transform
 from swmmcanada.acquire.landcover import LandcoverResult
 from swmmcanada.acquire.soil import SoilResult
 from swmmcanada.build.models import SubcatchmentIn
+from swmmcanada.derive import infiltration
 
 # HYSOGs250m code -> HSG letter. Dual (shallow-water-table) codes 11-14 reduce to their
 # DRAINED group by default (A/D->A, B/D->B, C/D->C, D/D->D); spec 07 §3.0.
@@ -72,10 +73,23 @@ def derive_parameters(
         )
 
         pct_imperv = _impervious_pct(poly_4326, landcover, fallback=sub.pct_imperv)
-        cn = _curve_number(poly_4326, soil, fallback=sub.cn)
         pct_slope = _mean_slope_pct(poly_4326, dem_path, fallback=sub.pct_slope)
 
-        out.append(replace(sub, pct_imperv=pct_imperv, cn=cn, pct_slope=pct_slope))
+        # Infiltration superset (ADR 0013): ONE zonal pass gives the dominant HSG, from
+        # which all three parameter sets derive; Green-Ampt prefers the real texture
+        # raster when the soil source shipped one (SoilGrids), else the HSG tier.
+        letter = _dominant_hsg(poly_4326, soil)
+        cn = _curve_number(letter, soil, fallback=sub.cn)
+        f0, fc, decay = infiltration.horton_for_hsg(letter)
+        texture = _dominant_texture(poly_4326, soil)
+        psi, ksat, imd = (infiltration.green_ampt_for_texture(texture) if texture
+                          else infiltration.green_ampt_for_hsg(letter))
+
+        out.append(replace(
+            sub, pct_imperv=pct_imperv, cn=cn, pct_slope=pct_slope,
+            horton_f0_mm_h=f0, horton_fc_mm_h=fc, horton_decay_1_h=decay,
+            ga_psi_mm=psi, ga_ksat_mm_h=ksat, ga_imd=imd,
+        ))
     return out
 
 
@@ -109,29 +123,43 @@ def _impervious_pct(poly_4326, landcover: LandcoverResult, *, fallback: float) -
     return float(100.0 * total / count)
 
 
-def _curve_number(poly_4326, soil: SoilResult, *, fallback: float) -> float:
-    """CN from the dominant (majority) HSG code within the polygon."""
-    with rasterio.open(soil.hsg_raster) as src:
+def _majority_code(raster_path, poly_4326, decodable: set) -> Optional[int]:
+    """Majority categorical code within the polygon, ignoring nodata and undecodable codes."""
+    with rasterio.open(raster_path) as src:
         data, _ = _mask_to_polygon(src, poly_4326)
         if data is None:
-            return fallback
+            return None
         nodata = src.nodata
 
     flat = data.ravel()
     if nodata is not None:
         flat = flat[flat != nodata]
-    # Drop codes we cannot decode to an HSG letter (e.g. HYSOGs 255 NoData).
-    decodable = np.array([c for c in flat if int(c) in _HSG_CODE_TO_LETTER], dtype=flat.dtype)
-    if decodable.size == 0:
-        return fallback
+    keep = np.array([c for c in flat if int(c) in decodable], dtype=flat.dtype)
+    if keep.size == 0:
+        return None
+    codes, counts = np.unique(keep, return_counts=True)
+    return int(codes[int(np.argmax(counts))])
 
-    codes, counts = np.unique(decodable, return_counts=True)
-    dominant_code = int(codes[int(np.argmax(counts))])
-    letter = _HSG_CODE_TO_LETTER[dominant_code]
-    cn = soil.hsg_to_cn.get(letter)
-    if cn is None:
-        return fallback
-    return float(cn)
+
+def _dominant_hsg(poly_4326, soil: SoilResult) -> Optional[str]:
+    """Dominant (majority) HSG letter within the polygon, or None outside coverage."""
+    code = _majority_code(soil.hsg_raster, poly_4326, set(_HSG_CODE_TO_LETTER))
+    return _HSG_CODE_TO_LETTER[code] if code is not None else None
+
+
+def _dominant_texture(poly_4326, soil: SoilResult) -> Optional[str]:
+    """Dominant USDA texture class within the polygon (ADR 0013), when the soil source
+    published a texture raster; None otherwise."""
+    if not soil.texture_raster:
+        return None
+    code = _majority_code(soil.texture_raster, poly_4326, set(infiltration.CODE_TEXTURE))
+    return infiltration.CODE_TEXTURE[code] if code is not None else None
+
+
+def _curve_number(letter: Optional[str], soil: SoilResult, *, fallback: float) -> float:
+    """CN from the dominant HSG letter (majority already taken by the caller)."""
+    cn = soil.hsg_to_cn.get(letter) if letter else None
+    return float(cn) if cn is not None else fallback
 
 
 def _mean_slope_pct(poly_4326, dem_path: "Path | str", *, fallback: float) -> float:

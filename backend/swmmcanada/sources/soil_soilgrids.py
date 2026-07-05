@@ -35,6 +35,25 @@ def texture_to_hsg(clay_gkg, sand_gkg):
     return hsg.astype("uint8")
 
 
+def texture_classes(clay_gkg, sand_gkg):
+    """SoilGrids texture (g/kg) → USDA texture-class code raster (ADR 0013;
+    codes = derive.infiltration.TEXTURE_CODE, 255 = NoData). Vectorised over the small
+    class count: one boolean mask per class beats a per-pixel Python loop."""
+    from swmmcanada.derive.infiltration import TEXTURE_CODE, usda_texture_class
+
+    clay = np.asarray(clay_gkg, dtype="float64") / 10.0   # g/kg → %
+    sand = np.asarray(sand_gkg, dtype="float64") / 10.0
+    out = np.full(clay.shape, 255, dtype="uint8")
+    valid = ~((np.asarray(clay_gkg) <= 0) & (np.asarray(sand_gkg) <= 0))
+    # Classify the distinct (clay, sand) pairs actually present (SoilGrids tiles repeat
+    # values heavily), then paint each class code back onto the raster.
+    pairs = {(float(c), float(s)) for c, s in zip(clay[valid].ravel(), sand[valid].ravel())}
+    for c, s in pairs:
+        code = TEXTURE_CODE[usda_texture_class(c, s)]
+        out[valid & (clay == c) & (sand == s)] = code
+    return out
+
+
 class SoilGridsSource:
     def __init__(self, timeout: float = 90.0, depth: str = "0-5cm"):
         self.timeout = timeout
@@ -63,4 +82,11 @@ class SoilGridsSource:
         profile.update(dtype="uint8", count=1, nodata=255)
         with rasterio.open(path, "w", **profile) as dst:
             dst.write(hsg, 1)
-        return SoilAsset(hsg_cog_href=path, crs="EPSG:4326")
+        # ADR 0013: the SAME clay/sand fetch also yields the USDA texture classes Green-Ampt
+        # wants — classify per pixel and ship a second categorical raster instead of
+        # discarding the texture once HSG is derived.
+        fd, tex_path = tempfile.mkstemp(suffix="_soilgrids_texture.tif")
+        os.close(fd)
+        with rasterio.open(tex_path, "w", **profile) as dst:
+            dst.write(texture_classes(clay, sand), 1)
+        return SoilAsset(hsg_cog_href=path, crs="EPSG:4326", texture_cog_href=tex_path)
