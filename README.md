@@ -88,7 +88,7 @@ backend/swmmcanada/      # Python pipeline: open data -> SWMM model
   derive/      clip + zonal stats -> subcatchment parameters
   build/       assemble + validate the SWMM .inp
   datastore/   model-ready datastore (GeoPackage + netCDF + JSON)
-  export/      model exporters reading the datastore: SWMM · MIKE+ CS import package · ICM (scaffold)
+  export/      model exporters reading the datastore: SWMM · MIKE+ CS import package · InfoWorks ICM ODIC package
   api/         FastAPI async tasks API
   pipeline.py  build_from_aoi · build_from_<city> (8 real-network cities)
 
@@ -105,10 +105,11 @@ Every build ships one result package:
 - **`model.inp`** — runs in EPA SWMM 5.2, with snowmelt whenever temperature data exists (plus `manifest.json`);
 - **`datastore/`** — the shareable model-ready datastore (GeoPackage network + netCDF/CF forcing + JSON provenance) that every export target reads from;
 - **`mikeplus/`** — a **DHI MIKE+ Collection System import package**: `nodes` / `links` / `catchments` shapefiles + `rain.csv` + a field-mapping sheet, with import steps and every approximation documented inside (`README.md` / `field_mapping.md`);
+- **`icm/`** — an **InfoWorks ICM Open Data Import Centre package**: `nodes.csv` / `conduits.csv` named for ODIC **Auto-Map**, `subcatchments.shp`, an InfoWorks-format rainfall event CSV (+ plain fallback), and the same field-mapping/lossy-report convention — the SWMM curve number transfers losslessly (`curve_number`);
 - **`validation.json`** — the model's health report: structural checks, the delineation method used, and its confidence;
 - **`preview/`** — map layers for the web UI.
 
-More export targets plug into the same interface (InfoWorks ICM is scaffolded).
+More export targets plug into the same interface.
 
 ## Run, calibrate & quantify uncertainty with Agentic SWMM
 

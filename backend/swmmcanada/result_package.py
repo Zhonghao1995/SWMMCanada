@@ -2,8 +2,8 @@
 build ships — the hand-off artifact aiswmm and users consume.
 
 Mirrors the ``datastore/schema.py`` convention: constants, so writers (pipeline) and
-shippers (api/tasks) agree by construction. ``mikeplus/`` is optional BY DESIGN — ADR 0008's
-graceful degradation means a failed MIKE+ export must never fail the package."""
+shippers (api/tasks) agree by construction. ``mikeplus/`` and ``icm/`` are optional BY
+DESIGN — ADR 0008/0012 graceful degradation: a failed secondary export never fails the package."""
 from pathlib import Path
 from typing import List
 
@@ -17,6 +17,7 @@ DATASTORE_DIR = "datastore"
 PREVIEW_DIR = "preview"
 PREVIEW_GEOJSON = f"{PREVIEW_DIR}/network.geojson"
 MIKEPLUS_DIR = "mikeplus"          # optional: ADR 0008 graceful degradation
+ICM_DIR = "icm"                    # optional: ADR 0012, same graceful degradation
 
 # Paths (relative to the package root) without which the package is NOT shippable.
 REQUIRED: List[str] = [

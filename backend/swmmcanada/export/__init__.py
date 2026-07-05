@@ -2,10 +2,10 @@
 
 The datastore is the hub (ADR 0003/0007); each exporter is a reader off it. SWMM stays the
 primary build path and is exposed here via a thin adapter; MIKE+ is the first non-SWMM target;
-InfoWorks ICM is a scaffold (issue #6).
+InfoWorks ICM is the second (ODIC import package, ADR 0012).
 """
 from swmmcanada.export.base import ExportResult, LossyMapping, ModelExporter
-from swmmcanada.export.icm import IcmExporter
+from swmmcanada.export.icm import IcmExporter, export_icm
 from swmmcanada.export.mikeplus import MikePlusExporter, export_mikeplus
 from swmmcanada.export.swmm import SwmmExporter
 
@@ -17,4 +17,5 @@ __all__ = [
     "MikePlusExporter",
     "export_mikeplus",
     "IcmExporter",
+    "export_icm",
 ]

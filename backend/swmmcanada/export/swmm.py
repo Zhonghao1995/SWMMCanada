@@ -10,7 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from swmmcanada.build import build_model
-from swmmcanada.datastore.core import _build_config_from_dict
+from swmmcanada.datastore import build_config_from_dict
 from swmmcanada.export.base import ExportResult
 
 
@@ -20,7 +20,7 @@ class SwmmExporter:
     target = "swmm"
 
     def export(self, ds, out_dir) -> ExportResult:
-        config = _build_config_from_dict(ds.config, out_dir)
+        config = build_config_from_dict(ds.config, out_dir)
         res = build_model(
             network=ds.network,
             subcatchments=ds.subcatchments,
