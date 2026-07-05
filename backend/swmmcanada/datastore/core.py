@@ -402,7 +402,7 @@ def build_from_datastore(datastore_dir, out_dir) -> BuildResult:
     sufficient hand-off artifact. ``out_dir`` is the build target (the datastore's stored
     config carries everything except the runtime out_dir)."""
     ds = read_datastore(datastore_dir)
-    config = _build_config_from_dict(ds.config, out_dir)
+    config = build_config_from_dict(ds.config, out_dir)
     return build_model(
         network=ds.network,
         subcatchments=ds.subcatchments,
@@ -413,7 +413,9 @@ def build_from_datastore(datastore_dir, out_dir) -> BuildResult:
     )
 
 
-def _build_config_from_dict(cfg: dict, out_dir) -> BuildConfig:
+def build_config_from_dict(cfg: dict, out_dir) -> BuildConfig:
+    """Reconstruct a BuildConfig from the datastore's stored config dict — the public
+    seam exporters use (ADR 0008/0012), so none of them parses the JSON shape itself."""
     return BuildConfig(
         out_dir=out_dir,
         start=date.fromisoformat(cfg["start"]),

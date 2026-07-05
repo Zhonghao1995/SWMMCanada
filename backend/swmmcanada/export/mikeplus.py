@@ -13,13 +13,14 @@ macOS wheel, so rainfall is emitted as CSV here and the field-mapping sheet says
 """
 from __future__ import annotations
 
-import csv
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 import geopandas as gpd
 from shapely.geometry import LineString, Point, Polygon
 
+from swmmcanada.build.models import filter_system
+from swmmcanada.export._shared import node_lookup, placeholder_square, to_crs, write_rain_csv
 from swmmcanada.export.base import ExportResult, LossyMapping
 
 # Horton infiltration constants (m/s) for the CN→Horton approximation (ADR 0008 §4). f0/wet/
@@ -59,8 +60,8 @@ class MikePlusExporter:
         out.mkdir(parents=True, exist_ok=True)
 
         crs = ds.config.get("coordinate_crs")  # e.g. "EPSG:32610"; None → keep EPSG:4326
-        network = _storm_only(ds.network)   # v1 exports the storm system only (ADR 0011)
-        node_xy = _node_lookup(network)     # name → (lon, lat) over junctions + outfalls
+        network = filter_system(ds.network)  # v1 exports the storm system only (ADR 0011)
+        node_xy = node_lookup(network)      # name → (lon, lat) over junctions + outfalls
 
         lossy: List[LossyMapping] = list(_hydrology_lossy())
         warnings: List[str] = []
@@ -69,7 +70,7 @@ class MikePlusExporter:
         files.append(_write_nodes(out / "nodes.shp", network, crs))
         files.append(_write_links(out / "links.shp", network, node_xy, crs, warnings))
         files.append(_write_catchments(out / "catchments.shp", ds, node_xy, crs, lossy, warnings))
-        files.append(_write_rain(out / "rain.csv", ds.rain))
+        files.append(write_rain_csv(out / "rain.csv", ds.rain))
         files.append(_write_field_mapping(out / "field_mapping.md", lossy))
         files.append(_write_readme(out / "README.md"))
 
@@ -88,30 +89,6 @@ def export_mikeplus(datastore_dir, out_dir) -> ExportResult:
 # --------------------------------------------------------------------------- #
 # geometry helpers
 # --------------------------------------------------------------------------- #
-def _storm_only(network):
-    """The storm-minor subgraph — MIKE+ CS v1 exports the storm system; other tagged
-    systems (sanitary, ADR 0011) are omitted and noted in the field-mapping sheet."""
-    from swmmcanada.build.models import NetworkIn
-
-    keep = lambda e: getattr(e, "system", "storm_minor") == "storm_minor"
-    return NetworkIn(junctions=[j for j in network.junctions if keep(j)],
-                     outfalls=[o for o in network.outfalls if keep(o)],
-                     conduits=[c for c in network.conduits if keep(c)])
-
-
-def _node_lookup(network) -> Dict[str, Tuple[float, float]]:
-    """name → (lon, lat) over junctions + outfalls (link endpoints + catchment placeholders)."""
-    xy: Dict[str, Tuple[float, float]] = {}
-    for n in list(network.junctions) + list(network.outfalls):
-        xy[n.name] = (float(n.x), float(n.y))
-    return xy
-
-
-def _to_crs(gdf: gpd.GeoDataFrame, crs: Optional[str]) -> gpd.GeoDataFrame:
-    """Reproject 4326→``crs`` when set so ``.to_file`` writes a matching ``.prj``."""
-    return gdf.to_crs(crs) if crs else gdf
-
-
 # --------------------------------------------------------------------------- #
 # shapefile writers  (DBF column names ≤ 10 chars)
 # --------------------------------------------------------------------------- #
@@ -137,7 +114,7 @@ def _write_nodes(path: Path, network, crs: Optional[str]) -> Path:
          "Diameter": diam},
         geometry=geom, crs="EPSG:4326",
     )
-    _to_crs(gdf, crs).to_file(path)
+    to_crs(gdf, crs).to_file(path)
     return path
 
 
@@ -159,7 +136,7 @@ def _write_links(path: Path, network, node_xy, crs: Optional[str], warnings: Lis
          "Diameter": diam, "ManningM": mann},
         geometry=geom, crs="EPSG:4326",
     )
-    _to_crs(gdf, crs).to_file(path)
+    to_crs(gdf, crs).to_file(path)
     return path
 
 
@@ -201,7 +178,7 @@ def _write_catchments(path: Path, ds, node_xy, crs: Optional[str],
         if s.polygon:
             geom.append(Polygon([(float(x), float(y)) for x, y in s.polygon]))
         else:  # keep the layer all-Polygon: synthesise a square from area at the outlet
-            geom.append(_placeholder_square(area_m2, node_xy.get(s.outlet_node)))
+            geom.append(placeholder_square(area_m2, node_xy.get(s.outlet_node)))
             placeholders += 1
 
     if placeholders:
@@ -211,40 +188,13 @@ def _write_catchments(path: Path, ds, node_xy, crs: Optional[str],
         ))
 
     gdf = gpd.GeoDataFrame(cols, geometry=geom, crs="EPSG:4326")
-    _to_crs(gdf, crs).to_file(path)
+    to_crs(gdf, crs).to_file(path)
     return path
-
-
-def _placeholder_square(area_m2: float, center_lonlat: Optional[Tuple[float, float]]) -> Polygon:
-    """A square of side √area centred on the outlet node, built in 4326 (reprojected with
-    the layer). Falls back to origin if the outlet node coordinate is unknown.
-
-    The side is derived in metres but drawn as a degree offset — placeholder geometry only,
-    never used for computation (``Area``/``Length`` come from the authoritative attributes).
-    """
-    lon, lat = center_lonlat if center_lonlat else (0.0, 0.0)
-    half_deg = (area_m2 ** 0.5) / 111_320.0 / 2.0  # ~metres per degree at the equator
-    return Polygon([
-        (lon - half_deg, lat - half_deg),
-        (lon + half_deg, lat - half_deg),
-        (lon + half_deg, lat + half_deg),
-        (lon - half_deg, lat + half_deg),
-    ])
 
 
 # --------------------------------------------------------------------------- #
 # rainfall + docs
 # --------------------------------------------------------------------------- #
-def _write_rain(path: Path, rain) -> Path:
-    """Two-column CSV (``datetime,rainfall_mm``, ISO datetimes). dfs0 deferred (ADR 0008)."""
-    with path.open("w", newline="") as fh:
-        w = csv.writer(fh)
-        w.writerow(["datetime", "rainfall_mm"])
-        for ts, mm in zip(rain.timestamps, rain.precip_mm):
-            w.writerow([ts.isoformat(), float(mm)])
-    return path
-
-
 def _hydrology_lossy() -> List[LossyMapping]:
     """The datastore→MIKE+ Model B losses that always apply (ADR 0008 §4), independent of
     geometry. Placeholder-polygon entries are appended per-catchment separately."""

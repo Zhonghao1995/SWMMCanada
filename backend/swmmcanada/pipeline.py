@@ -149,6 +149,20 @@ def _export_mikeplus_safe(ws: Path) -> None:
         (target / "EXPORT_FAILED.txt").write_text(f"MIKE+ export failed: {exc!r}\n")
 
 
+def _export_icm_safe(ws: Path) -> None:
+    """Emit the InfoWorks ICM ODIC import package into ``ws/icm`` (ADR 0012). Same contract
+    as the MIKE+ exporter: produced on every build, never load-bearing — a failure is noted
+    into the folder, the primary SWMM .inp / datastore are never blocked."""
+    try:
+        from swmmcanada.export import export_icm
+
+        export_icm(ws / result_package.DATASTORE_DIR, ws / result_package.ICM_DIR)
+    except Exception as exc:  # noqa: BLE001 — ICM export must never break the build
+        target = ws / result_package.ICM_DIR
+        target.mkdir(parents=True, exist_ok=True)
+        (target / "EXPORT_FAILED.txt").write_text(f"ICM export failed: {exc!r}\n")
+
+
 def _finish_build(
     ws: Path, aoi, network, subcatchments, *, start: date, end: date, method,
     config: BuildConfig, extra_provenance: dict, climate_client, climate_buffer_deg: float,
@@ -192,6 +206,7 @@ def _finish_build(
     )
     result = build_from_datastore(ws / result_package.DATASTORE_DIR, ws)
     _export_mikeplus_safe(ws)  # ADR 0008: MIKE+ CS package — every build, graceful
+    _export_icm_safe(ws)  # ADR 0012: ICM ODIC package — every build, graceful
     _export_observed_safe(ws, aoi, start, end)  # observed flow (HYDAT) — real data when present
 
     # Map preview: GeoJSON of the model geometry for the frontend's layers.

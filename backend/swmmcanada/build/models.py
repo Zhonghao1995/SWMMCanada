@@ -61,6 +61,15 @@ class NetworkIn:
     conduits: List[ConduitIn]
 
 
+def filter_system(network: "NetworkIn", system: str = "storm_minor") -> "NetworkIn":
+    """The subgraph of one tagged drainage system (ADR 0011) — the shared per-system view
+    exporters consume (MIKE+, ICM), so no exporter re-implements the tag filter."""
+    keep = lambda e: getattr(e, "system", "storm_minor") == system
+    return NetworkIn(junctions=[j for j in network.junctions if keep(j)],
+                     outfalls=[o for o in network.outfalls if keep(o)],
+                     conduits=[c for c in network.conduits if keep(c)])
+
+
 @dataclass(frozen=True)
 class RainfallSeries:
     timestamps: List[datetime]
