@@ -25,7 +25,9 @@ class BuildConfig:
     end: date
     title: str = "SWMMCanada model"
     flow_units: FlowUnits = FlowUnits.CMS
-    infiltration: InfiltrationModel = InfiltrationModel.CURVE_NUMBER
+    # ADR 0013: default = Horton (municipal engineering practice; MIKE+ native).
+    # CN / Green-Ampt selectable; derive stores all three parameter sets regardless.
+    infiltration: InfiltrationModel = InfiltrationModel.HORTON
     routing_model: str = "DYNWAVE"          # FLOW_ROUTING
     rain_interval: timedelta = timedelta(hours=1)
     rain_format: str = "VOLUME"             # depth (mm) per interval

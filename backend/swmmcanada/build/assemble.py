@@ -20,6 +20,8 @@ from swmm_api.input_file.sections import (
     EvaporationSection,
     Infiltration,
     InfiltrationCurveNumber,
+    InfiltrationGreenAmpt,
+    InfiltrationHorton,
     Junction,
     OptionSection,
     Outfall,
@@ -33,7 +35,7 @@ from swmm_api.input_file.sections import (
 )
 from swmm_api.input_file.sections.generic_section import TemperatureSection
 
-from swmmcanada.build.config import BuildConfig
+from swmmcanada.build.config import BuildConfig, InfiltrationModel
 from swmmcanada.build.models import (
     EvaporationSeries,
     NetworkIn,
@@ -153,11 +155,22 @@ def assemble_inp(
         subareas.add_obj(
             SubArea(s.name, s.n_imperv, s.n_perv, s.s_imperv_mm, s.s_perv_mm, s.pct_zero)
         )
-        infil.add_obj(
-            InfiltrationCurveNumber(
+        # ADR 0013: one switch, three parameter-row shapes — the row MUST match
+        # [OPTIONS] INFILTRATION (a mismatched pair mis-reads columns in the engine).
+        if config.infiltration is InfiltrationModel.HORTON:
+            infil.add_obj(InfiltrationHorton(
+                s.name, rate_max=s.horton_f0_mm_h, rate_min=s.horton_fc_mm_h,
+                decay=s.horton_decay_1_h, time_dry=7, volume_max=0,
+            ))
+        elif config.infiltration is InfiltrationModel.GREEN_AMPT:
+            infil.add_obj(InfiltrationGreenAmpt(
+                s.name, suction_head=s.ga_psi_mm, hydraulic_conductivity=s.ga_ksat_mm_h,
+                moisture_deficit_init=s.ga_imd,
+            ))
+        else:
+            infil.add_obj(InfiltrationCurveNumber(
                 s.name, curve_no=s.cn, hydraulic_conductivity=0.5, time_dry=7
-            )
-        )
+            ))
     inp[SEC.SUBCATCHMENTS] = subs
     inp[SEC.SUBAREAS] = subareas
     inp[SEC.INFILTRATION] = infil

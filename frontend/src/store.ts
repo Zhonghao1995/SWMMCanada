@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import type { Feature, FeatureCollection, Polygon, Position } from 'geojson'
 import type { Aoi, JobProgress } from './types'
 import { checkRainfall as apiCheckRainfall, fetchPreview, pollTask, previewAoi, submitTask } from './lib/api'
+import type { InfiltrationMethod } from './lib/api'
 import type { Bbox, RainfallCheck } from './lib/api'
 
 export type LayerKey = 'subcatchments' | 'conduits' | 'junctions'
@@ -18,6 +19,7 @@ interface AppState {
   draft: Position[] // in-progress polygon vertices [lng, lat]
   startDate: string
   endDate: string
+  infiltration: InfiltrationMethod // ADR 0013: pervious-area loss model for the build
   job: JobProgress
   preview: FeatureCollection | null // model geometry (network + subcatchments)
   layers: Record<LayerKey, boolean>
@@ -31,6 +33,7 @@ interface AppState {
   clearAoi: () => void
   setUpload: (file: File) => Promise<void>
   setDates: (start: string, end: string) => void
+  setInfiltration: (method: InfiltrationMethod) => void
   toggleLayer: (key: LayerKey) => void
   checkRainfall: () => Promise<void>
   submit: () => Promise<void>
@@ -90,6 +93,7 @@ export const useStore = create<AppState>((set, get) => ({
   draft: [],
   startDate: '2020-01-01',
   endDate: '2020-01-07', // default to a 1-week window
+  infiltration: 'HORTON', // engineering-practice default (ADR 0013)
   job: { status: 'idle' },
   preview: null,
   layers: DEFAULT_LAYERS,
@@ -133,6 +137,7 @@ export const useStore = create<AppState>((set, get) => ({
     }
   },
   setDates: (startDate, endDate) => set({ startDate, endDate, rainfall: IDLE_RAIN }),
+  setInfiltration: (infiltration) => set({ infiltration }),
   toggleLayer: (key) => set((s) => ({ layers: { ...s.layers, [key]: !s.layers[key] } })),
 
   checkRainfall: async () => {
@@ -167,11 +172,11 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   submit: async () => {
-    const { aoi, startDate, endDate } = get()
+    const { aoi, startDate, endDate, infiltration } = get()
     if (!aoi) return
     set({ job: { status: 'queued' }, preview: null })
     try {
-      const { taskId } = await submitTask({ aoi, startDate, endDate })
+      const { taskId } = await submitTask({ aoi, startDate, endDate, infiltration })
       for (;;) {
         const p = await pollTask(taskId)
         set({ job: p })
