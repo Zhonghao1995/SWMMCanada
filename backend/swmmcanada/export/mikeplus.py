@@ -23,22 +23,11 @@ from swmmcanada.build.models import filter_system
 from swmmcanada.export._shared import node_lookup, placeholder_square, to_crs, write_rain_csv
 from swmmcanada.export.base import ExportResult, LossyMapping
 
-# Horton infiltration constants (m/s) for the CN→Horton approximation (ADR 0008 §4). f0/wet/
-# dry are fixed heuristics; only f∞ (HortMin) is steered by CN — a drier, lower-CN surface
-# keeps a higher final infiltration capacity. These are a headline approximation, not a fit.
-_HORTON_F0 = 2.1e-5
-_HORTON_WET = 1.1e-3
-_HORTON_DRY = 1.6e-5
-
-
-def _horton_fmin(cn: float) -> float:
-    """Final infiltration capacity f∞ (m/s), heuristically steered by curve number.
-
-    ``(100-CN)`` (mm/h, clamped to [0.5, 13.0]) → m/s. Lower CN ⇒ more permeable ⇒ higher
-    f∞. This is the load-bearing approximation MIKE+ users must review before running.
-    """
-    mm_per_h = max(0.5, min(13.0, (100.0 - cn) * 0.25))
-    return mm_per_h / 3.6e6  # mm/h → m/s
+# Model B Horton parameters come DIRECTLY from the build's derived Horton set (ADR 0013:
+# the datastore carries all three infiltration parameter sets, so the old CN→Horton
+# heuristic is gone). Only the dry-side recovery constant stays fixed: SWMM expresses
+# recovery as a 7-day drying time, which has no exact single-constant Model B equivalent.
+_HORTON_DRY = 1.6e-5   # 1/s (~0.06 1/h) — multi-day recovery, matching SWMM's 7 d drying
 
 
 def _recip(n, fallback: float, what: str, warnings: List[str]) -> float:
@@ -169,9 +158,9 @@ def _write_catchments(path: Path, ds, node_xy, crs: Optional[str],
         cols["ManMPrv"].append(_recip(s.n_perv, 10.0, f"catchment {s.name} (perv)", warnings))
         cols["StorImp"].append(float(s.s_imperv_mm) / 1000.0)
         cols["StorPrv"].append(float(s.s_perv_mm) / 1000.0)
-        cols["HortMax"].append(_HORTON_F0)
-        cols["HortMin"].append(_horton_fmin(float(s.cn)))
-        cols["HortWet"].append(_HORTON_WET)
+        cols["HortMax"].append(float(s.horton_f0_mm_h) / 3.6e6)     # mm/h → m/s
+        cols["HortMin"].append(float(s.horton_fc_mm_h) / 3.6e6)     # mm/h → m/s
+        cols["HortWet"].append(float(s.horton_decay_1_h) / 3600.0)  # 1/h → 1/s
         cols["HortDry"].append(_HORTON_DRY)
         cols["Model"].append("B")
 
@@ -200,10 +189,17 @@ def _hydrology_lossy() -> List[LossyMapping]:
     geometry. Placeholder-polygon entries are appended per-catchment separately."""
     return [
         LossyMapping(
-            source="cn", target="Horton f0/f∞/wet/dry", kind="approximated",
-            detail="SWMM Curve Number has no MIKE+ Model B equivalent; Horton infiltration "
-                   "is heuristically derived from CN (f∞ from CN, f0/wet/dry fixed) — REVIEW "
-                   "before running.",
+            source="infiltration method (build choice)", target="Model B Horton",
+            kind="restructured",
+            detail="MIKE+ Model B computes Horton infiltration regardless of the SWMM-side "
+                   "method; parameters are the build's own derived Horton set (ADR 0013 "
+                   "superset) — no CN conversion involved.",
+        ),
+        LossyMapping(
+            source="Horton drying time (SWMM: 7 d)", target="HortDry", kind="approximated",
+            detail="SWMM expresses Horton recovery as a drying time; Model B wants a rate "
+                   "constant. Fixed at a multi-day-recovery typical value — review for "
+                   "cold-region or long-simulation use.",
         ),
         LossyMapping(
             source="pct_zero", target="—", kind="dropped",
@@ -243,13 +239,15 @@ def _write_field_mapping(path: Path, lossy: List[LossyMapping]) -> Path:
         ("`n_imperv` / `n_perv`", "`ManMImp` / `ManMPrv`", "**M = 1/n** (reciprocal)"),
         ("`s_imperv_mm` / `s_perv_mm`", "`StorImp` / `StorPrv`", "÷1000 (mm→m)"),
         ("`pct_imperv`", "`ImpervPct` (Contributing Area)", "as-is (%)"),
-        ("`cn`", "`HortMin` (Horton f∞)", "**approximated** — heuristic from CN"),
+        ("`horton_f0_mm_h` / `horton_fc_mm_h`", "`HortMax` / `HortMin`", "÷3.6e6 (mm/h→m/s) — direct (ADR 0013)"),
+        ("`horton_decay_1_h`", "`HortWet`", "÷3600 (1/h→1/s) — direct"),
     ]
     lines: List[str] = []
     lines.append("# MIKE+ CS field mapping (Model B / Kinematic Wave) — ADR 0008\n")
     lines.append("**Runoff = MIKE+ Model B (non-linear reservoir / Kinematic Wave).**\n")
-    lines.append("> **Horton infiltration is APPROXIMATED from the SWMM Curve Number** and "
-                 "should be reviewed before running the CS engine.\n")
+    lines.append("> **Horton parameters transfer DIRECTLY from the build's derived Horton "
+                 "set** (ADR 0013 — no CN conversion); only the dry-side recovery constant "
+                 "(`HortDry`) is a fixed typical value to review.\n")
     lines.append("> **Rainfall is exported as CSV** (`rain.csv`); the native MIKE `.dfs0` "
                  "carrier is deferred (`mikecore`/`mikeio` have no macOS wheel).\n")
     lines.append("> **Storm system only:** models carrying additional tagged systems "
@@ -297,8 +295,8 @@ All shapefiles carry a `.prj` in the datastore's projected display CRS.
 1. Import `nodes.shp`, `links.shp`, and `catchments.shp` into MIKE+ CS, mapping the
    shapefile columns to the CS attributes using the table in `field_mapping.md`.
 2. Import `rain.csv` as a rainfall time series and attach it as the catchment forcing.
-3. **Review the Horton infiltration parameters** on the catchments — they are approximated
-   from the SWMM Curve Number and must be checked before running the CS engine.
+3. Horton parameters transfer directly from the build's derived Horton set (ADR 0013);
+   **review `HortDry`** (fixed multi-day recovery constant) before long/cold-season runs.
 
 ## Notes
 

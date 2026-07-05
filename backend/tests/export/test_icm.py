@@ -142,6 +142,12 @@ def test_subcatchments_shp_units_cn_and_geometry(tmp_path):
     assert s1["cn"] == 80.0                                       # lossless pass-through
     assert abs(s1["dimension"] - (10000.0 / 3.141592653589793) ** 0.5) < 1e-6
     assert s1["imp_pct"] == 40.0 and s1["prv_pct"] == 60.0
+    # ADR 0013: Horton + Green-Ampt parameter sets ride along (DBF-safe names, as-is units)
+    assert all(len(c) <= 10 for c in gdf.columns if c != "geometry")
+    for col in ("hort_f0", "hort_fc", "hort_decay", "ga_psi_mm", "ga_ksat", "ga_imd"):
+        assert col in gdf.columns, col
+    assert s1["hort_f0"] == 101.6 and s1["hort_fc"] == 5.7        # model defaults (fixture)
+    assert s1["ga_psi_mm"] == 88.9 and s1["ga_imd"] == 0.434      # loam row defaults
 
 
 def test_rain_event_csv_infoworks_grammar(tmp_path):
