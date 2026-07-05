@@ -18,6 +18,7 @@ export default function ControlPanel() {
   const setUpload = useStore((s) => s.setUpload)
   const setDates = useStore((s) => s.setDates)
   const rainfall = useStore((s) => s.rainfall)
+  const uploadError = useStore((s) => s.uploadError)
   const checkRainfall = useStore((s) => s.checkRainfall)
   const submit = useStore((s) => s.submit)
   const preview = useStore((s) => s.preview)
@@ -75,7 +76,7 @@ export default function ControlPanel() {
           onClick={() => fileRef.current?.click()}
           className="flex w-full items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50"
         >
-          <Upload size={16} /> Upload boundary (.geojson / .zip)
+          <Upload size={16} /> Upload boundary (.zip shapefile / .geojson)
         </button>
         <input
           ref={fileRef}
@@ -89,12 +90,18 @@ export default function ControlPanel() {
         />
         {aoi && (
           <div className="flex items-center justify-between rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-600">
-            <span className="truncate">{aoi.source === 'draw' ? 'Polygon drawn' : aoi.name}</span>
+            <span className="truncate">
+              {aoi.source === 'draw' ? 'Polygon drawn' : aoi.name}
+              {aoi.source === 'upload' && aoi.areaKm2 !== undefined && (
+                <span className="ml-2 text-xs text-slate-400">{aoi.areaKm2.toFixed(2)} km²</span>
+              )}
+            </span>
             <button onClick={clearAoi} className="ml-2 text-slate-400 hover:text-red-500">
               <Trash2 size={15} />
             </button>
           </div>
         )}
+        {uploadError && <p className="text-[11px] text-red-500">{uploadError}</p>}
         {drawing && (
           <p className="text-[11px] text-slate-400">Click to add vertices; double-click to finish.</p>
         )}

@@ -1,5 +1,6 @@
 """FastAPI app for the async tasks-api (integration spec §2.1):
 
+  POST   /api/v1/aoi/preview        -> 200 {geometry, bbox, area_km2}  (parse only, no build)
   POST   /api/v1/tasks              -> 202 {task_id, status}   (json polygon or multipart shp)
   GET    /api/v1/tasks/{id}         -> 200 {state, progress_pct, stage, error}
   GET    /api/v1/tasks/{id}/result  -> 200 zip | 409 not ready | 404
@@ -19,6 +20,7 @@ from typing import Optional
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from shapely.geometry import mapping as shp_mapping
 
 from swmmcanada.api.tasks import TaskStore, run_task
 from swmmcanada.geo import aoi_from_geojson, aoi_from_shapefile
@@ -39,6 +41,43 @@ def create_app(*, pipeline=None, workdir=None, run_inline: bool = False) -> Fast
     def healthz():
         return {"status": "ok"}
 
+    async def _aoi_from_request(polygon: Optional[str], file: Optional[UploadFile]):
+        """The ONE upload-parsing path (shared by submit + preview): geojson text, .geojson
+        file, or zipped shapefile → canonical AOI. Geo errors map to the same HTTP codes
+        everywhere, so the preview endpoint fails exactly like a real submit would."""
+        try:
+            if file is not None:
+                raw = await file.read()
+                name = (file.filename or "").lower()
+                if name.endswith((".geojson", ".json")):
+                    return aoi_from_geojson(raw.decode("utf-8"))
+                return aoi_from_shapefile(raw, filename=file.filename)
+            if polygon:
+                return aoi_from_geojson(polygon)
+            raise HTTPException(422, "Provide a drawn polygon or a shapefile.")
+        except HTTPException:
+            raise
+        except AOIOversizeError as exc:
+            raise HTTPException(413, str(exc))
+        except GeoError as exc:
+            raise HTTPException(422, str(exc))
+
+    @app.post("/api/v1/aoi/preview")
+    async def aoi_preview(
+        polygon: Optional[str] = Form(None),
+        file: Optional[UploadFile] = File(None),
+    ):
+        """Parse an uploaded boundary WITHOUT starting a build: the frontend shows the
+        geometry on the map, its true area, and any parse error (bad CRS, oversize AOI)
+        the moment the user picks the file instead of minutes into a build."""
+        aoi = await _aoi_from_request(polygon, file)
+        return {
+            "geometry": shp_mapping(aoi.geometry),
+            "bbox": list(aoi.bbox),
+            "area_km2": aoi.area_km2,
+            "source": aoi.source,
+        }
+
     @app.post("/api/v1/tasks", status_code=202)
     async def submit(
         start_date: str = Form(...),
@@ -46,26 +85,10 @@ def create_app(*, pipeline=None, workdir=None, run_inline: bool = False) -> Fast
         polygon: Optional[str] = Form(None),
         file: Optional[UploadFile] = File(None),
     ):
+        aoi = await _aoi_from_request(polygon, file)
         try:
-            if file is not None:
-                raw = await file.read()
-                name = (file.filename or "").lower()
-                if name.endswith((".geojson", ".json")):
-                    aoi = aoi_from_geojson(raw.decode("utf-8"))
-                else:
-                    aoi = aoi_from_shapefile(raw, filename=file.filename)
-            elif polygon:
-                aoi = aoi_from_geojson(polygon)
-            else:
-                raise HTTPException(422, "Provide a drawn polygon or a shapefile.")
             start = date.fromisoformat(start_date)
             end = date.fromisoformat(end_date)
-        except HTTPException:
-            raise
-        except AOIOversizeError as exc:
-            raise HTTPException(413, str(exc))
-        except GeoError as exc:
-            raise HTTPException(422, str(exc))
         except ValueError as exc:
             raise HTTPException(422, f"Bad date: {exc}")
         if end < start:

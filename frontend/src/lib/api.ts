@@ -1,4 +1,4 @@
-import type { FeatureCollection } from 'geojson'
+import type { Feature, FeatureCollection, MultiPolygon, Polygon } from 'geojson'
 import type { Aoi, JobProgress, JobStatus } from '../types'
 
 // Client for the backend tasks-api async contract
@@ -24,6 +24,39 @@ const STATE_MAP: Record<string, JobStatus> = {
   SUCCEEDED: 'succeeded',
   FAILED: 'failed',
   CANCELLED: 'cancelled',
+}
+
+export interface AoiPreview {
+  boundary: Feature<Polygon | MultiPolygon>
+  bbox: Bbox
+  areaKm2: number
+}
+
+// Parse an uploaded boundary on the backend WITHOUT starting a build, so the UI can
+// draw it, show its area, and surface parse errors (bad CRS, oversize) immediately.
+export async function previewAoi(file: File): Promise<AoiPreview> {
+  const body = new FormData()
+  body.append('file', file)
+  const r = await fetch(`${API}/aoi/preview`, { method: 'POST', body })
+  if (!r.ok) {
+    let detail = `HTTP ${r.status}`
+    try {
+      detail = ((await r.json()) as { detail?: string }).detail ?? detail
+    } catch {
+      // non-JSON error body; keep the status text
+    }
+    throw new Error(detail)
+  }
+  const j = (await r.json()) as {
+    geometry: Polygon | MultiPolygon
+    bbox: Bbox
+    area_km2: number
+  }
+  return {
+    boundary: { type: 'Feature', properties: {}, geometry: j.geometry },
+    bbox: j.bbox,
+    areaKm2: j.area_km2,
+  }
 }
 
 export async function submitTask(params: SubmitParams): Promise<{ taskId: string }> {

@@ -25,6 +25,7 @@ from swmmcanada.geo.errors import (
     AOIEmptyError,
     AOIGeometryTypeError,
     AOIOversizeError,
+    ShapefileIncompleteError,
 )
 
 WORKING_CRS = "EPSG:4326"   # AOI.geometry stored/returned in lon/lat (WGS84)
@@ -167,7 +168,13 @@ def _read_shapefile_union(
 
     try:
         read_path = f"zip://{path}" if str(path).lower().endswith(".zip") else path
-        gdf = gpd.read_file(read_path)
+        try:
+            gdf = gpd.read_file(read_path)
+        except Exception as exc:  # corrupt zip / not a shapefile → a 4xx, not a 500
+            raise ShapefileIncompleteError(
+                "Could not read the upload as a shapefile. Provide a .zip containing "
+                "the full set (.shp/.shx/.dbf/.prj) or a .geojson."
+            ) from exc
     finally:
         if cleanup:
             try:
