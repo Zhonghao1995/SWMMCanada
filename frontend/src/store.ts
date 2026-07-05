@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import type { Feature, FeatureCollection, Polygon, Position } from 'geojson'
 import type { Aoi, JobProgress } from './types'
-import { checkRainfall as apiCheckRainfall, fetchPreview, pollTask, submitTask } from './lib/api'
+import { checkRainfall as apiCheckRainfall, fetchPreview, pollTask, previewAoi, submitTask } from './lib/api'
 import type { Bbox, RainfallCheck } from './lib/api'
 
 export type LayerKey = 'subcatchments' | 'conduits' | 'junctions'
@@ -22,13 +22,14 @@ interface AppState {
   preview: FeatureCollection | null // model geometry (network + subcatchments)
   layers: Record<LayerKey, boolean>
   rainfall: RainfallState // ECCC rain-data availability for the chosen AOI + period
+  uploadError: string | null // boundary parse error, shown the moment a file is picked
 
   startDraw: () => void
   addVertex: (lng: number, lat: number) => void
   finishDraw: () => void
   cancelDraw: () => void
   clearAoi: () => void
-  setUpload: (file: File) => void
+  setUpload: (file: File) => Promise<void>
   setDates: (start: string, end: string) => void
   toggleLayer: (key: LayerKey) => void
   checkRainfall: () => Promise<void>
@@ -53,9 +54,10 @@ function walkBbox(coords: unknown, acc: number[]): void {
   }
 }
 
-// AOI → lon/lat bbox for the rainfall check. Drawn polygons and .geojson uploads
-// carry geometry the browser can read; .zip shapefiles are parsed server-side only.
+// AOI → lon/lat bbox for the rainfall check. Uploads carry the bbox the backend
+// parsed on pick (shapefiles included); drawn polygons and .geojson read locally.
 async function aoiBbox(aoi: Aoi): Promise<Bbox | null> {
+  if (aoi.source === 'upload' && aoi.bbox) return aoi.bbox
   const acc = [Infinity, Infinity, -Infinity, -Infinity]
   if (aoi.source === 'draw') {
     walkBbox(aoi.polygon.geometry.coordinates, acc)
@@ -92,9 +94,10 @@ export const useStore = create<AppState>((set, get) => ({
   preview: null,
   layers: DEFAULT_LAYERS,
   rainfall: IDLE_RAIN,
+  uploadError: null,
 
   startDraw: () =>
-    set({ drawing: true, draft: [], aoi: null, job: { status: 'idle' }, preview: null, rainfall: IDLE_RAIN }),
+    set({ drawing: true, draft: [], aoi: null, job: { status: 'idle' }, preview: null, rainfall: IDLE_RAIN, uploadError: null }),
   addVertex: (lng, lat) => set((s) => (s.drawing ? { draft: [...s.draft, [lng, lat]] } : {})),
   finishDraw: () => {
     const { draft } = get()
@@ -103,8 +106,8 @@ export const useStore = create<AppState>((set, get) => ({
   },
   cancelDraw: () => set({ drawing: false, draft: [] }),
   clearAoi: () =>
-    set({ aoi: null, draft: [], drawing: false, job: { status: 'idle' }, preview: null, rainfall: IDLE_RAIN }),
-  setUpload: (file) =>
+    set({ aoi: null, draft: [], drawing: false, job: { status: 'idle' }, preview: null, rainfall: IDLE_RAIN, uploadError: null }),
+  setUpload: async (file) => {
     set({
       aoi: { source: 'upload', file, name: file.name },
       drawing: false,
@@ -112,7 +115,23 @@ export const useStore = create<AppState>((set, get) => ({
       job: { status: 'idle' },
       preview: null,
       rainfall: IDLE_RAIN,
-    }),
+      uploadError: null,
+    })
+    // Parse on the backend right away: boundary on the map, area in the panel, and
+    // any parse error (bad CRS, oversize, broken zip) now instead of at build time.
+    try {
+      const parsed = await previewAoi(file)
+      const cur = get().aoi
+      if (cur?.source === 'upload' && cur.file === file) {
+        set({ aoi: { ...cur, boundary: parsed.boundary, bbox: parsed.bbox, areaKm2: parsed.areaKm2 } })
+      }
+    } catch (err) {
+      const cur = get().aoi
+      if (cur?.source === 'upload' && cur.file === file) {
+        set({ aoi: null, uploadError: err instanceof Error ? err.message : `${err}` })
+      }
+    }
+  },
   setDates: (startDate, endDate) => set({ startDate, endDate, rainfall: IDLE_RAIN }),
   toggleLayer: (key) => set((s) => ({ layers: { ...s.layers, [key]: !s.layers[key] } })),
 
@@ -134,7 +153,7 @@ export const useStore = create<AppState>((set, get) => ({
               available: false,
               spanDays: 0,
               message:
-                'Rainfall check needs a drawn polygon or a .geojson boundary. Uploaded .zip shapefiles are checked at build time.',
+                'Could not read the boundary extent in the browser. Rainfall is checked again at build time.',
             },
           },
         })

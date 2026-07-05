@@ -73,8 +73,19 @@ export default function MapPanel() {
     }
   }, [preview])
 
-  const aoiFc: FeatureCollection =
-    aoi && aoi.source === 'draw' ? { type: 'FeatureCollection', features: [aoi.polygon as Feature] } : EMPTY
+  // Fit the map to an uploaded boundary as soon as the backend has parsed it.
+  useEffect(() => {
+    if (aoi?.source === 'upload' && aoi.bbox && mapRef.current) {
+      const [minx, miny, maxx, maxy] = aoi.bbox
+      mapRef.current.fitBounds([[minx, miny], [maxx, maxy]], { padding: 60, duration: 800 })
+    }
+  }, [aoi])
+
+  const aoiFeature: Feature | null =
+    aoi?.source === 'draw' ? aoi.polygon : aoi?.source === 'upload' && aoi.boundary ? aoi.boundary : null
+  const aoiFc: FeatureCollection = aoiFeature
+    ? { type: 'FeatureCollection', features: [aoiFeature] }
+    : EMPTY
 
   const draftFc: FeatureCollection = draft.length
     ? {

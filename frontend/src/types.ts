@@ -1,8 +1,9 @@
-import type { Feature, Polygon } from 'geojson'
+import type { Feature, MultiPolygon, Polygon } from 'geojson'
 
-// The AOI the user provides — a drawn polygon OR an uploaded shapefile.
-// Drawn polygons are GeoJSON here; uploaded shapefiles are parsed by the backend
-// `geo` module, so the frontend only carries the file until submit.
+// The AOI the user provides — a drawn polygon OR an uploaded boundary file.
+// Uploads are parsed by the backend the moment they are picked (POST /aoi/preview),
+// which returns the boundary geometry + bbox + area so the map and the rainfall
+// check work for shapefiles too. The raw File is still what gets submitted.
 export interface DrawnAoi {
   source: 'draw'
   polygon: Feature<Polygon>
@@ -11,6 +12,9 @@ export interface UploadedAoi {
   source: 'upload'
   file: File
   name: string
+  boundary?: Feature<Polygon | MultiPolygon> // parsed by the backend on upload
+  bbox?: [number, number, number, number]    // lon/lat, from the same parse
+  areaKm2?: number
 }
 export type Aoi = DrawnAoi | UploadedAoi
 
