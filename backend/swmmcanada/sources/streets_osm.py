@@ -6,9 +6,18 @@ import networkx as nx
 from swmmcanada.network.errors import NetworkError
 
 
+# A cached Overpass answer below this many street nodes gets ONE cache-bypassed recheck:
+# under load, Overpass returns HTTP 200 with PARTIAL data (server-side timeout), osmnx
+# builds a tiny graph without raising, and the cache then poisons every rebuild of that
+# bbox forever (observed live: a dense Duncan block cached as a 6-node graph). Genuinely
+# tiny rural boxes just pay one extra Overpass call.
+MIN_PLAUSIBLE_NODES = 16
+
+
 def fetch_street_graph(bbox_wgs84) -> nx.Graph:
     """bbox = (minlon, minlat, maxlon, maxlat). Returns an undirected graph with node x/y
     (lon/lat) and edge length (m)."""
+    import shutil
     import tempfile
     from pathlib import Path
 
@@ -23,8 +32,29 @@ def fetch_street_graph(bbox_wgs84) -> nx.Graph:
     cache.mkdir(parents=True, exist_ok=True)
     ox.settings.cache_folder = str(cache)
 
+    g = _graph_from_bbox(ox, bbox_wgs84, use_cache=True)
+    if g.number_of_nodes() < MIN_PLAUSIBLE_NODES:
+        fresh = _graph_from_bbox(ox, bbox_wgs84, use_cache=False)
+        if fresh.number_of_nodes() > g.number_of_nodes():
+            # The cached answer was poisoned (partial Overpass response): trust the live
+            # one and drop the cache so future builds re-cache good data.
+            shutil.rmtree(cache, ignore_errors=True)
+            cache.mkdir(parents=True, exist_ok=True)
+            g = fresh
+
+    if g.number_of_nodes() < 2:
+        raise NetworkError("OSM returned too few street nodes for this AOI.")
+    return g
+
+
+def _graph_from_bbox(ox, bbox_wgs84, *, use_cache: bool) -> nx.Graph:
     left, bottom, right, top = bbox_wgs84
-    g_osm = ox.graph_from_bbox(bbox=(left, bottom, right, top), network_type="drive")
+    prior = ox.settings.use_cache
+    ox.settings.use_cache = use_cache
+    try:
+        g_osm = ox.graph_from_bbox(bbox=(left, bottom, right, top), network_type="drive")
+    finally:
+        ox.settings.use_cache = prior
 
     g = nx.Graph()
     for n, d in g_osm.nodes(data=True):
@@ -33,9 +63,6 @@ def fetch_street_graph(bbox_wgs84) -> nx.Graph:
         if g.has_edge(u, v):
             continue
         g.add_edge(u, v, length=float(d.get("length") or 0.0))
-
-    if g.number_of_nodes() < 2:
-        raise NetworkError("OSM returned too few street nodes for this AOI.")
     return g
 
 
