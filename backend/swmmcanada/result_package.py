@@ -62,3 +62,15 @@ def record_terrain(package_dir, *, source: str, resolution_m: float, coverage: s
                 "cover, couple at the network's manholes (rim/ground elevations included).",
     }
     manifest.write_text(json.dumps(data, indent=2))
+
+
+def record_forcing(package_dir, forcing: dict) -> None:
+    """Stamp the rainfall-forcing record (ADR 0014) into ``manifest.json`` beside the
+    terrain block: which resolution the raingage got (hourly/daily), from which station,
+    at what coverage — or why it fell back."""
+    import json
+
+    manifest = Path(package_dir) / MANIFEST_JSON
+    data = json.loads(manifest.read_text()) if manifest.exists() else {}
+    data["forcing"] = {k: v for k, v in forcing.items() if k != "mismatch_warning"}
+    manifest.write_text(json.dumps(data, indent=2))

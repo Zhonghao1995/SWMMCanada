@@ -72,10 +72,11 @@ def _infiltration_kwargs(infiltration) -> dict:
 
 
 def _validate_or_raise(network, subcatchments, aoi, method: MethodDescriptor, ws: Path,
-                       delineation: Optional[dict] = None):
+                       delineation: Optional[dict] = None, forcing: Optional[dict] = None):
     """Validate the subcatchment model, always write validation.json into the package, and
     raise (stopping the build) if any error-severity check fails — so no untrusted .inp ships."""
-    report = validate_model(network, subcatchments, aoi, method=method, delineation=delineation)
+    report = validate_model(network, subcatchments, aoi, method=method, delineation=delineation,
+                            forcing=forcing)
     (Path(ws) / vschema.VALIDATION_JSON).write_text(json.dumps(report.to_dict(), indent=2))
     if not report.ok:
         detail = "; ".join(f"{c.id}: {c.message}" for c in report.errors)
@@ -193,12 +194,15 @@ def _finish_build(
     series = next((s for s in climate.series if not s.frame.empty), None)
     if series is None:
         raise RuntimeError("No climate data available for this AOI/period.")
-    rain = to_rainfall_series(series)
+    # Rainfall tier (ADR 0014): the raingage takes the hourly series when a usable one was
+    # found; temperature/evaporation stay on the daily station either way.
+    rain = to_rainfall_series(climate.hourly_rain or series)
     evaporation = to_evaporation_series(series)
     temperature = to_temperature_series(series)
 
     _r("VALIDATING", 85)
-    _validate_or_raise(network, subcatchments, aoi, method, ws, delineation=sub_diag)
+    _validate_or_raise(network, subcatchments, aoi, method, ws, delineation=sub_diag,
+                       forcing=climate.forcing or None)
 
     _r("BUILDING", 90)
     # Datastore is the PRIMARY build path (ADR 0007): write it, then build the .inp from it.
@@ -218,6 +222,8 @@ def _finish_build(
     if dem is not None:  # 2D-overland raw materials are promised deliverables — stamp the
         result_package.record_terrain(  # terrain source/resolution into the manifest
             ws, source=dem.source, resolution_m=dem.resolution_m, coverage=dem.coverage)
+    if climate.forcing:  # rainfall tier record (ADR 0014) rides beside the terrain block
+        result_package.record_forcing(ws, climate.forcing)
     _export_mikeplus_safe(ws)  # ADR 0008: MIKE+ CS package — every build, graceful
     _export_icm_safe(ws)  # ADR 0012: ICM ODIC package — every build, graceful
     _export_observed_safe(ws, aoi, start, end)  # observed flow (HYDAT) — real data when present

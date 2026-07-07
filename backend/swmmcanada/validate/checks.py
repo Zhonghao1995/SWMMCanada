@@ -228,3 +228,19 @@ def check_shape_plausibility(geo: GeoContext):
                    "subcatchment shapes are within plausible bounds" if not flagged
                    else f"{len(flagged)} cell(s) are extreme in size or very elongated",
                    n_area_outliers=len(area_outliers), n_elongated=len(elongated), sample=flagged[:10])
+
+
+# --- forcing checks (ADR 0014) -------------------------------------------------
+
+def check_forcing_consistency(forcing: dict):
+    """Hourly-vs-daily rain total sanity (ADR 0014). Passes when no mismatch was computed
+    (daily tier, or no daily reference) or the mismatch is within tolerance; a failure is
+    Warning-tier — the model runs, but the raingage source deserves a look."""
+    mismatch = forcing.get("mismatch_pct")
+    if forcing.get("rainfall_resolution") != "hourly" or mismatch is None:
+        return _result("forcing_consistency", schema.WARNING, True,
+                       f"rainfall tier: {forcing.get('rainfall_resolution', 'daily')}")
+    ok = mismatch <= 15.0
+    msg = (f"hourly vs daily rain totals within {mismatch}%" if ok else
+           forcing.get("mismatch_warning", f"hourly vs daily rain totals differ by {mismatch}%"))
+    return _result("forcing_consistency", schema.WARNING, ok, msg, mismatch_pct=mismatch)

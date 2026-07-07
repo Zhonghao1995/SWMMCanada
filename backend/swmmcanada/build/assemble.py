@@ -110,6 +110,17 @@ def assemble_inp(
     opt["FLOW_UNITS"] = config.flow_units.value
     opt["INFILTRATION"] = config.infiltration.value
     opt["FLOW_ROUTING"] = config.routing_model
+    # Dynamic-wave numerics for pulsed forcing (ADR 0014 follow-through): the engine
+    # defaults (20 s max step, no inertial damping) let short/steep conduits oscillate once
+    # hourly intensities replace daily drizzle — Kitchener hit −976% routing continuity from
+    # ONE oscillating node. Standard municipal stabilisation: 5 s max routing step (variable
+    # stepping stays on), partial inertial damping, both normal-flow criteria, more trials.
+    # Measured: Kitchener −976% → −0.17%, Ottawa −14.6% → +0.26%.
+    opt["ROUTING_STEP"] = 5
+    opt["MINIMUM_STEP"] = 0.5
+    opt["INERTIAL_DAMPING"] = "PARTIAL"
+    opt["NORMAL_FLOW_LIMITED"] = "BOTH"
+    opt["MAX_TRIALS"] = 20
     opt["START_DATE"] = config.start
     opt["END_DATE"] = config.end
     opt["REPORT_START_DATE"] = config.start

@@ -2,6 +2,8 @@
 import math
 from datetime import date, datetime
 
+import pandas as pd
+
 from swmmcanada.acquire.climate import (
     ClimateResult,
     ClimateSeries,
@@ -245,3 +247,80 @@ def test_to_temperature_series_falls_back_to_midpoint():
     temp = to_temperature_series(ClimateSeries(station=None, frame=parse_daily(fc)))
     assert temp is not None
     assert temp.tmean_c == [13.0]                                       # (8 + 18) / 2
+
+
+# --- hourly rainfall tier (ADR 0014) --------------------------------------------------
+
+def _hourly_fc(n_hours, precip_each=0.5, station="3031092", missing_every=None):
+    """Fixture: n_hours of hourly records starting 2022-06-01 00:00; every `missing_every`-th
+    record has PRECIP_AMOUNT=None (a gap hour)."""
+    feats = []
+    t0 = datetime(2022, 6, 1, 0)
+    for i in range(n_hours):
+        t = t0 + pd.Timedelta(hours=i)
+        val = None if (missing_every and i % missing_every == 0) else precip_each
+        feats.append({"properties": {
+            "LOCAL_DATE": t.strftime("%Y-%m-%d %H:%M:%S"),
+            "PRECIP_AMOUNT": val, "PRECIP_AMOUNT_FLAG": None,
+            "CLIMATE_IDENTIFIER": station}})
+    return {"type": "FeatureCollection", "features": feats}
+
+
+class HourlyClient(FakeClient):
+    def __init__(self, hourly_fc):
+        self._hourly = hourly_fc
+
+    def get_json(self, url, params):
+        if "climate-hourly" in url:
+            return self._hourly
+        return super().get_json(url, params)
+
+
+def _aoi():
+    return aoi_from_geojson(BOX)
+
+
+def test_hourly_tier_selected_when_coverage_is_good():
+    # 2 days requested = 48 expected hours; fixture provides all 48 -> hourly wins.
+    res = fetch_climate(_aoi(), date(2022, 6, 1), date(2022, 6, 2),
+                        client=HourlyClient(_hourly_fc(48)))
+    assert res.hourly_rain is not None
+    f = res.forcing
+    assert f["rainfall_resolution"] == "hourly"
+    assert f["coverage_pct"] == 100.0 and f["n_missing_hours"] == 0
+    assert f["hourly_total_mm"] == 24.0                      # 48 x 0.5 mm
+    rain = to_rainfall_series(res.hourly_rain)
+    assert len(rain.timestamps) == 48
+    assert (rain.timestamps[1] - rain.timestamps[0]).seconds == 3600
+
+
+def test_hourly_below_coverage_falls_back_to_daily():
+    # every 3rd hour missing -> ~67% coverage < 90% -> daily fallback, reason recorded.
+    res = fetch_climate(_aoi(), date(2022, 6, 1), date(2022, 6, 2),
+                        client=HourlyClient(_hourly_fc(48, missing_every=3)))
+    assert res.hourly_rain is None
+    assert res.forcing["rainfall_resolution"] == "daily"
+    assert "coverage" in res.forcing["fallback_reason"] or ">=90%" in res.forcing["fallback_reason"]
+
+
+def test_no_hourly_records_falls_back_to_daily():
+    res = fetch_climate(_aoi(), date(2022, 6, 1), date(2022, 6, 2), client=FakeClient())
+    assert res.hourly_rain is None and res.forcing["rainfall_resolution"] == "daily"
+
+
+def test_mismatch_beyond_tolerance_warns():
+    # hourly total = 48 x 1.0 = 48 mm vs the daily fixture total 5.2 mm -> big mismatch.
+    res = fetch_climate(_aoi(), date(2022, 6, 1), date(2022, 6, 2),
+                        client=HourlyClient(_hourly_fc(48, precip_each=1.0)))
+    assert res.forcing["mismatch_pct"] > 15.0
+    assert any("differs from the daily" in w for w in res.warnings)
+
+
+def test_missing_hours_within_tolerance_count_as_zero_rain():
+    # every 20th hour missing -> 95% coverage passes; missing hours become 0 in the series.
+    res = fetch_climate(_aoi(), date(2022, 6, 1), date(2022, 6, 2),
+                        client=HourlyClient(_hourly_fc(48, missing_every=20)))
+    assert res.forcing["rainfall_resolution"] == "hourly"
+    assert res.forcing["n_missing_hours"] == 3               # hours 0, 20, 40
+    rain = to_rainfall_series(res.hourly_rain)
+    assert rain.precip_mm[0] == 0.0                          # NaN -> 0, recorded not hidden

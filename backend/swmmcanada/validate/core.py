@@ -46,6 +46,7 @@ class ValidationReport:
     checks: List[CheckResult]
     delineation: Optional[dict] = None   # gate readings / fallback reason (ADR 0010)
     systems: Optional[dict] = None       # per-system element counts (ADR 0011)
+    forcing: Optional[dict] = None       # rainfall tier/station/coverage (ADR 0014)
 
     @property
     def errors(self) -> List[CheckResult]:
@@ -84,6 +85,8 @@ class ValidationReport:
             out["delineation"] = self.delineation
         if self.systems:
             out["systems"] = self.systems
+        if self.forcing:
+            out["forcing"] = self.forcing
         return out
 
 
@@ -94,6 +97,7 @@ def validate_model(
     *,
     method: MethodDescriptor,
     delineation: Optional[dict] = None,
+    forcing: Optional[dict] = None,
 ) -> ValidationReport:
     """Run every check against the assembled model and return a structured report."""
     all_nodes = list(network.junctions) + list(network.outfalls)
@@ -130,7 +134,10 @@ def validate_model(
     results.append(C.check_outlet_distance(geo, node_coords))
     results.append(C.check_shape_plausibility(geo))
 
+    if forcing:
+        results.append(C.check_forcing_consistency(forcing))
+
     return ValidationReport(
         method=method, n_subcatchments=len(subcatchments), checks=results,
-        delineation=delineation, systems=systems or None,
+        delineation=delineation, systems=systems or None, forcing=forcing,
     )
