@@ -298,6 +298,18 @@ All shapefiles carry a `.prj` in the datastore's projected display CRS.
 3. Horton parameters transfer directly from the build's derived Horton set (ADR 0013);
    **review `HortDry`** (fixed multi-day recovery constant) before long/cold-season runs.
 
+## For 2D overland modelling
+
+The parent package ships the raw materials a 2D (major-system / pluvial) model needs —
+mesh them in your tool, we deliberately do not generate the 2D model for you:
+
+- **Terrain**: `../dem_dtm.tif`, clipped to the AOI (NRCan LiDAR 1–2 m where coverage is
+  proven, the 30 m national MRDEM elsewhere — see `"terrain"` in `../manifest.json` for
+  the source, resolution and coverage of THIS build).
+- **Roughness zoning**: `../landcover.tif` (NALCMS 2020 classes).
+- **1D coupling**: the imported network — manhole locations with rim/ground elevations.
+- **Boundary**: the AOI recorded in the datastore provenance.
+
 ## Notes
 
 - **Native `.dfs0` is deferred**: `mikecore`/`mikeio` ship no macOS wheel, so rainfall is a

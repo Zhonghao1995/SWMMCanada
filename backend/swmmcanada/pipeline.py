@@ -176,7 +176,7 @@ def _export_icm_safe(ws: Path) -> None:
 def _finish_build(
     ws: Path, aoi, network, subcatchments, *, start: date, end: date, method,
     config: BuildConfig, extra_provenance: dict, climate_client, climate_buffer_deg: float,
-    report=None, sub_diag: Optional[dict] = None,
+    report=None, sub_diag: Optional[dict] = None, dem=None,
 ) -> BuildResult:
     """The build spine (CONTEXT "Build spine") — the single shared tail of every build path.
 
@@ -215,6 +215,9 @@ def _finish_build(
         },
     )
     result = build_from_datastore(ws / result_package.DATASTORE_DIR, ws)
+    if dem is not None:  # 2D-overland raw materials are promised deliverables — stamp the
+        result_package.record_terrain(  # terrain source/resolution into the manifest
+            ws, source=dem.source, resolution_m=dem.resolution_m, coverage=dem.coverage)
     _export_mikeplus_safe(ws)  # ADR 0008: MIKE+ CS package — every build, graceful
     _export_icm_safe(ws)  # ADR 0012: ICM ODIC package — every build, graceful
     _export_observed_safe(ws, aoi, start, end)  # observed flow (HYDAT) — real data when present
@@ -299,7 +302,7 @@ def build_from_aoi(
             "pipe_sizing": sizing_diag,
         },
         climate_client=climate_client, climate_buffer_deg=climate_buffer_deg, report=report,
-        sub_diag=sub_diag,
+        sub_diag=sub_diag, dem=dem,
     )
 
 
@@ -398,7 +401,7 @@ def build_city(
             "sanitary": san_diag,
         },
         climate_client=climate_client, climate_buffer_deg=climate_buffer_deg, report=report,
-        sub_diag=sub_diag,
+        sub_diag=sub_diag, dem=dem,
     )
 
 

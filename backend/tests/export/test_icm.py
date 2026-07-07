@@ -197,3 +197,12 @@ def test_lossy_report_no_cn_loss_but_drops_reported(tmp_path):
     # and the sheet carries the report + the Auto-Map contract
     sheet = (tmp_path / "field_mapping.md").read_text()
     assert "curve_number" in sheet and "Auto-Map" in sheet and "pct_zero" in sheet
+
+
+def test_readme_points_2d_modellers_at_the_raw_materials(tmp_path):
+    """ADR 0009 amendment: the package IS the 2D raw-material delivery — the README must
+    say where terrain/roughness live and that meshing stays in the engineer's tool."""
+    IcmExporter().export(_datastore(), tmp_path)
+    text = (tmp_path / "README.md").read_text()
+    assert "For 2D overland modelling" in text
+    assert "dem_dtm.tif" in text and "landcover.tif" in text

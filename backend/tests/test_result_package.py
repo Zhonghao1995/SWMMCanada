@@ -28,6 +28,8 @@ def test_contract_covers_the_handoff_essentials():
     assert rp.VALIDATION_JSON in rp.REQUIRED
     assert sum(1 for r in rp.REQUIRED if r.startswith(f"{rp.DATASTORE_DIR}/")) == 3
     assert rp.PREVIEW_GEOJSON in rp.REQUIRED
+    # 2D-overland raw materials are promised deliverables, not workspace leftovers
+    assert rp.DEM_DTM in rp.REQUIRED and rp.LANDCOVER in rp.REQUIRED
     # mikeplus/ is deliberately NOT required (ADR 0008 graceful degradation).
     assert not any(r.startswith(rp.MIKEPLUS_DIR) for r in rp.REQUIRED)
 
@@ -61,3 +63,18 @@ def test_observed_flow_exports_when_hydat_present(tmp_path, monkeypatch):
     monkeypatch.delenv("SWMMCANADA_HYDAT_PATH")
     _export_observed_safe(ws2, aoi, date(2022, 6, 1), date(2022, 6, 30))
     assert not list(ws2.iterdir())                      # no HYDAT → silent no-op
+
+
+def test_record_terrain_stamps_the_manifest(tmp_path):
+    """The first question a 2D modeller asks is "1 m LiDAR or 30 m national?" — the
+    manifest answers it for every build."""
+    import json
+
+    (tmp_path / rp.MANIFEST_JSON).write_text(json.dumps({"title": "x"}))
+    rp.record_terrain(tmp_path, source="hrdem-lidar:proj-1m", resolution_m=1.0, coverage="full")
+    data = json.loads((tmp_path / rp.MANIFEST_JSON).read_text())
+    assert data["title"] == "x"                       # existing keys survive
+    t = data["terrain"]
+    assert t["dem"] == rp.DEM_DTM and t["landcover"] == rp.LANDCOVER
+    assert t["source"] == "hrdem-lidar:proj-1m" and t["resolution_m"] == 1.0
+    assert t["coverage"] == "full"
