@@ -150,3 +150,35 @@ def test_buildings_close_big_interiors_as_evidence():
     with_evidence = block_aware_service_area(g, aoi, buildings=[house])
     assert not bare.contains(centre)
     assert with_evidence.contains(centre)
+
+
+def test_frontage_split_beats_triangle_fans():
+    """The municipal property: a point in front of a street edge's middle belongs to that
+    edge's end junction — NOT to a diagonally-nearer intersection (the triangle-fan bug)."""
+    from shapely.geometry import Point
+    from swmmcanada.network.service_area import block_aware_service_area, edge_split_cells
+
+    aoi = _Aoi(-123.40, 48.40, -123.394, 48.406)
+    g = nx.Graph()
+    # one ~150 x 300 m block: corners are junctions; the long west edge runs south-north
+    coords = {(0, 0): (-123.3990, 48.4010), (1, 0): (-123.3970, 48.4010),
+              (1, 1): (-123.3970, 48.4037), (0, 1): (-123.3990, 48.4037)}
+    for n, (x, y) in coords.items():
+        g.add_node(n, x=x, y=y, elev=10.0)
+    g.add_edge((0, 0), (1, 0)); g.add_edge((1, 0), (1, 1))
+    g.add_edge((1, 1), (0, 1)); g.add_edge((0, 1), (0, 0))
+    jxy = {str(n): (d["x"], d["y"]) for n, d in g.nodes(data=True)}
+    mask = block_aware_service_area(g, aoi)
+
+    cells = edge_split_cells(g, jxy, mask, aoi)
+    assert set(cells) == set(jxy)                        # every junction serves something
+    # a point just INSIDE the block, in front of the west edge's lower half:
+    probe = Point(-123.39875, 48.40155)
+    owner = next(n for n, c in cells.items() if c.polygon_4326.contains(probe))
+    assert owner == str((0, 0))                          # the west edge's south junction
+    # cells are disjoint and jointly cover most of the mask
+    from shapely.ops import unary_union
+    union = unary_union([c.polygon_4326 for c in cells.values()])
+    assert union.area >= mask.area * 0.95
+    overlap = sum(c.polygon_4326.area for c in cells.values()) - union.area
+    assert overlap <= union.area * 0.01

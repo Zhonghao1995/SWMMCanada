@@ -68,10 +68,22 @@ def delineate_junction_subcatchments(
     gate: dict = {"threshold_pct": config.slope_gate_pct}
 
     if service_mask is not None:
-        # Corridor mode (ADR 0017): the municipal split IS the street-midpoint Voronoi —
-        # inside a ~50 m served band, D8 basins add nothing over gutter-midpoint semantics
-        # and their corridor-clipped candidates kept failing the posterior geometry gate.
-        # DEM basins remain the method for no-corridor contexts (city fallback).
+        # Corridor mode (ADR 0017): the municipal split is nearest-STREET-SEGMENT
+        # assignment with gutter divides at segment midpoints (amendment 3) — point-Voronoi
+        # at intersections carves grid blocks into diagonal triangle fans; frontage logic
+        # gives the rectangular hand-drawn cells. DEM basins remain for no-corridor
+        # contexts (city fallback).
+        if streets is not None:
+            from swmmcanada.network.service_area import edge_split_cells
+
+            gate["decision"] = "corridor_frontage"
+            cells = edge_split_cells(streets, junction_xy, service_mask, aoi)
+            subs = _build_subcatchments(junction_xy, aoi, network_config, cells=cells)
+            subs, service_diag = _apply_service(subs, junction_xy, aoi, None, min_cell_ha)
+            service_diag["applied"] = True
+            return subs, {"method": METHOD_VORONOI, "n_subcatchments": len(subs),
+                          "gate": gate, "service": service_diag,
+                          "split": "nearest street segment, midpoint gutter divides"}
         gate["decision"] = "corridor_voronoi"
         return _voronoi(junction_xy, aoi, network_config, gate,
                         service_mask=service_mask, min_cell_ha=min_cell_ha)
