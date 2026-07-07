@@ -141,3 +141,109 @@ def merge_slivers(
 
     keep.extend(s for s, _ in big)
     return keep, diag
+
+
+def edge_split_cells(streets, junction_xy, mask, aoi, *, sample_step_m: float = 10.0):
+    """Municipal split (ADR 0017 amendment 3): assign ground to the nearest STREET SEGMENT
+    (not the nearest intersection point), each segment half draining to its end junction.
+
+    Point-Voronoi seeded at intersections carves every grid block into a diagonal triangle
+    fan meeting at the block centre — nothing like hand-drawn cells. Frontage logic ("a lot
+    drains to the street it faces") is nearest-EDGE assignment: rectangular blocks split
+    along the rear-lot midline with 45° corner hips and mid-segment gutter divides —
+    the rectangular municipal look. Implemented as dense samples along each half-edge
+    labelled by its end junction, one Voronoi over the samples, unioned per junction.
+
+    Returns {junction_name: SubcatchmentCell} for `_build_subcatchments(cells=...)`.
+    """
+    from shapely import STRtree
+    from shapely.geometry import MultiPoint, Point
+    from shapely.ops import voronoi_diagram
+
+    from swmmcanada.network.subcatchments import SubcatchmentCell
+
+    to_m = lonlat_projector(utm_crs_for(aoi))
+    from pyproj import Transformer
+
+    to_deg = Transformer.from_crs(utm_crs_for(aoi), "EPSG:4326", always_xy=True).transform
+    mask_m = shp_transform(to_m, mask)
+
+    labels: List[str] = []
+    pts: List[Point] = []
+    for u, v in streets.edges():
+        nu, nv = str(u), str(v)
+        if nu not in junction_xy and nv not in junction_xy:
+            continue
+        a = to_m(streets.nodes[u]["x"], streets.nodes[u]["y"])
+        b = to_m(streets.nodes[v]["x"], streets.nodes[v]["y"])
+        length = ((b[0] - a[0]) ** 2 + (b[1] - a[1]) ** 2) ** 0.5
+        n = max(2, int(length // sample_step_m))
+        for i in range(n + 1):
+            t = i / n
+            name = nu if t < 0.5 else nv          # gutter divide at the segment midpoint
+            if name not in junction_xy:
+                continue
+            labels.append(name)
+            pts.append(Point(a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1])))
+    if not pts:
+        return {}
+
+    vor = voronoi_diagram(MultiPoint(pts), envelope=mask_m.buffer(200.0))
+    tree = STRtree(list(vor.geoms))
+    by_label: Dict[str, list] = {}
+    for name, pt in zip(labels, pts):
+        idx = tree.query(pt, predicate="within")
+        if len(idx):
+            by_label.setdefault(name, []).append(vor.geoms[int(idx[0])])
+
+    picked_m: Dict[str, object] = {}
+    leftovers: List[object] = []
+    for name, regions in by_label.items():
+        merged = unary_union(regions).intersection(mask_m)
+        parts = [g for g in (merged.geoms if hasattr(merged, "geoms") else [merged])
+                 if g.geom_type == "Polygon" and not g.is_empty]
+        if not parts:
+            continue
+        seed = Point(to_m(*junction_xy[name]))
+        containing = [q for q in parts if q.contains(seed)]
+        cell_m = containing[0] if containing else max(parts, key=lambda q: q.area)
+        leftovers.extend(q for q in parts if q is not cell_m)
+        if not cell_m.is_valid:
+            fixed = [g for g in ([cell_m.buffer(0)] if cell_m.buffer(0).geom_type == "Polygon"
+                     else list(cell_m.buffer(0).geoms)) if g.geom_type == "Polygon"]
+            if not fixed:
+                continue
+            cell_m = max(fixed, key=lambda g: g.area)
+        if cell_m.area < 25.0:
+            leftovers.append(cell_m)
+            continue
+        picked_m[name] = cell_m
+
+    # Corner scraps from the split (a junction's samples wrapping a corner produce
+    # disconnected bits) go to whichever final cell shares the longest boundary —
+    # coverage stays whole instead of leaking sliver holes.
+    for scrap in leftovers:
+        if scrap.area < 25.0:
+            continue
+        best, best_len = None, 0.0
+        for name, cell_m in picked_m.items():
+            if not scrap.intersects(cell_m):
+                continue
+            shared = scrap.intersection(cell_m).length
+            if shared > best_len:
+                best, best_len = name, shared
+        if best is None:
+            continue
+        merged = unary_union([picked_m[best], scrap])
+        if merged.geom_type == "Polygon" and merged.is_valid:
+            picked_m[best] = merged
+
+    cells: Dict[str, SubcatchmentCell] = {}
+    for name, cell_m in picked_m.items():
+        cell_deg = shp_transform(to_deg, cell_m)
+        cells[name] = SubcatchmentCell(
+            polygon_4326=cell_deg,
+            area_m2=cell_m.area,
+            exterior=[(float(x), float(y)) for x, y in cell_deg.exterior.coords],
+        )
+    return cells
