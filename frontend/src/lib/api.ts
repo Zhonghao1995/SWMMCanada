@@ -178,24 +178,31 @@ export async function checkRainfall(bbox: Bbox, startDate: string, endDate: stri
     `${GEOMET}/collections/climate-daily/items?bbox=${bboxStr(qbbox)}` +
       `&datetime=${startDate}/${endDate}&limit=10000&sortby=LOCAL_DATE&f=json`,
   )
-  const byStation = new Map<string, { name: string; days: number }>()
+  const byStation = new Map<string, { name: string; days: number; lon: number; lat: number }>()
   for (const f of daily.features ?? []) {
     const p = f.properties ?? {}
     if (p.TOTAL_PRECIPITATION == null) continue
     const id = p.CLIMATE_IDENTIFIER ?? '?'
-    const e = byStation.get(id) ?? { name: p.STATION_NAME ?? id, days: 0 }
+    const c = f.geometry?.coordinates ?? [NaN, NaN]
+    const e = byStation.get(id) ?? { name: p.STATION_NAME ?? id, days: 0, lon: c[0], lat: c[1] }
     e.days += 1
     byStation.set(id, e)
   }
-  let best: { name: string; days: number } | undefined
+  let best: { name: string; days: number; lon: number; lat: number } | undefined
   for (const e of byStation.values()) if (!best || e.days > best.days) best = e
   if (best) {
+    // Honest framing: this is the nearest/most-complete gauge WITH records — it may sit
+    // tens of km away (ECCC gauges are sparse); say so, with the distance, instead of
+    // letting the user think we grabbed the wrong city's data.
+    const km = _kmFromAoi(best.lon, best.lat, bbox)
+    const where = km != null ? ` — nearest gauge with records: ${best.name}, ~${km} km from your area` : ` (gauge: ${best.name})`
     return {
       available: true,
       spanDays,
       station: best.name,
       daysWithData: best.days,
-      message: `${best.days} of ${spanDays} day(s) have ECCC rain records (gauge: ${best.name}).`,
+      message: `Daily rain records: ${best.days} of ${spanDays} day(s)${where}. ` +
+        `The build auto-selects hourly data where available; the station and resolution actually used are shown after the build.`,
     }
   }
 
@@ -231,6 +238,38 @@ export async function checkRainfall(bbox: Bbox, startDate: string, endDate: stri
     message:
       `No rain records for this period at the nearest gauge (${station.name}); ` +
       `it has data ${range.start} → ${range.end}.`,
+  }
+}
+
+function _kmFromAoi(lon: number, lat: number, aoiBbox: Bbox): number | null {
+  if (!Number.isFinite(lon) || !Number.isFinite(lat)) return null
+  const cx = (aoiBbox[0] + aoiBbox[2]) / 2
+  const cy = (aoiBbox[1] + aoiBbox[3]) / 2
+  const kmPerDegLat = 111.2
+  const kmPerDegLon = kmPerDegLat * Math.cos((cy * Math.PI) / 180)
+  return Math.round(Math.hypot((lon - cx) * kmPerDegLon, (lat - cy) * kmPerDegLat))
+}
+
+// The rainfall record the BUILD actually used (ADR 0014/0015) — tier, station, coverage —
+// read from the task's validation.json. Null until the build reached the climate stage.
+export interface ForcingInfo {
+  rainfall_resolution: string
+  station_name?: string
+  coverage_pct?: number
+  idf_station_name?: string
+  return_period_yr?: number
+  total_mm?: number
+  fallback_reason?: string
+}
+
+export async function fetchForcing(taskId: string): Promise<ForcingInfo | null> {
+  try {
+    const r = await fetch(`${API}/tasks/${taskId}/validation`)
+    if (!r.ok) return null
+    const j = (await r.json()) as { forcing?: ForcingInfo }
+    return j.forcing ?? null
+  } catch {
+    return null
   }
 }
 

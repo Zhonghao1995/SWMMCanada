@@ -25,6 +25,7 @@ export default function ControlPanel() {
   const checkRainfall = useStore((s) => s.checkRainfall)
   const submit = useStore((s) => s.submit)
   const preview = useStore((s) => s.preview)
+  const forcing = useStore((s) => s.forcing)
   const layers = useStore((s) => s.layers)
   const toggleLayer = useStore((s) => s.toggleLayer)
 
@@ -128,6 +129,10 @@ export default function ControlPanel() {
           />
         </div>
 
+        <p className="text-[11px] text-slate-400">
+          Period (ISO): {startDate} → {endDate}
+        </p>
+
         <button
           onClick={checkRainfall}
           disabled={!aoi || rainfall.status === 'checking'}
@@ -204,6 +209,16 @@ export default function ControlPanel() {
               >
                 {job.mode.startsWith('Real') ? '🏙️ ' : '🧩 '}
                 {job.mode}
+              </div>
+            )}
+            {forcing && (
+              <div className="mt-1 text-[11px] text-slate-500">
+                {'🌧 Rain used: '}
+                {forcing.rainfall_resolution === 'design_storm'
+                  ? `synthetic design storm — T=${forcing.return_period_yr} yr, ${forcing.total_mm} mm ` +
+                    `(IDF: ${forcing.idf_station_name}). Not observed rain.`
+                  : `${forcing.rainfall_resolution}${forcing.station_name ? ` · ${forcing.station_name}` : ''}` +
+                    `${forcing.coverage_pct != null ? ` · ${forcing.coverage_pct}% coverage` : ''}`}
               </div>
             )}
             {job.message && <div className="mt-1 text-slate-500">{job.message}</div>}
