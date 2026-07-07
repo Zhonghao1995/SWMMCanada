@@ -31,7 +31,7 @@ from swmmcanada.geo.crs import utm_crs_for
 from swmmcanada.network import synthesise_network
 from swmmcanada.network.delineate_dem import delineate_junction_subcatchments
 from swmmcanada.network.sizing import size_conduits
-from swmmcanada.network.service_area import MIN_CELL_HA, street_service_corridor
+from swmmcanada.network.service_area import MIN_CELL_HA, block_aware_service_area
 from swmmcanada.network.water import subtract_water, water_union
 from swmmcanada.preview import network_geojson
 from swmmcanada.validate import (
@@ -46,7 +46,9 @@ from swmmcanada.sources.landcover_nrcan import NRCanLandcoverSource
 from swmmcanada.sources.soil_constant import ConstantHsgSoilSource
 from swmmcanada.sources.soil_hysogs import HysogsSoilSource
 from swmmcanada.sources.soil_soilgrids import SoilGridsSource
-from swmmcanada.sources.streets_osm import fetch_street_graph, sample_elevations
+from swmmcanada.sources.streets_osm import (
+    fetch_building_footprints, fetch_street_graph, sample_elevations,
+)
 from swmmcanada.sources.cities import base
 from swmmcanada.sources.cities.registry import CitySpec, city_for_point, city_spec
 
@@ -325,7 +327,8 @@ def build_from_aoi(
     synth = synthesise_network(streets, aoi=aoi, water=water)
     # Municipal worldview (ADR 0017): the street service corridor bounds what the network
     # serves; inside it, ADR 0010's gate still picks DEM basins vs Voronoi as the referee.
-    corridor = street_service_corridor(streets, aoi)
+    buildings = fetch_building_footprints(tuple(aoi.bbox))   # evidence for block interiors
+    corridor = block_aware_service_area(streets, aoi, buildings=buildings)
     junction_xy = {j.name: (j.x, j.y) for j in synth.network.junctions}
     subcatchments, sub_diag = delineate_junction_subcatchments(
         junction_xy, aoi, dem_path=dem.path, streets=streets,
