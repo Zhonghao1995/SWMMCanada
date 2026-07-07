@@ -171,7 +171,7 @@ def _select_sinks(g: nx.Graph, *, aoi, water, config: NetworkConfig):
 
 
 def _build_subcatchments(junction_xy, aoi, config: NetworkConfig, cells=None,
-                         widths=None) -> List[SubcatchmentIn]:
+                         widths=None, clip_poly=None) -> List[SubcatchmentIn]:
     """Cells → one SubcatchmentIn per junction (missing cell → nominal placeholder; %imperv
     stays a placeholder, derive overwrites). ``cells`` defaults to Voronoi delineation when
     an AOI polygon is given; the DEM delineator (delineate_dem, ADR 0010) passes its own,
@@ -180,7 +180,10 @@ def _build_subcatchments(junction_xy, aoi, config: NetworkConfig, cells=None,
     if cells is None:
         cells = {}
         if aoi is not None and len(junction_xy) >= 2:
-            poly = aoi.geometry if hasattr(aoi, "geometry") else aoi
+            # ADR 0017: the Voronoi tiling clips to the street service corridor when one is
+            # given — the municipal "nearest junction serves its half-blocks" split.
+            poly = clip_poly if clip_poly is not None else (
+                aoi.geometry if hasattr(aoi, "geometry") else aoi)
             cells = delineate_subcatchments(junction_xy, poly)
     subs: List[SubcatchmentIn] = []
     for jname in junction_xy:

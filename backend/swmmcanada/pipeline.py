@@ -31,6 +31,7 @@ from swmmcanada.geo.crs import utm_crs_for
 from swmmcanada.network import synthesise_network
 from swmmcanada.network.delineate_dem import delineate_junction_subcatchments
 from swmmcanada.network.sizing import size_conduits
+from swmmcanada.network.service_area import MIN_CELL_HA, street_service_corridor
 from swmmcanada.network.water import subtract_water, water_union
 from swmmcanada.preview import network_geojson
 from swmmcanada.validate import (
@@ -74,11 +75,11 @@ def _infiltration_kwargs(infiltration) -> dict:
 
 def _validate_or_raise(network, subcatchments, aoi, method: MethodDescriptor, ws: Path,
                        delineation: Optional[dict] = None, forcing: Optional[dict] = None,
-                       water=None):
+                       water=None, served=None):
     """Validate the subcatchment model, always write validation.json into the package, and
     raise (stopping the build) if any error-severity check fails — so no untrusted .inp ships."""
     report = validate_model(network, subcatchments, aoi, method=method, delineation=delineation,
-                            forcing=forcing, water=water)
+                            forcing=forcing, water=water, served=served)
     (Path(ws) / vschema.VALIDATION_JSON).write_text(json.dumps(report.to_dict(), indent=2))
     if not report.ok:
         detail = "; ".join(f"{c.id}: {c.message}" for c in report.errors)
@@ -213,7 +214,7 @@ def _export_icm_safe(ws: Path) -> None:
 def _finish_build(
     ws: Path, aoi, network, subcatchments, *, start: date, end: date, method,
     config: BuildConfig, extra_provenance: dict, climate_client, climate_buffer_deg: float,
-    report=None, sub_diag: Optional[dict] = None, dem=None, water=None,
+    report=None, sub_diag: Optional[dict] = None, dem=None, water=None, served=None,
 ) -> BuildResult:
     """The build spine (CONTEXT "Build spine") — the single shared tail of every build path.
 
@@ -244,7 +245,7 @@ def _finish_build(
 
     _r("VALIDATING", 85)
     _validate_or_raise(network, subcatchments, aoi, method, ws, delineation=sub_diag,
-                       forcing=forcing or None, water=water)
+                       forcing=forcing or None, water=water, served=served)
 
     _r("BUILDING", 90)
     # Datastore is the PRIMARY build path (ADR 0007): write it, then build the .inp from it.
@@ -322,13 +323,24 @@ def build_from_aoi(
 
     _r("NETWORK", 55)
     synth = synthesise_network(streets, aoi=aoi, water=water)
-    # Delineation v2 (ADR 0010): DEM D8 basins (street-burned) behind the terrain honesty
-    # gate; flat/noisy terrain falls back to junction-Voronoi with the reading recorded.
+    # Municipal worldview (ADR 0017): the street service corridor bounds what the network
+    # serves; inside it, ADR 0010's gate still picks DEM basins vs Voronoi as the referee.
+    corridor = street_service_corridor(streets, aoi)
     junction_xy = {j.name: (j.x, j.y) for j in synth.network.junctions}
     subcatchments, sub_diag = delineate_junction_subcatchments(
-        junction_xy, aoi, dem_path=dem.path, streets=streets)
+        junction_xy, aoi, dem_path=dem.path, streets=streets,
+        service_mask=corridor, min_cell_ha=MIN_CELL_HA)
     subcatchments, water_diag = subtract_water(subcatchments, water, junction_xy, aoi)
     sub_diag = {**(sub_diag or {}), "water": water_diag}
+    if corridor is not None:  # the service promise, quantified (ADR 0017)
+        from shapely.ops import transform as _shpt
+        from swmmcanada.geo.crs import lonlat_projector as _llp, utm_crs_for as _utm
+        _to_m = _llp(_utm(aoi))
+        corr_ha = _shpt(_to_m, corridor).area / 10_000.0
+        sub_diag.setdefault("service", {}).update(
+            corridor_ha=round(corr_ha, 1),
+            unserved_frac=round(max(0.0, 1.0 - corr_ha / (aoi.area_km2 * 100.0)), 3),
+            lot_depth_m=50.0)
 
     if derive:
         _r("SOIL", 62)
@@ -361,7 +373,7 @@ def build_from_aoi(
             "pipe_sizing": sizing_diag,
         },
         climate_client=climate_client, climate_buffer_deg=climate_buffer_deg, report=report,
-        sub_diag=sub_diag, dem=dem, water=water,
+        sub_diag=sub_diag, dem=dem, water=water, served=corridor,
     )
 
 

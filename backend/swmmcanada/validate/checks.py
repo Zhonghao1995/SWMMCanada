@@ -57,7 +57,7 @@ def check_geometry_absent(subs: List[SubcatchmentIn]):
 class GeoContext:
     """Cell polygons + AOI reprojected once into a metric CRS, with a cached cell union."""
 
-    def __init__(self, subcatchments: List[SubcatchmentIn], aoi, water=None):
+    def __init__(self, subcatchments: List[SubcatchmentIn], aoi, water=None, served=None):
         from shapely.geometry import Polygon
         from shapely.ops import transform as shp_transform
 
@@ -65,11 +65,17 @@ class GeoContext:
 
         self._tr = lonlat_projector(utm_crs_for(aoi))
         self.aoi_m = shp_transform(self._tr, aoi.geometry)
-        # ADR 0016: open water is legitimately uncovered — coverage/conservation compare
-        # against the EFFECTIVE AOI (AOI minus water) when a water layer is present.
+        # ADR 0016/0017: open water and land outside the street service corridor are
+        # legitimately uncovered — coverage/conservation compare against the EFFECTIVE AOI
+        # (AOI ∩ served − water) when those layers are present.
         self.water_m = shp_transform(self._tr, water) if water is not None else None
-        self.effective_aoi_m = (
-            self.aoi_m.difference(self.water_m) if self.water_m is not None else self.aoi_m)
+        self.served_m = shp_transform(self._tr, served) if served is not None else None
+        eff = self.aoi_m
+        if self.served_m is not None:
+            eff = eff.intersection(self.served_m)
+        if self.water_m is not None:
+            eff = eff.difference(self.water_m)
+        self.effective_aoi_m = eff
         self.cells: List[Tuple[SubcatchmentIn, object]] = []
         for s in subcatchments:
             if not s.polygon:
