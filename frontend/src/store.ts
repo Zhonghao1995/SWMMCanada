@@ -2,7 +2,8 @@ import { create } from 'zustand'
 import type { Feature, FeatureCollection, Polygon, Position } from 'geojson'
 import type { Aoi, JobProgress } from './types'
 import { checkRainfall as apiCheckRainfall, fetchPreview, pollTask, previewAoi, submitTask } from './lib/api'
-import type { InfiltrationMethod } from './lib/api'
+import type { ForcingInfo, InfiltrationMethod } from './lib/api'
+import { fetchForcing } from './lib/api'
 import type { Bbox, RainfallCheck } from './lib/api'
 
 export type LayerKey = 'subcatchments' | 'conduits' | 'junctions'
@@ -22,6 +23,7 @@ interface AppState {
   infiltration: InfiltrationMethod // ADR 0013: pervious-area loss model for the build
   job: JobProgress
   preview: FeatureCollection | null // model geometry (network + subcatchments)
+  forcing: ForcingInfo | null // rain tier/station the build actually used (ADR 0014/0015)
   layers: Record<LayerKey, boolean>
   rainfall: RainfallState // ECCC rain-data availability for the chosen AOI + period
   uploadError: string | null // boundary parse error, shown the moment a file is picked
@@ -96,6 +98,7 @@ export const useStore = create<AppState>((set, get) => ({
   infiltration: 'HORTON', // engineering-practice default (ADR 0013)
   job: { status: 'idle' },
   preview: null,
+  forcing: null,
   layers: DEFAULT_LAYERS,
   rainfall: IDLE_RAIN,
   uploadError: null,
@@ -174,7 +177,7 @@ export const useStore = create<AppState>((set, get) => ({
   submit: async () => {
     const { aoi, startDate, endDate, infiltration } = get()
     if (!aoi) return
-    set({ job: { status: 'queued' }, preview: null })
+    set({ job: { status: 'queued' }, preview: null, forcing: null })
     try {
       const { taskId } = await submitTask({ aoi, startDate, endDate, infiltration })
       for (;;) {
@@ -182,6 +185,7 @@ export const useStore = create<AppState>((set, get) => ({
         set({ job: p })
         if (TERMINAL.has(p.status)) {
           if (p.status === 'succeeded') set({ preview: await fetchPreview(taskId) })
+          set({ forcing: await fetchForcing(taskId) })   // what rain the build really used
           break
         }
         await new Promise((r) => setTimeout(r, 1500))
