@@ -9,7 +9,19 @@ from swmmcanada.network.errors import NetworkError
 def fetch_street_graph(bbox_wgs84) -> nx.Graph:
     """bbox = (minlon, minlat, maxlon, maxlat). Returns an undirected graph with node x/y
     (lon/lat) and edge length (m)."""
+    import tempfile
+    from pathlib import Path
+
     import osmnx as ox
+
+    # osmnx caches Overpass responses to ./cache RELATIVE TO THE CWD by default — a served
+    # worker's cwd may be read-only, killing every synthesis build at the STREETS stage
+    # ([Errno 13] Permission denied: 'cache'; found by the first out-of-8-cities build from
+    # the web UI). Cache explicitly in the system temp dir: always writable, and shared
+    # across builds, which is kinder to Overpass than disabling the cache.
+    cache = Path(tempfile.gettempdir()) / "swmmcanada-osmnx-cache"
+    cache.mkdir(parents=True, exist_ok=True)
+    ox.settings.cache_folder = str(cache)
 
     left, bottom, right, top = bbox_wgs84
     g_osm = ox.graph_from_bbox(bbox=(left, bottom, right, top), network_type="drive")
