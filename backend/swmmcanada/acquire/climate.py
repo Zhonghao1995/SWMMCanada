@@ -2,8 +2,10 @@
 temperature, via the MSC GeoMet OGC API (climate-stations + climate-daily). No scraping.
 
 HTTP is behind an injected `ClimateHttpClient` (one `get_json` method) so the whole module
-is offline-testable against recorded GeoJSON fixtures. v1 implements the DAILY path (the
-forcing `build` needs); hourly is a later increment.
+is offline-testable against recorded GeoJSON fixtures. Rainfall resolution is TIERED
+(ADR 0014): the nearest station whose hourly PRECIP_AMOUNT covers >=90% of the period is
+preferred automatically; otherwise the daily path (v1 behaviour) stands. Temperature and
+evaporation stay daily — their consumers (snowmelt min/max, Hargreaves) are daily methods.
 """
 import math
 from dataclasses import dataclass, field
@@ -18,6 +20,14 @@ from swmmcanada.build.models import EvaporationSeries, RainfallSeries, Temperatu
 BASE = "https://api.weather.gc.ca"
 
 _DAILY_COLS = ["timestamp_local", "precip_mm", "tmin_c", "tmax_c", "tmean_c", "precip_flag", "climate_id"]
+_HOURLY_COLS = ["timestamp_local", "precip_mm", "precip_flag", "climate_id"]
+
+# ADR 0014 quality gates: a station's hourly rain is usable only if PRECIP_AMOUNT is
+# non-missing for >=90% of the period's hours; an hourly-vs-daily total mismatch beyond
+# 15% is surfaced as a validation Warning (the two tiers may come from different stations,
+# so this is a sanity signal, not an exact conservation test).
+MIN_HOURLY_COVERAGE = 0.90
+MISMATCH_WARN_PCT = 15.0
 
 
 class ClimateHttpClient(Protocol):
@@ -49,6 +59,10 @@ class ClimateResult:
     requested_bbox: Tuple[float, float, float, float]
     requested_range: Tuple[date, date]
     warnings: List[str] = field(default_factory=list)
+    # ADR 0014: hourly rainfall tier — the series the raingage should use when present,
+    # and the honest record of which resolution/station/coverage the build got and why.
+    hourly_rain: Optional[ClimateSeries] = None
+    forcing: dict = field(default_factory=dict)
 
 
 def fetch_climate(
@@ -96,13 +110,103 @@ def fetch_climate(
     if not chosen:
         warnings.append("No climate station with data for the AOI/period.")
 
+    # Hourly rainfall tier (ADR 0014): prefer the nearest station whose hourly
+    # PRECIP_AMOUNT actually covers the period; fall back to the daily series otherwise.
+    c = aoi.geometry.centroid
+    candidates = inside + [s_ for s_ in sorted(
+        stations, key=lambda s_: (s_.lon - c.x) ** 2 + (s_.lat - c.y) ** 2) if s_ not in inside]
+    hourly_rain, forcing = _hourly_tier(
+        client, candidates[:max_buffer_tries], start, end,
+        daily_series=(series[0] if series else None))
+    if forcing.get("mismatch_warning"):
+        warnings.append(forcing["mismatch_warning"])
+
     return ClimateResult(
         stations=chosen,
         series=series,
         requested_bbox=tuple(aoi.bbox),  # type: ignore[arg-type]
         requested_range=(start, end),
         warnings=warnings,
+        hourly_rain=hourly_rain,
+        forcing=forcing,
     )
+
+
+def _hourly_tier(client, candidates, start: date, end: date, *, daily_series):
+    """Pick the first candidate station whose hourly rain is usable (ADR 0014) and build the
+    honest forcing record. Returns (hourly ClimateSeries | None, forcing dict)."""
+    expected_h = ((end - start).days + 1) * 24
+    tried = 0
+    for s in candidates:
+        frame = _fetch_hourly(client, s.climate_id, start, end)
+        tried += 1
+        n_valid = int(frame["precip_mm"].notna().sum()) if not frame.empty else 0
+        coverage = n_valid / expected_h if expected_h else 0.0
+        if coverage >= MIN_HOURLY_COVERAGE:
+            n_missing = expected_h - n_valid
+            forcing = {
+                "rainfall_resolution": "hourly",
+                "station": s.climate_id, "station_name": s.name,
+                "coverage_pct": round(100.0 * coverage, 1),
+                "n_missing_hours": n_missing,
+                "hourly_total_mm": round(float(frame["precip_mm"].sum(skipna=True)), 2),
+            }
+            if daily_series is not None and not daily_series.frame.empty:
+                daily_total = float(daily_series.frame["precip_mm"].sum(skipna=True))
+                forcing["daily_total_mm"] = round(daily_total, 2)
+                h = forcing["hourly_total_mm"]
+                mismatch = (abs(h - daily_total) / daily_total * 100.0) if daily_total > 0 else (
+                    0.0 if h == 0 else 100.0)
+                forcing["mismatch_pct"] = round(mismatch, 1)
+                if mismatch > MISMATCH_WARN_PCT:
+                    forcing["mismatch_warning"] = (
+                        f"hourly rain total ({h} mm, {s.climate_id}) differs from the daily "
+                        f"station total ({forcing['daily_total_mm']} mm) by {forcing['mismatch_pct']}% "
+                        f"— review the raingage source.")
+            return ClimateSeries(station=s, frame=frame), forcing
+    return None, {
+        "rainfall_resolution": "daily",
+        "fallback_reason": (
+            f"no station within reach has hourly PRECIP_AMOUNT covering "
+            f">={int(MIN_HOURLY_COVERAGE * 100)}% of the period ({tried} candidates tried)"),
+    }
+
+
+def _fetch_hourly(client: ClimateHttpClient, climate_id: str, start: date, end: date) -> pd.DataFrame:
+    fc = client.get_json(
+        f"{BASE}/collections/climate-hourly/items",
+        {
+            "CLIMATE_IDENTIFIER": climate_id,
+            "datetime": f"{start.isoformat()}/{end.isoformat()}",
+            "sortby": "LOCAL_DATE",
+            "limit": 10000,
+            "f": "json",
+        },
+    )
+    return parse_hourly(fc)
+
+
+def parse_hourly(feature_collection: dict) -> pd.DataFrame:
+    """GeoMet climate-hourly FeatureCollection → tidy hourly frame. Trace ('T') precip → 0;
+    missing → NaN (counted against the ADR 0014 coverage gate)."""
+    rows = []
+    for feat in feature_collection.get("features", []):
+        p = feat.get("properties", {})
+        precip = _f(p.get("PRECIP_AMOUNT"))
+        pflag = p.get("PRECIP_AMOUNT_FLAG")
+        if math.isnan(precip) and pflag == "T":
+            precip = 0.0
+        rows.append(
+            {
+                "timestamp_local": pd.to_datetime(p.get("LOCAL_DATE")),
+                "precip_mm": precip,
+                "precip_flag": pflag,
+                "climate_id": p.get("CLIMATE_IDENTIFIER"),
+            }
+        )
+    if not rows:
+        return pd.DataFrame(columns=_HOURLY_COLS)
+    return pd.DataFrame(rows, columns=_HOURLY_COLS).sort_values("timestamp_local").reset_index(drop=True)
 
 
 def _fetch_daily(client: ClimateHttpClient, climate_id: str, start: date, end: date) -> pd.DataFrame:

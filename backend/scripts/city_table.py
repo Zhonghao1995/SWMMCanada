@@ -62,7 +62,7 @@ COLUMNS = [
     "city", "label", "topology", "area_km2",
     "junctions", "conduits", "outfalls", "subcatchments",
     "sub_method", "inverts_gapfilled_pct",
-    "sanitary",
+    "sanitary", "rain_tier",
     "swmm_errors", "runoff_continuity_pct", "routing_continuity_pct",
     "precip_mm", "runoff_mm",
     "status",
@@ -156,6 +156,8 @@ def build_one(key, topology, bbox, out_root: Path) -> dict:
         inverts_gapfilled_pct=round(100.0 * n_fill / n_nodes, 1) if n_nodes else "",
         sanitary=(f"yes ({sanitary.get('n_junctions', '?')} J / {sanitary.get('n_conduits', '?')} C)"
                   if sanitary.get("included") else "no"),
+        rain_tier=json.loads(res.manifest_path.read_text()).get(
+            "forcing", {}).get("rainfall_resolution", "daily"),
         swmm_errors=n_errors,
         runoff_continuity_pct=runoff_cont, routing_continuity_pct=routing_cont,
         precip_mm=_depth_mm(rpt_text, "Total Precipitation"),

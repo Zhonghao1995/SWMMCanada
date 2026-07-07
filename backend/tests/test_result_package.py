@@ -78,3 +78,15 @@ def test_record_terrain_stamps_the_manifest(tmp_path):
     assert t["dem"] == rp.DEM_DTM and t["landcover"] == rp.LANDCOVER
     assert t["source"] == "hrdem-lidar:proj-1m" and t["resolution_m"] == 1.0
     assert t["coverage"] == "full"
+
+
+def test_record_forcing_stamps_the_manifest(tmp_path):
+    import json
+
+    (tmp_path / rp.MANIFEST_JSON).write_text(json.dumps({"title": "x"}))
+    rp.record_forcing(tmp_path, {"rainfall_resolution": "hourly", "station": "1014820",
+                                 "coverage_pct": 98.2, "mismatch_warning": "internal-only"})
+    data = json.loads((tmp_path / rp.MANIFEST_JSON).read_text())
+    assert data["forcing"]["rainfall_resolution"] == "hourly"
+    assert data["forcing"]["coverage_pct"] == 98.2
+    assert "mismatch_warning" not in data["forcing"]     # warning text lives in validation
