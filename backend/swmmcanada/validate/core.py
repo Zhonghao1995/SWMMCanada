@@ -99,6 +99,7 @@ def validate_model(
     delineation: Optional[dict] = None,
     forcing: Optional[dict] = None,
     water=None,
+    served=None,
 ) -> ValidationReport:
     """Run every check against the assembled model and return a structured report."""
     all_nodes = list(network.junctions) + list(network.outfalls)
@@ -125,12 +126,13 @@ def validate_model(
 
     # Geometric — operate on cells that carry a polygon; flag the ones that don't.
     results.append(C.check_geometry_absent(subcatchments))
-    geo = C.GeoContext(subcatchments, aoi, water)  # one reprojection to a metric CRS, shared
+    geo = C.GeoContext(subcatchments, aoi, water, served)  # one reprojection to metric, shared
     results.append(C.check_geometry_valid(geo))
     results.append(C.check_overlap(geo))
     results.append(C.check_area_conservation(
         subcatchments, aoi,
-        effective_aoi_m2=(geo.effective_aoi_m.area if water is not None else None)))
+        effective_aoi_m2=(geo.effective_aoi_m.area
+                          if (water is not None or served is not None) else None)))
     results.append(C.check_aoi_coverage(geo))
     results.append(C.check_aoi_containment(geo))
     results.append(C.check_node_coverage(geo, node_coords))

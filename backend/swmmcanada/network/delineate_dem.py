@@ -55,6 +55,8 @@ def delineate_junction_subcatchments(
     *,
     dem_path=None,
     streets=None,
+    service_mask=None,     # ADR 0017: street service corridor (4326); None = whole AOI (v2)
+    min_cell_ha=None,      # ADR 0017: sliver-merge threshold; None = no merging (v2)
     config: DemDelineationConfig = DemDelineationConfig(),
     network_config: NetworkConfig = NetworkConfig(),
 ) -> Tuple[List[SubcatchmentIn], dict]:
@@ -65,14 +67,25 @@ def delineate_junction_subcatchments(
     """
     gate: dict = {"threshold_pct": config.slope_gate_pct}
 
+    if service_mask is not None:
+        # Corridor mode (ADR 0017): the municipal split IS the street-midpoint Voronoi —
+        # inside a ~50 m served band, D8 basins add nothing over gutter-midpoint semantics
+        # and their corridor-clipped candidates kept failing the posterior geometry gate.
+        # DEM basins remain the method for no-corridor contexts (city fallback).
+        gate["decision"] = "corridor_voronoi"
+        return _voronoi(junction_xy, aoi, network_config, gate,
+                        service_mask=service_mask, min_cell_ha=min_cell_ha)
+
     if dem_path is None:
         gate["decision"] = "no_dem"
-        return _voronoi(junction_xy, aoi, network_config, gate)
+        return _voronoi(junction_xy, aoi, network_config, gate,
+                        service_mask=service_mask, min_cell_ha=min_cell_ha)
 
     window = _read_dem_window(dem_path, aoi, config)
     if window is None:
         gate["decision"] = "no_dem_overlap"
-        return _voronoi(junction_xy, aoi, network_config, gate)
+        return _voronoi(junction_xy, aoi, network_config, gate,
+                        service_mask=service_mask, min_cell_ha=min_cell_ha)
     dem, transform, dem_crs, aoi_mask = window
 
     import pyflwdir
@@ -88,7 +101,8 @@ def delineate_junction_subcatchments(
     gate["median_slope_pct"] = round(median_slope, 3)
     if median_slope < threshold:
         gate["decision"] = "below_slope_gate"
-        return _voronoi(junction_xy, aoi, network_config, gate)
+        return _voronoi(junction_xy, aoi, network_config, gate,
+                        service_mask=service_mask, min_cell_ha=min_cell_ha)
 
     burned, n_burned = _burn_streets(dem, transform, dem_crs, streets, config)
     gate["streets_burned_cells"] = n_burned
@@ -99,7 +113,8 @@ def delineate_junction_subcatchments(
     if cells is None:  # degenerate (e.g. every junction outside the DEM window)
         gate["decision"] = "dem_degenerate"
         gate.update(dem_diag)
-        return _voronoi(junction_xy, aoi, network_config, gate)
+        return _voronoi(junction_xy, aoi, network_config, gate,
+                        service_mask=service_mask, min_cell_ha=min_cell_ha)
 
     subs = _build_subcatchments(junction_xy, aoi, network_config, cells=cells, widths=widths)
 
@@ -109,7 +124,8 @@ def delineate_junction_subcatchments(
     if errors:
         gate["decision"] = "posterior_fallback"
         gate["posterior_errors"] = errors
-        return _voronoi(junction_xy, aoi, network_config, gate)
+        return _voronoi(junction_xy, aoi, network_config, gate,
+                        service_mask=service_mask, min_cell_ha=min_cell_ha)
 
     gate["decision"] = "dem"
     diag = {
@@ -122,12 +138,33 @@ def delineate_junction_subcatchments(
     return subs, diag
 
 
+def _apply_service(subs, junction_xy, aoi, service_mask, min_cell_ha):
+    """Size discipline for corridor mode (ADR 0017 §3). The corridor itself is applied at
+    the Voronoi source (clip polygon); this only merges slivers."""
+    from swmmcanada.network.service_area import merge_slivers
+
+    diag: dict = {"applied": service_mask is not None or min_cell_ha is not None}
+    if min_cell_ha is not None:
+        subs, merge_diag = merge_slivers(subs, aoi, min_cell_ha=min_cell_ha)
+        diag.update(merge_diag)
+    return subs, diag
+
+
 # --------------------------------------------------------------------------- #
 # fallback + gate helpers
 # --------------------------------------------------------------------------- #
-def _voronoi(junction_xy, aoi, network_config, gate) -> Tuple[List[SubcatchmentIn], dict]:
-    subs = _build_subcatchments(junction_xy, aoi, network_config)
-    return subs, {"method": METHOD_VORONOI, "n_subcatchments": len(subs), "gate": gate}
+def _voronoi(junction_xy, aoi, network_config, gate,
+             service_mask=None, min_cell_ha=None) -> Tuple[List[SubcatchmentIn], dict]:
+    # The Voronoi tiling clips to the corridor at the source (ADR 0017): pass it as the
+    # clip polygon, then apply size discipline. None/None = the v2 whole-AOI behaviour.
+    clip = None
+    if service_mask is not None:
+        clip = service_mask
+    subs = _build_subcatchments(junction_xy, aoi, network_config, clip_poly=clip)
+    subs, service_diag = _apply_service(subs, junction_xy, aoi, None, min_cell_ha)
+    service_diag["applied"] = service_mask is not None or min_cell_ha is not None
+    return subs, {"method": METHOD_VORONOI, "n_subcatchments": len(subs), "gate": gate,
+                  "service": service_diag}
 
 
 def _posterior_errors(junction_xy, subs, aoi) -> List[str]:
