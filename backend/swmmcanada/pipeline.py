@@ -123,6 +123,40 @@ def _design_intensity_fn(aoi):
             "return_period_yr": 5, "reason": "idf_unavailable"}
 
 
+def _design_storm_fallback(aoi, start: date):
+    """Third rainfall tier (ADR 0015): no usable gauge at all -> an alternating-block
+    design storm from the nearest ECCC IDF station. Returns (RainfallSeries, forcing dict);
+    raises RuntimeError when even the IDF source is unreachable — rain is never invented
+    from nothing."""
+    from swmmcanada.acquire.design_storm import (
+        DEFAULT_DURATION_H, DEFAULT_RETURN_PERIOD_YR, alternating_block_series,
+    )
+
+    lat = (aoi.bbox[1] + aoi.bbox[3]) / 2
+    lon = (aoi.bbox[0] + aoi.bbox[2]) / 2
+    try:
+        from swmmcanada.sources.idf_eccc import fetch_idf_table, nearest_idf_station
+
+        station = nearest_idf_station(lat, lon)
+        table = fetch_idf_table(station)
+        rain = alternating_block_series(table, start)
+    except Exception as exc:
+        raise RuntimeError(
+            "No climate station with usable rainfall for this AOI/period, and the ECCC IDF "
+            f"design-storm fallback is unreachable ({type(exc).__name__}). Try a different "
+            "area or period.") from exc
+    forcing = {
+        "rainfall_resolution": "design_storm",
+        "idf_station": station.station_id, "idf_station_name": station.name,
+        "return_period_yr": DEFAULT_RETURN_PERIOD_YR, "duration_h": DEFAULT_DURATION_H,
+        "timestep_min": 60, "method": "alternating-block from ECCC IDF table",
+        "total_mm": round(sum(rain.precip_mm), 1),
+        "fallback_reason": "no climate station with usable rainfall within reach "
+                           "(synthetic single-event storm — not for continuous hydrology)",
+    }
+    return rain, forcing
+
+
 def _export_observed_safe(ws: Path, aoi, start: date, end: date) -> None:
     """CONTEXT deliverable: observed streamflow CSV (the calibration/validation target),
     written when the offline HYDAT database is present (SWMMCANADA_HYDAT_PATH) and a WSC
@@ -192,17 +226,23 @@ def _finish_build(
     _r("CLIMATE", 80)
     climate = fetch_climate(aoi, start, end, client=climate_client, near_buffer_deg=climate_buffer_deg)
     series = next((s for s in climate.series if not s.frame.empty), None)
-    if series is None:
-        raise RuntimeError("No climate data available for this AOI/period.")
-    # Rainfall tier (ADR 0014): the raingage takes the hourly series when a usable one was
-    # found; temperature/evaporation stay on the daily station either way.
-    rain = to_rainfall_series(climate.hourly_rain or series)
-    evaporation = to_evaporation_series(series)
-    temperature = to_temperature_series(series)
+    forcing = dict(climate.forcing)
+    if series is not None:
+        # Rainfall tiers 1-2 (ADR 0014): hourly series when a usable one was found, else the
+        # daily station; temperature/evaporation stay on the daily station either way.
+        rain = to_rainfall_series(climate.hourly_rain or series)
+        evaporation = to_evaporation_series(series)
+        temperature = to_temperature_series(series)
+    else:
+        # Tier 3 (ADR 0015): no usable gauge at all -> IDF design storm, honestly labelled;
+        # temperature/evaporation are honestly absent (no station to derive them from).
+        rain, forcing = _design_storm_fallback(aoi, start)
+        evaporation = None
+        temperature = None
 
     _r("VALIDATING", 85)
     _validate_or_raise(network, subcatchments, aoi, method, ws, delineation=sub_diag,
-                       forcing=climate.forcing or None)
+                       forcing=forcing or None)
 
     _r("BUILDING", 90)
     # Datastore is the PRIMARY build path (ADR 0007): write it, then build the .inp from it.
@@ -222,8 +262,8 @@ def _finish_build(
     if dem is not None:  # 2D-overland raw materials are promised deliverables — stamp the
         result_package.record_terrain(  # terrain source/resolution into the manifest
             ws, source=dem.source, resolution_m=dem.resolution_m, coverage=dem.coverage)
-    if climate.forcing:  # rainfall tier record (ADR 0014) rides beside the terrain block
-        result_package.record_forcing(ws, climate.forcing)
+    if forcing:  # rainfall tier record (ADR 0014/0015) rides beside the terrain block
+        result_package.record_forcing(ws, forcing)
     _export_mikeplus_safe(ws)  # ADR 0008: MIKE+ CS package — every build, graceful
     _export_icm_safe(ws)  # ADR 0012: ICM ODIC package — every build, graceful
     _export_observed_safe(ws, aoi, start, end)  # observed flow (HYDAT) — real data when present
