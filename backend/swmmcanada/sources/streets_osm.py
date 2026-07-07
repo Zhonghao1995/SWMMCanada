@@ -87,3 +87,17 @@ def sample_elevations(graph: nx.Graph, dem_path) -> nx.Graph:
                 graph.nodes[n]["elev"] = v
         graph.remove_nodes_from(drop)
     return graph
+
+
+def fetch_building_footprints(bbox_wgs84):
+    """OSM building footprints inside the bbox (EPSG:4326 polygons), for the service-area
+    evidence test (ADR 0017: a block interior with buildings is lots, not wilderness).
+    Graceful: any failure returns [] — buildings refine the mask, they never block a build."""
+    import osmnx as ox
+
+    try:
+        left, bottom, right, top = bbox_wgs84
+        gdf = ox.features_from_bbox(bbox=(left, bottom, right, top), tags={"building": True})
+        return [g for g in gdf.geometry if g is not None and g.geom_type in ("Polygon", "MultiPolygon")]
+    except Exception:
+        return []

@@ -20,6 +20,11 @@ from swmmcanada.geo.crs import lonlat_projector, utm_crs_for
 # One lot depth each side of the street — the served band. Urban lot depths run ~40-60 m
 # (engineering practice; verify against municipal design manuals before citing in print).
 LOT_DEPTH_M = 50.0
+# A city block whose un-buffered interior is at most this big is served WHOLE: municipal
+# grading drains back yards to their fronting street, so a mid-block lens smaller than a
+# couple of lots is not "unserved land", it is the middle of the lots themselves. Bigger
+# interiors (superblocks, fields ringed by roads) honestly stay unserved.
+MAX_INTERIOR_GAP_HA = 0.5
 # Size discipline: cells below this merge into a neighbour (typical municipal subcatchments
 # are 0.5-10 ha; 0.05 ha = 500 m² is noise from adjacent pour points on one flow path).
 MIN_CELL_HA = 0.05
@@ -46,6 +51,47 @@ def street_service_corridor(streets, aoi, *, lot_depth_m: float = LOT_DEPTH_M):
     if corridor_m.is_empty:
         return None
     return shp_transform(to_deg, corridor_m)
+
+
+def block_aware_service_area(streets, aoi, *, lot_depth_m: float = LOT_DEPTH_M,
+                             max_interior_gap_ha: float = MAX_INTERIOR_GAP_HA,
+                             buildings=None):
+    """The service mask with the municipal block look (ADR 0017 amendment): the street
+    corridor PLUS every city block (planar face of the street network) whose interior
+    lens beyond the corridor is small — those interiors are the backs of lots that drain
+    to their fronting streets, so cells become wall-to-wall block polygons bounded by
+    street centrelines instead of street-hugging sausages with mid-block holes."""
+    from shapely.ops import polygonize
+
+    to_m = lonlat_projector(utm_crs_for(aoi))
+    from pyproj import Transformer
+
+    to_deg = Transformer.from_crs(utm_crs_for(aoi), "EPSG:4326", always_xy=True).transform
+
+    segments = []
+    for u, v in streets.edges():
+        a, b = streets.nodes[u], streets.nodes[v]
+        segments.append(LineString([to_m(a["x"], a["y"]), to_m(b["x"], b["y"])]))
+    if not segments:
+        return None
+    corridor_m = unary_union([seg.buffer(lot_depth_m) for seg in segments])
+
+    buildings_m = None
+    if buildings:
+        buildings_m = unary_union([shp_transform(to_m, b) for b in buildings])
+
+    served = [corridor_m]
+    for face in polygonize(unary_union(segments)):
+        gap = face.difference(corridor_m)
+        if gap.is_empty or gap.area <= max_interior_gap_ha * 10_000.0:
+            served.append(face)               # small lens: the backs of the lots
+        elif buildings_m is not None and gap.intersects(buildings_m):
+            served.append(face)               # EVIDENCE: buildings in the interior — these
+            #                                   are lots whose roofs drain to their street
+    mask_m = unary_union(served).intersection(shp_transform(to_m, aoi.geometry))
+    if mask_m.is_empty:
+        return None
+    return shp_transform(to_deg, mask_m)
 
 
 def merge_slivers(
