@@ -3,10 +3,11 @@
 This is the product's moat — independent of SWMMAnywhere (benchmark only). v1 is a
 deliberately crude happy-path on a street graph:
 
-  largest connected component → outfall = its lowest node → shortest-path tree toward
-  the outfall (one parent per node) → inverts propagated outward with a minimum slope so
-  flow strictly falls toward the outfall → one conduit per tree edge (constant diameter)
-  → one nominal subcatchment per junction.
+  largest connected component → outlets (water-adjacent local minima when an open-water
+  layer is given [ADR 0016], else the single lowest node) → multi-source shortest-path
+  FOREST toward the outlets (one parent per node) → inverts propagated outward per tree
+  with a minimum slope so flow strictly falls toward its outlet → one conduit per forest
+  edge (constant diameter) → one nominal subcatchment per junction.
 
 The OSM fetch (osmnx) is an injectable concern; this core takes a networkx graph with
 node attrs (x, y, elev) so it is fully offline-testable. Output reuses the build model
@@ -52,7 +53,7 @@ class SynthesisedNetwork:
 
 
 def synthesise_network(
-    streets: nx.Graph, *, aoi=None, config: NetworkConfig = NetworkConfig()
+    streets: nx.Graph, *, aoi=None, water=None, config: NetworkConfig = NetworkConfig()
 ) -> SynthesisedNetwork:
     if streets.number_of_nodes() < 2:
         raise NetworkError("Need at least 2 street nodes to synthesise a network.")
@@ -70,20 +71,25 @@ def synthesise_network(
         if "length" not in d or d["length"] is None:
             d["length"] = _dist(g.nodes[u], g.nodes[v])
 
-    # 3) Lowest node = terminal junction (the "sink"). A dedicated outfall hangs off it
-    #    with a SINGLE link — SWMM requires an outfall to have exactly one connecting link.
-    sink = min(g.nodes, key=lambda n: g.nodes[n]["elev"])
+    # 3) Terminal junctions (the "sinks"). With an open-water layer (ADR 0016): street
+    #    nodes hugging the water, thinned to lowest-first with a minimum spacing — a river
+    #    reach discharges at several points, not one. Without water (or none qualify):
+    #    the v1 single lowest node, unchanged.
+    sinks, outlet_basis = _select_sinks(g, aoi=aoi, water=water, config=config)
 
-    # 4) Shortest-path tree toward the sink → one parent per node.
-    paths = nx.single_source_dijkstra_path(g, sink, weight="length")
+    # 4) Multi-source shortest-path FOREST toward the sinks → one parent per node; every
+    #    node drains to its nearest (by street distance) outlet.
+    paths = nx.multi_source_dijkstra_path(g, set(sinks), weight="length")
     parent: Dict[object, object] = {n: p[-2] for n, p in paths.items() if len(p) >= 2}
 
-    # 5) Inverts: propagate outward from the sink so each upstream node sits higher.
-    inverts: Dict[object, float] = {sink: g.nodes[sink]["elev"] - config.outfall_depth_m}
+    # 5) Inverts: propagate outward from each sink so every upstream node sits higher
+    #    than its parent within its own tree.
+    inverts: Dict[object, float] = {
+        sk: g.nodes[sk]["elev"] - config.outfall_depth_m for sk in sinks}
     children = defaultdict(list)
     for node, par in parent.items():
         children[par].append(node)
-    queue = deque([sink])
+    queue = deque(sinks)
     while queue:
         node = queue.popleft()
         for child in children[node]:
@@ -117,18 +123,20 @@ def synthesise_network(
             )
         )
 
-    # 7) Dedicated single-link outfall just downstream of the sink (lower invert).
-    sink_x, sink_y = g.nodes[sink]["x"], g.nodes[sink]["y"]
-    outfall_name = f"OUT_{name[sink]}"
-    outfall_inv = inverts[sink] - config.min_slope * config.outfall_link_len_m
-    outfalls = [OutfallIn(outfall_name, invert_m=outfall_inv, x=sink_x + 1e-4, y=sink_y)]
-    conduits.append(
-        ConduitIn(
-            "C_OUT", name[sink], outfall_name,
-            length_m=config.outfall_link_len_m,
-            diameter_m=config.diameter_m, roughness_n=config.roughness_n,
+    # 7) One dedicated single-link outfall per sink (SWMM: an outfall has exactly one link).
+    outfalls: List[OutfallIn] = []
+    for sk in sinks:
+        sk_x, sk_y = g.nodes[sk]["x"], g.nodes[sk]["y"]
+        outfall_name = f"OUT_{name[sk]}"
+        outfall_inv = inverts[sk] - config.min_slope * config.outfall_link_len_m
+        outfalls.append(OutfallIn(outfall_name, invert_m=outfall_inv, x=sk_x + 1e-4, y=sk_y))
+        conduits.append(
+            ConduitIn(
+                f"C_OUT_{name[sk]}", name[sk], outfall_name,
+                length_m=config.outfall_link_len_m,
+                diameter_m=config.diameter_m, roughness_n=config.roughness_n,
+            )
         )
-    )
 
     return SynthesisedNetwork(
         network=NetworkIn(junctions=junctions, outfalls=outfalls, conduits=conduits),
@@ -136,11 +144,30 @@ def synthesise_network(
         diagnostics={
             "n_nodes": g.number_of_nodes(),
             "n_conduits": len(conduits),
-            "outfall": outfall_name,
-            "terminal_junction": name[sink],
+            "n_outfalls": len(outfalls),
+            "outfalls": [o.name for o in outfalls],
+            "outlet_basis": outlet_basis,
+            "terminal_junctions": [name[sk] for sk in sinks],
             "dropped_nodes": dropped,
         },
     )
+
+
+def _select_sinks(g: nx.Graph, *, aoi, water, config: NetworkConfig):
+    """Outlet nodes + the honest basis label (ADR 0016 §4). Water-adjacent candidates are
+    thinned lowest-elevation-first with a minimum spacing; no water layer (or no node near
+    the water) keeps the v1 single-lowest-node behaviour bit-for-bit."""
+    if water is not None and aoi is not None:
+        from swmmcanada.network.water import nodes_near_water, thin_by_spacing
+
+        node_xy = {n: (g.nodes[n]["x"], g.nodes[n]["y"]) for n in g.nodes}
+        near = nodes_near_water(node_xy, water, aoi)
+        if near:
+            cands = [(n, g.nodes[n]["elev"], node_xy[n]) for n in near]
+            chosen = thin_by_spacing(cands, aoi)
+            if chosen:
+                return chosen, "water-adjacent local minima (ADR 0016)"
+    return [min(g.nodes, key=lambda n: g.nodes[n]["elev"])], "lowest node (no water layer)"
 
 
 def _build_subcatchments(junction_xy, aoi, config: NetworkConfig, cells=None,

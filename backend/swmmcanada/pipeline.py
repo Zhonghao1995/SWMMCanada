@@ -31,6 +31,7 @@ from swmmcanada.geo.crs import utm_crs_for
 from swmmcanada.network import synthesise_network
 from swmmcanada.network.delineate_dem import delineate_junction_subcatchments
 from swmmcanada.network.sizing import size_conduits
+from swmmcanada.network.water import subtract_water, water_union
 from swmmcanada.preview import network_geojson
 from swmmcanada.validate import (
     MethodDescriptor,
@@ -72,11 +73,12 @@ def _infiltration_kwargs(infiltration) -> dict:
 
 
 def _validate_or_raise(network, subcatchments, aoi, method: MethodDescriptor, ws: Path,
-                       delineation: Optional[dict] = None, forcing: Optional[dict] = None):
+                       delineation: Optional[dict] = None, forcing: Optional[dict] = None,
+                       water=None):
     """Validate the subcatchment model, always write validation.json into the package, and
     raise (stopping the build) if any error-severity check fails — so no untrusted .inp ships."""
     report = validate_model(network, subcatchments, aoi, method=method, delineation=delineation,
-                            forcing=forcing)
+                            forcing=forcing, water=water)
     (Path(ws) / vschema.VALIDATION_JSON).write_text(json.dumps(report.to_dict(), indent=2))
     if not report.ok:
         detail = "; ".join(f"{c.id}: {c.message}" for c in report.errors)
@@ -211,7 +213,7 @@ def _export_icm_safe(ws: Path) -> None:
 def _finish_build(
     ws: Path, aoi, network, subcatchments, *, start: date, end: date, method,
     config: BuildConfig, extra_provenance: dict, climate_client, climate_buffer_deg: float,
-    report=None, sub_diag: Optional[dict] = None, dem=None,
+    report=None, sub_diag: Optional[dict] = None, dem=None, water=None,
 ) -> BuildResult:
     """The build spine (CONTEXT "Build spine") — the single shared tail of every build path.
 
@@ -242,7 +244,7 @@ def _finish_build(
 
     _r("VALIDATING", 85)
     _validate_or_raise(network, subcatchments, aoi, method, ws, delineation=sub_diag,
-                       forcing=forcing or None)
+                       forcing=forcing or None, water=water)
 
     _r("BUILDING", 90)
     # Datastore is the PRIMARY build path (ADR 0007): write it, then build the .inp from it.
@@ -308,17 +310,28 @@ def build_from_aoi(
     streets = fetch_street_graph(tuple(aoi.bbox))
     sample_elevations(streets, dem.path)
 
+    # Open-water layer (ADR 0016) from the landcover clip — needed BEFORE synthesis so the
+    # network can discharge at the water instead of one global low point. derive=False has
+    # no landcover, so the whole water story honestly absent (v1 behaviour).
+    landcover = None
+    water = None
+    if derive:
+        _r("LANDCOVER", 45)
+        landcover = acquire_landcover(tuple(aoi.bbox), ws, source=landcover_source or NRCanLandcoverSource())
+        water = water_union(landcover.raster_path, aoi)
+
     _r("NETWORK", 55)
-    synth = synthesise_network(streets, aoi=aoi)
+    synth = synthesise_network(streets, aoi=aoi, water=water)
     # Delineation v2 (ADR 0010): DEM D8 basins (street-burned) behind the terrain honesty
     # gate; flat/noisy terrain falls back to junction-Voronoi with the reading recorded.
     junction_xy = {j.name: (j.x, j.y) for j in synth.network.junctions}
     subcatchments, sub_diag = delineate_junction_subcatchments(
         junction_xy, aoi, dem_path=dem.path, streets=streets)
+    subcatchments, water_diag = subtract_water(subcatchments, water, junction_xy, aoi)
+    sub_diag = {**(sub_diag or {}), "water": water_diag}
 
     if derive:
-        _r("LANDCOVER_SOIL", 62)
-        landcover = acquire_landcover(tuple(aoi.bbox), ws, source=landcover_source or NRCanLandcoverSource())
+        _r("SOIL", 62)
         soil = _acquire_soil_auto(tuple(aoi.bbox), ws, soil_source)
         _r("DERIVE", 70)
         subcatchments = derive_parameters(subcatchments, dem.path, landcover, soil)
@@ -348,7 +361,7 @@ def build_from_aoi(
             "pipe_sizing": sizing_diag,
         },
         climate_client=climate_client, climate_buffer_deg=climate_buffer_deg, report=report,
-        sub_diag=sub_diag, dem=dem,
+        sub_diag=sub_diag, dem=dem, water=water,
     )
 
 
@@ -392,6 +405,8 @@ def build_city(
     else:
         subcatchments = []
     dem = None
+    water = None
+    landcover = None
     if not subcatchments:  # no catch-basin data -> junction delineation (DEM-gated, ADR 0010)
         junction_xy = {j.name: (j.x, j.y) for j in network.junctions}
         if derive:  # the DEM is needed for derive anyway; without derive there is none → "no_dem"
@@ -400,13 +415,19 @@ def build_city(
         subcatchments, sub_diag = delineate_junction_subcatchments(
             junction_xy, aoi, dem_path=(dem.path if dem else None))
         imperv_map = {}
+        if derive:  # water masking for the junction fallback (ADR 0016; parcel cells skip it)
+            landcover = acquire_landcover(tuple(aoi.bbox), ws, source=landcover_source or NRCanLandcoverSource())
+            water = water_union(landcover.raster_path, aoi)
+            subcatchments, water_diag = subtract_water(subcatchments, water, junction_xy, aoi)
+            sub_diag = {**(sub_diag or {}), "water": water_diag}
 
     if derive:
         if dem is None:
             _r("ACQUIRING_DEM", 45)
             dem = acquire_dem(tuple(aoi.bbox), ws, source=dem_source)
         _r("LANDCOVER_SOIL", 60)
-        landcover = acquire_landcover(tuple(aoi.bbox), ws, source=landcover_source or NRCanLandcoverSource())
+        if landcover is None:
+            landcover = acquire_landcover(tuple(aoi.bbox), ws, source=landcover_source or NRCanLandcoverSource())
         soil = _acquire_soil_auto(tuple(aoi.bbox), ws, soil_source)
         _r("DERIVE", 70)
         subcatchments = derive_parameters(subcatchments, dem.path, landcover, soil)
@@ -447,7 +468,7 @@ def build_city(
             "sanitary": san_diag,
         },
         climate_client=climate_client, climate_buffer_deg=climate_buffer_deg, report=report,
-        sub_diag=sub_diag, dem=dem,
+        sub_diag=sub_diag, dem=dem, water=water,
     )
 
 

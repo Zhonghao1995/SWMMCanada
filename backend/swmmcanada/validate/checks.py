@@ -57,7 +57,7 @@ def check_geometry_absent(subs: List[SubcatchmentIn]):
 class GeoContext:
     """Cell polygons + AOI reprojected once into a metric CRS, with a cached cell union."""
 
-    def __init__(self, subcatchments: List[SubcatchmentIn], aoi):
+    def __init__(self, subcatchments: List[SubcatchmentIn], aoi, water=None):
         from shapely.geometry import Polygon
         from shapely.ops import transform as shp_transform
 
@@ -65,6 +65,11 @@ class GeoContext:
 
         self._tr = lonlat_projector(utm_crs_for(aoi))
         self.aoi_m = shp_transform(self._tr, aoi.geometry)
+        # ADR 0016: open water is legitimately uncovered — coverage/conservation compare
+        # against the EFFECTIVE AOI (AOI minus water) when a water layer is present.
+        self.water_m = shp_transform(self._tr, water) if water is not None else None
+        self.effective_aoi_m = (
+            self.aoi_m.difference(self.water_m) if self.water_m is not None else self.aoi_m)
         self.cells: List[Tuple[SubcatchmentIn, object]] = []
         for s in subcatchments:
             if not s.polygon:
@@ -125,9 +130,9 @@ def check_overlap(geo: GeoContext):
                    overlap_m2=round(overlap, 1), fraction=round(frac, 4))
 
 
-def check_area_conservation(subs: List[SubcatchmentIn], aoi):
+def check_area_conservation(subs: List[SubcatchmentIn], aoi, effective_aoi_m2=None):
     sum_m2 = sum((s.area_ha or 0.0) for s in subs) * 1e4
-    aoi_m2 = aoi.area_km2 * 1e6
+    aoi_m2 = effective_aoi_m2 if effective_aoi_m2 is not None else aoi.area_km2 * 1e6
     frac = abs(sum_m2 - aoi_m2) / aoi_m2 if aoi_m2 > 0 else 0.0
     passed = frac <= schema.AREA_CONSERVATION_TOL
     return _result("area_conservation", schema.WARNING, passed,
@@ -138,8 +143,8 @@ def check_area_conservation(subs: List[SubcatchmentIn], aoi):
 def check_aoi_coverage(geo: GeoContext):
     if not geo.valid_polys():
         return _na("aoi_coverage", schema.WARNING)
-    aoi_area = geo.aoi_m.area
-    covered = geo.union().intersection(geo.aoi_m).area
+    aoi_area = geo.effective_aoi_m.area
+    covered = geo.union().intersection(geo.effective_aoi_m).area
     frac = max(0.0, aoi_area - covered) / aoi_area if aoi_area > 0 else 0.0
     sev = schema.ERROR if frac > schema.AOI_COVERAGE_ERROR_FRAC else schema.WARNING
     passed = frac <= schema.AOI_COVERAGE_WARN_FRAC
