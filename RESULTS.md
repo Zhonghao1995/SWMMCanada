@@ -115,40 +115,47 @@ reviewed diff — it cannot silently degrade coverage.
 ## Eight-city engine validation
 
 All eight real-network cities, built end-to-end from live open data on one fixed week
-(1–7 June 2022, ~1–2.6 km² fixed downtown AOIs, Horton infiltration — the build default,
-ADR 0013) and run in EPA SWMM 5.2.4 — **zero engine errors in all eight**. One pinned
-script produces the whole table: `backend/.venv/bin/python backend/scripts/city_table.py`
-(figure: `backend/scripts/city_figure.py`).
+(1–7 June 2022, ~1–2.6 km² fixed downtown AOIs, Horton infiltration default) and run in
+EPA SWMM 5.2.4 — **zero engine errors and flow-routing continuity within ±1.1% in all
+eight**, with **every AOI automatically served hourly rainfall** (ADR 0014 tier: nearest
+station whose hourly record covers ≥90% of the period; the tier, station and coverage are
+recorded in each build's manifest and validation report). One pinned script produces the
+whole table: `backend/.venv/bin/python backend/scripts/city_table.py` (figure:
+`backend/scripts/city_figure.py`).
 
 ![Eight built storm networks](results/eight_city_networks.png)
 
-| City | Topology | km² | Junctions / conduits / outfalls | Subcatchments | Inverts gap-filled | Runoff / routing continuity (%) |
-|---|---|--:|:--:|--:|--:|:--:|
-| Victoria, BC | explicit node IDs | 1.36 | 508 / 514 / 30 | 767 | 7.5% | −0.001 / −0.59 |
-| Ottawa, ON | geometry-inferred | 2.61 | 619 / 630 / 73 | 2,461 | 15.9% | −0.027 / −0.20 |
-| London, ON | explicit node IDs | 0.91 | 187 / 188 / 14 | 352 | 3.6% | −0.023 / +0.05 |
-| Kitchener–Waterloo, ON | explicit manhole IDs | 0.90 | 454 / 456 / 23 | 341 | 0.4% | −0.085 / +0.99 |
-| Calgary, AB | geometry-inferred | 0.78 | 371 / 383 / 75 | 171 | 38.7% | −0.067 / +0.29 |
-| Surrey, BC | geometry-inferred | 0.81 | 159 / 160 / 23 | 243 | 1.2% | −0.006 / −0.01 |
-| Kelowna, BC | geometry-inferred | 0.80 | 144 / 145 / 20 | 161 | 9.3% | −0.009 / −20.6¹ |
-| Regina, SK | geometry-inferred | 0.79 | 247 / 247 / 17 | 428 | 14.2% | 0.0 / 0.0² |
+| City | Topology | km² | Junctions / conduits / outfalls | Subcatchments | Inverts gap-filled | Rain → runoff (mm) | Runoff / routing continuity (%) |
+|---|---|--:|:--:|--:|--:|:--:|:--:|
+| Victoria, BC | explicit node IDs | 1.36 | 508 / 514 / 30 | 767 | 7.5% | 11.8 → 3.5 | −0.21 / −0.23 |
+| Ottawa, ON | geometry-inferred | 2.61 | 619 / 630 / 73 | 2,461 | 15.9% | 13.7 → 5.6 | −0.56 / +0.26 |
+| London, ON | explicit node IDs | 0.91 | 187 / 188 / 14 | 352 | 3.6% | 18.3 → 7.2 | −0.27 / +0.16 |
+| Kitchener–Waterloo, ON | explicit manhole IDs | 0.90 | 454 / 456 / 23 | 341 | 0.4% | 9.6 → 3.4 | −0.13 / −0.17 |
+| Calgary, AB | geometry-inferred | 0.78 | 371 / 383 / 75 | 171 | 38.7% | 34.2 → 19.0 | −0.28 / −1.08 |
+| Surrey, BC | geometry-inferred | 0.81 | 159 / 160 / 23 | 243 | 1.2% | 28.4 → 6.6 | −0.09 / −0.004 |
+| Kelowna, BC | geometry-inferred | 0.80 | 144 / 145 / 20 | 161 | 9.3% | 25.2 → 9.0 | −0.13 / −0.63 |
+| Regina, SK | geometry-inferred | 0.79 | 247 / 247 / 17 | 428 | 14.2% | 0.0 → 0.0¹ | 0.0 / 0.0¹ |
 
-¹ Kelowna's routing imbalance is dominated by a single junction (−54% node continuity):
-the city publishes no node inverts (back-filled from pipe ends) and no rim elevations, and
-that structure floods a third of the wet inflow. Zero engine errors — reported as-is as a
-data-quality signal; an automatic adverse-invert validation check is future work.
-² The fixed week was dry at Regina's nearest ECCC station (0 mm), so continuity is
-trivially exact; engine execution is still verified.
+¹ The fixed comparison week was dry at Regina's nearest station (0 mm at both tiers), so
+continuity is trivially exact; engine execution is still verified.
 
-Runoff depths across all cities are systematically low for the rain received: daily-average
-forcing (a day's rain spread at ~0.1–0.5 mm/h) often falls below the continuous Hargreaves
-evaporation demand, so little reaches the pipes between events. That is the documented
-daily-forcing limitation, not a network defect — sub-daily forcing is a data increment, and
-design flows already use the minute-scale IDF curves. Consistent with it, switching the
-infiltration method from SCS Curve Number to Horton (the ADR 0013 default change) left
-seven of the eight cities' engine results bit-identical — only Calgary, the wettest AOI
-that week, shifted (runoff 18.7 → 17.8 mm) — the method choice only starts to matter
-under real sub-daily storm intensities.
+**Hourly forcing changed the physics, not just the numbers.** Under the previous daily
+forcing, a day's rain was spread at ~0.1–0.5 mm/h — often below the continuous evaporation
+demand — so runoff ratios were unrealistically low (Victoria: 3.4%). With the hourly tier
+they land at **23–55%**, plausible for dense downtowns. The three infiltration methods
+(ADR 0013) now also compute measurably differently — Calgary's wet week infiltrates
+10.3 mm under Horton vs 7.6 mm under Curve Number — though downtown *runoff* remains
+impervious-dominated at these intensities; full runoff divergence awaits design-storm
+events (future dual-drainage work).
+
+**Real intensities also exposed — and fixed — an engine-numerics gap.** Daily drizzle let
+SWMM's default dynamic-wave settings pass unnoticed; hourly pulses made a handful of
+short/steep conduits oscillate (Kitchener reached −976% routing continuity from ONE
+oscillating node; Kelowna's earlier −20.6% single-node artefact was the same phenomenon).
+The writer now sets standard municipal stabilisation numerics (5 s max routing step with
+variable stepping, partial inertial damping, both normal-flow criteria, 20 trials) —
+measured effect: Kitchener −976% → −0.17%, Ottawa −14.6% → +0.26%, **Kelowna −20.6% →
+−0.63%**. An automatic adverse-invert data check remains open as #77.
 
 ## Victoria — fidelity to the source data
 
