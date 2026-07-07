@@ -205,7 +205,7 @@ export async function checkRainfall(bbox: Bbox, startDate: string, endDate: stri
     return {
       available: false,
       spanDays,
-      message: 'No ECCC climate gauge within ~50 km — the build cannot attach real rainfall and will fail at the climate stage. Try a different area or period. (A synthetic design-storm fallback is planned.)',
+      message: 'No ECCC climate gauge within ~50 km — the build will fall back to a synthetic IDF design storm (T=5 yr, alternating block), clearly labelled in the result. Fine for structural checks; not real observed rain.',
     }
   }
   const range = await stationRange(station.id)
