@@ -4,6 +4,7 @@
   POST   /api/v1/tasks              -> 202 {task_id, status}   (json polygon or multipart shp)
   GET    /api/v1/tasks/{id}         -> 200 {state, progress_pct, stage, error}
   GET    /api/v1/tasks/{id}/result  -> 200 zip | 409 not ready | 404
+  GET    /api/v1/coverage           -> 200 {real_network_cities, synthesis}
   GET    /api/v1/healthz            -> 200
 
 Inline pre-checks (AOI parse, max-AOI cap, date sanity) fail fast as 4xx before a task is
@@ -28,7 +29,7 @@ from swmmcanada.build.config import InfiltrationModel
 from swmmcanada.geo import aoi_from_geojson, aoi_from_shapefile
 from swmmcanada.geo.errors import AOIOversizeError, GeoError
 from swmmcanada.pipeline import pipeline_for_aoi
-from swmmcanada.sources.cities.registry import city_for_point, in_canada_coarse
+from swmmcanada.sources.cities.registry import city_for_point, coverage_summary, in_canada_coarse
 
 
 def create_app(*, pipeline=None, workdir=None, run_inline: bool = False) -> FastAPI:
@@ -39,6 +40,17 @@ def create_app(*, pipeline=None, workdir=None, run_inline: bool = False) -> Fast
     store = TaskStore()
     work_root = Path(workdir or tempfile.mkdtemp(prefix="swmmcanada_"))
     executor = ThreadPoolExecutor(max_workers=2)
+
+    @app.get("/api/v1/coverage")
+    def coverage():
+        """What this deployment can build: discovery for integrating
+        clients (aiswmm answers "which cities are supported" from here
+        instead of a hardcoded list that drifts, as its Regina-missing
+        hint once did)."""
+        return {
+            "real_network_cities": coverage_summary(),
+            "synthesis": "anywhere in Canada from open data",
+        }
 
     @app.get("/api/v1/healthz")
     def healthz():
