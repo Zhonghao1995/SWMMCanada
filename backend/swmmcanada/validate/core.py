@@ -124,6 +124,10 @@ def validate_model(
     results.append(C.check_outlet_exists(subcatchments, node_names))
     results.append(C.check_area_positive(subcatchments))
 
+    # Network inverts — the adverse/back-filled-invert data-quality signal, surfaced
+    # before the engine run instead of in the .rpt (issue #77).
+    results.append(C.check_invert_consistency(network))
+
     # Geometric — operate on cells that carry a polygon; flag the ones that don't.
     results.append(C.check_geometry_absent(subcatchments))
     geo = C.GeoContext(subcatchments, aoi, water, served)  # one reprojection to metric, shared
