@@ -140,7 +140,10 @@ export type Bbox = [number, number, number, number] // [minLng, minLat, maxLng, 
 export interface RainfallCheck {
   available: boolean
   spanDays: number // length of the requested window, in days (inclusive)
+  tier?: 'hourly' | 'daily' // which rainfall tier the build would pick (ADR 0014 mirror)
   station?: string // name of the nearest / chosen ECCC gauge
+  hourlyStation?: string // the hourly-tier candidate, when one qualifies
+  hourlyCoveragePct?: number
   daysWithData?: number // days in the window with a precip record
   dataStart?: string // station's earliest daily record (ISO)
   dataEnd?: string // station's latest daily record (ISO)
@@ -151,6 +154,7 @@ export interface RainfallCheck {
 
 interface GeoMetProps {
   TOTAL_PRECIPITATION?: number | null
+  PRECIP_AMOUNT?: number | null
   CLIMATE_IDENTIFIER?: string
   STATION_NAME?: string
   LOCAL_DATE?: string
@@ -181,16 +185,74 @@ function isoDayDiff(a: string, b: string): number {
 
 const bboxStr = (b: number[]) => b.map((v) => v.toFixed(5)).join(',')
 
+// Mirror of the build's hourly tier (ADR 0014, acquire/climate.py): nearest station whose
+// hourly PRECIP_AMOUNT covers >= 90% of the window wins. Advisory only; the build's own
+// selection is authoritative and is reported after the build.
+const MIN_HOURLY_COVERAGE = 0.9
+
+interface HourlyProbe {
+  name: string
+  km: number | null
+  coveragePct: number
+}
+
+async function probeHourly(
+  qbbox: number[],
+  aoiBbox: Bbox,
+  startDate: string,
+  endDate: string,
+  spanDays: number,
+): Promise<HourlyProbe | null> {
+  try {
+    const fc = await geomet(
+      `${GEOMET}/collections/climate-hourly/items?bbox=${bboxStr(qbbox)}` +
+        `&datetime=${startDate}T00:00:00/${endDate}T23:59:59` +
+        `&properties=PRECIP_AMOUNT,CLIMATE_IDENTIFIER,STATION_NAME&limit=10000&f=json`,
+    )
+    const byStation = new Map<string, { name: string; hours: number; lon: number; lat: number }>()
+    for (const f of fc.features ?? []) {
+      const p = f.properties ?? {}
+      if (p.PRECIP_AMOUNT == null) continue
+      const id = p.CLIMATE_IDENTIFIER ?? '?'
+      const c = f.geometry?.coordinates ?? [NaN, NaN]
+      const e = byStation.get(id) ?? { name: p.STATION_NAME ?? id, hours: 0, lon: c[0], lat: c[1] }
+      e.hours += 1
+      byStation.set(id, e)
+    }
+    const expected = spanDays * 24
+    const cx = (aoiBbox[0] + aoiBbox[2]) / 2
+    const cy = (aoiBbox[1] + aoiBbox[3]) / 2
+    const qualified = [...byStation.values()]
+      .map((e) => ({ ...e, coverage: expected ? e.hours / expected : 0 }))
+      .filter((e) => e.coverage >= MIN_HOURLY_COVERAGE)
+      .sort((a, b) => (a.lon - cx) ** 2 + (a.lat - cy) ** 2 - ((b.lon - cx) ** 2 + (b.lat - cy) ** 2))
+    const best = qualified[0]
+    if (!best) return null
+    return {
+      name: best.name,
+      km: _kmFromAoi(best.lon, best.lat, aoiBbox),
+      coveragePct: Math.min(100, Math.round(best.coverage * 100)),
+    }
+  } catch {
+    return null // advisory probe; a GeoMet hiccup must not fail the whole check
+  }
+}
+
 export async function checkRainfall(bbox: Bbox, startDate: string, endDate: string): Promise<RainfallCheck> {
   const spanDays = Math.max(1, isoDayDiff(startDate, endDate) + 1)
   const buf = 0.5 // ~50 km — ECCC climate gauges are sparse, so look beyond the AOI itself
   const qbbox = [bbox[0] - buf, bbox[1] - buf, bbox[2] + buf, bbox[3] + buf]
 
-  // 1) Any daily precip records anywhere in the buffered bbox for the period?
-  const daily = await geomet(
-    `${GEOMET}/collections/climate-daily/items?bbox=${bboxStr(qbbox)}` +
-      `&datetime=${startDate}/${endDate}&limit=10000&sortby=LOCAL_DATE&f=json`,
-  )
+  // 1) Both tiers probed in parallel, mirroring the build (ADR 0014): the hourly tier is
+  // what the build prefers; the daily gauge stays relevant as the evaporation/temperature
+  // source and as the fallback.
+  const [daily, hourly] = await Promise.all([
+    geomet(
+      `${GEOMET}/collections/climate-daily/items?bbox=${bboxStr(qbbox)}` +
+        `&datetime=${startDate}/${endDate}&limit=10000&sortby=LOCAL_DATE&f=json`,
+    ),
+    probeHourly(qbbox, bbox, startDate, endDate, spanDays),
+  ])
   const byStation = new Map<string, { name: string; days: number; lon: number; lat: number }>()
   for (const f of daily.features ?? []) {
     const p = f.properties ?? {}
@@ -204,18 +266,38 @@ export async function checkRainfall(bbox: Bbox, startDate: string, endDate: stri
   let best: { name: string; days: number; lon: number; lat: number } | undefined
   for (const e of byStation.values()) if (!best || e.days > best.days) best = e
   if (best) {
-    // Honest framing: this is the nearest/most-complete gauge WITH records — it may sit
-    // tens of km away (ECCC gauges are sparse); say so, with the distance, instead of
-    // letting the user think we grabbed the wrong city's data.
+    // Honest framing: these are the gauges WITH records — they may sit tens of km away
+    // (ECCC gauges are sparse); say so, with distances, instead of letting the user think
+    // we grabbed the wrong city's data.
     const km = _kmFromAoi(best.lon, best.lat, bbox)
-    const where = km != null ? `; nearest gauge with records: ${best.name}, ~${km} km from your area` : ` (gauge: ${best.name})`
+    const dailyWhere = km != null ? `${best.name}, ~${km} km away` : best.name
+    if (hourly) {
+      return {
+        available: true,
+        spanDays,
+        tier: 'hourly',
+        station: best.name,
+        hourlyStation: hourly.name,
+        hourlyCoveragePct: hourly.coveragePct,
+        daysWithData: best.days,
+        message:
+          `Hourly rain usable: ${hourly.name}` +
+          `${hourly.km != null ? `, ~${hourly.km} km away` : ''} (${hourly.coveragePct}% coverage); ` +
+          `the build will use the hourly tier. Daily records: ${best.days} of ${spanDays} day(s) at ` +
+          `${dailyWhere} (also the evaporation and temperature source). ` +
+          `The station actually used is confirmed after the build.`,
+      }
+    }
     return {
       available: true,
       spanDays,
+      tier: 'daily',
       station: best.name,
       daysWithData: best.days,
-      message: `Daily rain records: ${best.days} of ${spanDays} day(s)${where}. ` +
-        `The build auto-selects hourly data where available; the station and resolution actually used are shown after the build.`,
+      message:
+        `Daily rain records: ${best.days} of ${spanDays} day(s) at ${dailyWhere}. ` +
+        `No station within ~50 km has hourly coverage of at least 90% for this window, ` +
+        `so the build will use the daily tier. The station actually used is confirmed after the build.`,
     }
   }
 
