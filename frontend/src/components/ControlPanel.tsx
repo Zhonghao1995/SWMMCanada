@@ -32,10 +32,16 @@ export default function ControlPanel() {
   const toggleLayer = useStore((s) => s.toggleLayer)
 
   const counts = useMemo(() => {
-    const c: Record<string, number> = {}
+    const c = { subcatchment: 0, junction: 0, outfall: 0, stormPipe: 0, sanPipe: 0, sanitary: 0 }
     preview?.features.forEach((f) => {
-      const k = (f.properties as { kind?: string } | null)?.kind
-      if (k) c[k] = (c[k] || 0) + 1
+      const p = f.properties as { kind?: string; system?: string } | null
+      if (!p?.kind) return
+      if (p.kind === 'conduit') {
+        p.system === 'sanitary' ? c.sanPipe++ : c.stormPipe++
+      } else if (p.kind in c) {
+        c[p.kind as 'subcatchment' | 'junction' | 'outfall']++
+      }
+      if (p.system === 'sanitary') c.sanitary++
     })
     return c
   }, [preview])
@@ -304,22 +310,29 @@ export default function ControlPanel() {
         <section className="space-y-2">
           <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-400">4 · Model layers</h2>
           <p className="text-[11px] text-slate-500">
-            {counts.subcatchment ?? 0} subcatchments · {counts.conduit ?? 0} conduits ·{' '}
-            {counts.junction ?? 0} junctions · {counts.outfall ?? 0} outfall
+            {counts.subcatchment} subcatchments · {counts.stormPipe} storm
+            {counts.sanPipe > 0 ? ` + ${counts.sanPipe} sanitary` : ''} pipes ·{' '}
+            {counts.junction} junctions · {counts.outfall} outfall{counts.outfall === 1 ? '' : 's'}
           </p>
           {(
             [
-              ['subcatchments', 'Subcatchments', '#22c55e'],
-              ['conduits', 'Conduits', '#2563eb'],
-              ['junctions', 'Junctions', '#1d4ed8'],
+              ['subcatchments', 'Subcatchments', '#22c55e', true],
+              ['storm', 'Storm network', '#2563eb', true],
+              ['sanitary', 'Sanitary network', '#c2410c', counts.sanitary > 0],
             ] as const
-          ).map(([key, label, color]) => (
-            <label key={key} className="flex items-center gap-2 text-sm text-slate-600">
-              <input type="checkbox" checked={layers[key]} onChange={() => toggleLayer(key)} />
-              <span className="inline-block h-3 w-3 rounded-sm" style={{ background: color }} />
-              {label}
-            </label>
-          ))}
+          )
+            .filter(([, , , show]) => show)
+            .map(([key, label, color]) => (
+              <label key={key} className="flex items-center gap-2 text-sm text-slate-600">
+                <input type="checkbox" checked={layers[key]} onChange={() => toggleLayer(key)} />
+                <span className="inline-block h-3 w-3 rounded-sm" style={{ background: color }} />
+                {label}
+              </label>
+            ))}
+          <p className="text-[11px] text-slate-400">
+            Pipe width scales with diameter; arrows show flow direction when zoomed in. Click any
+            element for its attributes.
+          </p>
         </section>
       )}
 

@@ -13,9 +13,12 @@ import 'maplibre-gl/dist/maplibre-gl.css'
 import type { Feature, FeatureCollection } from 'geojson'
 import { useStore } from '../store'
 
-// Free CARTO Positron raster basemap — no API token.
+// Free CARTO Positron raster basemap — no API token. The glyphs endpoint (same CARTO
+// CDN as the tiles) serves the flow-direction arrows (symbol layers need a font
+// source); if it is unreachable the arrows simply do not render, nothing else breaks.
 const MAP_STYLE: StyleSpecification = {
   version: 8,
+  glyphs: 'https://tiles.basemaps.cartocdn.com/fonts/{fontstack}/{range}.pbf',
   sources: {
     carto: {
       type: 'raster',
@@ -47,6 +50,13 @@ const KIND_COLORS: Record<string, string> = {
   outfall: '#ef4444',
 }
 
+// Two drainage systems, two colours (ADR 0011 tags ride the preview): storm stays the
+// blue family, sanitary goes brick — the classic utility-drawing split.
+export const STORM_COLOR = '#2563eb'
+export const SANITARY_COLOR = '#c2410c'
+const CONDUIT_COLOR = ['match', ['get', 'system'], 'sanitary', SANITARY_COLOR, STORM_COLOR]
+const NODE_COLOR = ['match', ['get', 'system'], 'sanitary', SANITARY_COLOR, '#1d4ed8']
+
 // Pipe width encodes diameter (m -> px), clamped at the interpolation ends.
 const CONDUIT_WIDTH = [
   'interpolate', ['linear'], ['get', 'diameter_m'],
@@ -54,7 +64,15 @@ const CONDUIT_WIDTH = [
   0.45, 2.4,
   0.9, 4.2,
   1.8, 7,
-] as unknown as number
+]
+
+// Hovered feature gets emphasised (feature-state set from onMouseMove).
+const hoverCase = (on: unknown, off: unknown) =>
+  ['case', ['boolean', ['feature-state', 'hover'], false], on, off]
+
+// MapLibre expression arrays vs react-map-gl's typed paint props.
+const expr = (e: unknown) => e as unknown as number
+const exprColor = (e: unknown) => e as unknown as string
 const POPUP_ROWS: Record<string, [string, string, string?][]> = {
   subcatchment: [
     ['Area', 'area_ha', 'ha'],
@@ -122,6 +140,31 @@ export default function MapPanel() {
   const layers = useStore((s) => s.layers)
   const [picked, setPicked] = useState<Picked | null>(null)
   const [hovering, setHovering] = useState(false)
+  const hoverId = useRef<number | string | null>(null)
+
+  // System toggles filter pipes AND their nodes together (an engineer hides a system,
+  // not an element type). An empty allow-list must match nothing, hence the sentinel.
+  const allowedSystems = [
+    ...(layers.storm ? ['storm_minor', 'storm_major'] : []),
+    ...(layers.sanitary ? ['sanitary'] : []),
+  ]
+  const sysFilter = ['in', ['get', 'system'],
+    ['literal', allowedSystems.length ? allowedSystems : ['__none__']]]
+  const conduitFilter = ['all', kindIs('conduit'), sysFilter] as FilterSpecification
+  const junctionFilter = ['all', kindIs('junction'), sysFilter] as FilterSpecification
+
+  const setHover = (id: number | string | undefined) => {
+    const map = mapRef.current
+    if (!map) return
+    if (hoverId.current !== null && hoverId.current !== id) {
+      map.setFeatureState({ source: 'model', id: hoverId.current }, { hover: false })
+      hoverId.current = null
+    }
+    if (id !== undefined) {
+      map.setFeatureState({ source: 'model', id }, { hover: true })
+      hoverId.current = id
+    }
+  }
 
   // Fit the map to the model when a preview loads; a new build voids the old popup.
   useEffect(() => {
@@ -179,8 +222,16 @@ export default function MapPanel() {
         if (f?.properties) setPicked({ lng: e.lngLat.lng, lat: e.lngLat.lat, props: f.properties })
         else setPicked(null)
       }}
-      onMouseEnter={() => setHovering(true)}
-      onMouseLeave={() => setHovering(false)}
+      onMouseMove={(e: MapLayerMouseEvent) => {
+        if (drawing) return
+        const f = e.features?.[0]
+        setHover(f?.id as number | string | undefined)
+        setHovering(!!f)
+      }}
+      onMouseLeave={() => {
+        setHover(undefined)
+        setHovering(false)
+      }}
       onDblClick={(e: MapLayerMouseEvent) => {
         if (drawing) {
           e.preventDefault()
@@ -191,26 +242,38 @@ export default function MapPanel() {
       <NavigationControl position="top-right" showCompass={false} />
       <ScaleControl position="bottom-right" />
 
-      {/* Generated model: subcatchments / conduits / junctions / outfall */}
-      <Source id="model" type="geojson" data={model}>
+      {/* Generated model: subcatchments / conduits / junctions / outfall.
+          generateId powers the hover feature-state. */}
+      <Source id="model" type="geojson" data={model} generateId>
         <Layer id="m-sub-fill" type="fill" filter={kindIs('subcatchment')} layout={vis(layers.subcatchments)}
-          paint={{ 'fill-color': '#22c55e', 'fill-opacity': 0.18 }} />
+          paint={{ 'fill-color': '#22c55e',
+                   'fill-opacity': expr(hoverCase(0.32, 0.18)) }} />
         <Layer id="m-sub-line" type="line" filter={kindIs('subcatchment')} layout={vis(layers.subcatchments)}
           paint={{ 'line-color': '#16a34a', 'line-width': 0.6, 'line-opacity': 0.55 }} />
-        <Layer id="m-conduit" type="line" filter={kindIs('conduit')}
-          layout={{ visibility: layers.conduits ? 'visible' : 'none', 'line-cap': 'round' }}
-          paint={{ 'line-color': '#2563eb', 'line-width': CONDUIT_WIDTH }} />
-        <Layer id="m-junction" type="circle" filter={kindIs('junction')} layout={vis(layers.junctions)}
-          paint={{ 'circle-radius': 3.4, 'circle-color': '#1d4ed8',
+        <Layer id="m-conduit" type="line" filter={conduitFilter}
+          layout={{ 'line-cap': 'round' }}
+          paint={{ 'line-color': exprColor(CONDUIT_COLOR),
+                   'line-width': expr(hoverCase(['+', CONDUIT_WIDTH, 1.6], CONDUIT_WIDTH)) }} />
+        {/* Flow direction: glyph arrows along the digitised (= flow) direction, close zooms only. */}
+        <Layer id="m-flow" type="symbol" filter={conduitFilter} minzoom={15}
+          layout={{ 'symbol-placement': 'line', 'symbol-spacing': 90,
+                    'text-field': '>', 'text-size': 11, 'text-font': ['Open Sans Regular'],
+                    'text-keep-upright': false, 'text-allow-overlap': true,
+                    'text-rotation-alignment': 'map' }}
+          paint={{ 'text-color': exprColor(CONDUIT_COLOR), 'text-opacity': 0.9,
+                   'text-halo-color': '#ffffff', 'text-halo-width': 1.2 }} />
+        <Layer id="m-junction" type="circle" filter={junctionFilter}
+          paint={{ 'circle-radius': expr(hoverCase(5, 3.4)),
+                   'circle-color': exprColor(NODE_COLOR),
                    'circle-stroke-width': 1, 'circle-stroke-color': '#ffffff' }} />
         <Layer id="m-outfall" type="circle" filter={kindIs('outfall')}
-          paint={{ 'circle-radius': 7, 'circle-color': '#ef4444', 'circle-stroke-width': 2, 'circle-stroke-color': '#ffffff' }} />
+          paint={{ 'circle-radius': expr(hoverCase(8.5, 7)), 'circle-color': '#ef4444',
+                   'circle-stroke-width': 2, 'circle-stroke-color': '#ffffff' }} />
 
         {/* Invisible fat hit targets for click-to-inspect; declared last = queried first. */}
-        <Layer id="m-conduit-hit" type="line" filter={kindIs('conduit')}
-          layout={{ visibility: layers.conduits ? 'visible' : 'none' }}
+        <Layer id="m-conduit-hit" type="line" filter={conduitFilter}
           paint={{ 'line-color': '#000000', 'line-width': 12, 'line-opacity': 0 }} />
-        <Layer id="m-junction-hit" type="circle" filter={kindIs('junction')} layout={vis(layers.junctions)}
+        <Layer id="m-junction-hit" type="circle" filter={junctionFilter}
           paint={{ 'circle-radius': 9, 'circle-color': '#000000', 'circle-opacity': 0 }} />
         <Layer id="m-outfall-hit" type="circle" filter={kindIs('outfall')}
           paint={{ 'circle-radius': 12, 'circle-color': '#000000', 'circle-opacity': 0 }} />
@@ -244,7 +307,12 @@ export default function MapPanel() {
             <div className="flex items-center gap-1.5 border-b border-slate-100 bg-slate-50 py-2 pl-3 pr-8">
               <span
                 className="h-2.5 w-2.5 shrink-0 rounded-full"
-                style={{ background: KIND_COLORS[String(picked.props.kind)] ?? '#64748b' }}
+                style={{
+                  background:
+                    picked.props.system === 'sanitary'
+                      ? SANITARY_COLOR
+                      : KIND_COLORS[String(picked.props.kind)] ?? '#64748b',
+                }}
               />
               <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
                 {String(picked.props.kind)}

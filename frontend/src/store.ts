@@ -6,7 +6,7 @@ import type { DesignStormChoice, ForcingInfo, InfiltrationMethod } from './lib/a
 import { fetchForcing } from './lib/api'
 import type { Bbox, RainfallCheck } from './lib/api'
 
-export type LayerKey = 'subcatchments' | 'conduits' | 'junctions'
+export type LayerKey = 'subcatchments' | 'storm' | 'sanitary'
 
 export interface RainfallState {
   status: 'idle' | 'checking' | 'done' | 'error'
@@ -88,7 +88,7 @@ async function aoiBbox(aoi: Aoi): Promise<Bbox | null> {
 }
 
 const TERMINAL = new Set(['succeeded', 'failed', 'cancelled'])
-const DEFAULT_LAYERS: Record<LayerKey, boolean> = { subcatchments: true, conduits: true, junctions: true }
+const DEFAULT_LAYERS: Record<LayerKey, boolean> = { subcatchments: true, storm: true, sanitary: true }
 const IDLE_RAIN: RainfallState = { status: 'idle' }
 
 export const useStore = create<AppState>((set, get) => ({
