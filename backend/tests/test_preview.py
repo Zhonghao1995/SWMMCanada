@@ -43,3 +43,20 @@ def test_network_geojson_layers():
     for f in by_kind["subcatchment"]:
         coords = f["geometry"]["coordinates"][0]
         assert coords[0] == coords[-1]
+
+
+def test_features_carry_the_first_pass_qc_fields():
+    """ADR 0019: the preview IS the click-inspect data contract — every element carries
+    the fields an engineer sanity-checks on click."""
+    sn = synthesise_network(_graph(), aoi=aoi_from_geojson(BOX))
+    fc = network_geojson(sn.network, sn.subcatchments)
+    by_kind = {}
+    for f in fc["features"]:
+        by_kind.setdefault(f["properties"]["kind"], []).append(f["properties"])
+
+    assert {"outlet_node", "width_m"}.issubset(by_kind["subcatchment"][0])
+    assert {"length_m", "roughness_n", "from_node", "to_node", "system"}.issubset(by_kind["conduit"][0])
+    assert {"invert_m", "max_depth_m", "system"}.issubset(by_kind["junction"][0])
+    out = by_kind["outfall"][0]
+    assert {"invert_m", "outfall_type", "system"}.issubset(out)
+    assert out["kind"] == "outfall"          # the layer key survives the type field rename

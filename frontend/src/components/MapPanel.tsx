@@ -1,7 +1,8 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Map, {
   Layer,
   NavigationControl,
+  Popup,
   ScaleControl,
   Source,
   type MapLayerMouseEvent,
@@ -34,6 +35,44 @@ const EMPTY: FeatureCollection = { type: 'FeatureCollection', features: [] }
 const kindIs = (k: string): FilterSpecification => ['==', ['get', 'kind'], k] as FilterSpecification
 const vis = (on: boolean) => ({ visibility: (on ? 'visible' : 'none') as 'visible' | 'none' })
 
+// Click-to-inspect (ADR 0019): the popup reads only what the preview GeoJSON already
+// carries. Rows are [label, property key, unit]; missing keys are skipped.
+const INSPECT_LAYERS = ['m-outfall', 'm-junction', 'm-conduit', 'm-sub-fill']
+const POPUP_ROWS: Record<string, [string, string, string?][]> = {
+  subcatchment: [
+    ['Area', 'area_ha', 'ha'],
+    ['Impervious', 'pct_imperv', '%'],
+    ['CN', 'cn'],
+    ['Slope', 'pct_slope', '%'],
+    ['Width', 'width_m', 'm'],
+    ['Outlet node', 'outlet_node'],
+  ],
+  conduit: [
+    ['Diameter', 'diameter_m', 'm'],
+    ['Length', 'length_m', 'm'],
+    ['Roughness n', 'roughness_n'],
+    ['From node', 'from_node'],
+    ['To node', 'to_node'],
+    ['System', 'system'],
+  ],
+  junction: [
+    ['Invert', 'invert_m', 'm'],
+    ['Max depth', 'max_depth_m', 'm'],
+    ['System', 'system'],
+  ],
+  outfall: [
+    ['Invert', 'invert_m', 'm'],
+    ['Type', 'outfall_type'],
+    ['System', 'system'],
+  ],
+}
+
+interface Picked {
+  lng: number
+  lat: number
+  props: Record<string, unknown>
+}
+
 function bboxOf(fc: FeatureCollection): LngLatBoundsLike | null {
   let minx = Infinity, miny = Infinity, maxx = -Infinity, maxy = -Infinity, found = false
   const walk = (c: unknown): void => {
@@ -64,9 +103,12 @@ export default function MapPanel() {
   const finishDraw = useStore((s) => s.finishDraw)
   const preview = useStore((s) => s.preview)
   const layers = useStore((s) => s.layers)
+  const [picked, setPicked] = useState<Picked | null>(null)
+  const [hovering, setHovering] = useState(false)
 
-  // Fit the map to the model when a preview loads.
+  // Fit the map to the model when a preview loads; a new build voids the old popup.
   useEffect(() => {
+    setPicked(null)
     if (preview && mapRef.current) {
       const b = bboxOf(preview)
       if (b) mapRef.current.fitBounds(b, { padding: 50, duration: 800 })
@@ -108,10 +150,20 @@ export default function MapPanel() {
       initialViewState={{ longitude: -123.363, latitude: 48.424, zoom: 14 }}
       mapStyle={MAP_STYLE}
       style={{ width: '100%', height: '100%' }}
-      cursor={drawing ? 'crosshair' : ''}
+      cursor={drawing ? 'crosshair' : hovering ? 'pointer' : ''}
+      interactiveLayerIds={drawing ? [] : INSPECT_LAYERS}
       onClick={(e: MapLayerMouseEvent) => {
-        if (drawing) addVertex(e.lngLat.lng, e.lngLat.lat)
+        if (drawing) {
+          addVertex(e.lngLat.lng, e.lngLat.lat)
+          return
+        }
+        // Topmost feature wins (outfall > junction > conduit > subcatchment).
+        const f = e.features?.[0]
+        if (f?.properties) setPicked({ lng: e.lngLat.lng, lat: e.lngLat.lat, props: f.properties })
+        else setPicked(null)
       }}
+      onMouseEnter={() => setHovering(true)}
+      onMouseLeave={() => setHovering(false)}
       onDblClick={(e: MapLayerMouseEvent) => {
         if (drawing) {
           e.preventDefault()
@@ -149,6 +201,40 @@ export default function MapPanel() {
         <Layer id="draft-pts" type="circle"
           paint={{ 'circle-radius': 4, 'circle-color': '#f59e0b', 'circle-stroke-width': 1.5, 'circle-stroke-color': '#ffffff' }} />
       </Source>
+
+      {/* Click-to-inspect popup (ADR 0019): first-pass QC, read-only */}
+      {picked && (
+        <Popup
+          longitude={picked.lng}
+          latitude={picked.lat}
+          anchor="bottom"
+          maxWidth="240px"
+          closeButton
+          closeOnClick={false}
+          onClose={() => setPicked(null)}
+        >
+          <div className="text-xs text-slate-700">
+            <div className="mb-1 font-semibold capitalize">
+              {String(picked.props.kind)} {String(picked.props.id ?? '')}
+            </div>
+            <table>
+              <tbody>
+                {(POPUP_ROWS[String(picked.props.kind)] ?? [])
+                  .filter(([, key]) => picked.props[key] !== undefined && picked.props[key] !== null)
+                  .map(([label, key, unit]) => (
+                    <tr key={key}>
+                      <td className="pr-2 text-slate-400">{label}</td>
+                      <td className="font-medium">
+                        {String(picked.props[key])}
+                        {unit ? ` ${unit}` : ''}
+                      </td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+        </Popup>
+      )}
     </Map>
   )
 }

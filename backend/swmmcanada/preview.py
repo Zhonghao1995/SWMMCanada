@@ -23,9 +23,12 @@ def network_geojson(network: NetworkIn, subcatchments: List[SubcatchmentIn]) -> 
         features.append({
             "type": "Feature",
             "properties": {
+                # First-pass QC field set (ADR 0019): what an engineer sanity-checks on a
+                # click. The full parameter table stays in the downloadable package.
                 "kind": "subcatchment", "id": s.name, "area_ha": round(s.area_ha, 4),
                 "pct_imperv": round(s.pct_imperv, 1), "cn": round(s.cn, 1),
                 "pct_slope": round(s.pct_slope, 2),
+                "outlet_node": s.outlet_node, "width_m": round(s.width_m, 1),
             },
             "geometry": {"type": "Polygon", "coordinates": [ring]},
         })
@@ -35,6 +38,8 @@ def network_geojson(network: NetworkIn, subcatchments: List[SubcatchmentIn]) -> 
             features.append({
                 "type": "Feature",
                 "properties": {"kind": "conduit", "id": c.name, "diameter_m": c.diameter_m,
+                               "length_m": round(c.length_m, 1), "roughness_n": c.roughness_n,
+                               "from_node": c.from_node, "to_node": c.to_node,
                                "system": c.system},
                 "geometry": {"type": "LineString", "coordinates": [coord[c.from_node], coord[c.to_node]]},
             })
@@ -42,14 +47,17 @@ def network_geojson(network: NetworkIn, subcatchments: List[SubcatchmentIn]) -> 
     for j in network.junctions:
         features.append({
             "type": "Feature",
-            "properties": {"kind": "junction", "id": j.name, "system": j.system},
+            "properties": {"kind": "junction", "id": j.name, "invert_m": round(j.invert_m, 2),
+                           "max_depth_m": round(j.max_depth_m, 2), "system": j.system},
             "geometry": {"type": "Point", "coordinates": [float(j.x), float(j.y)]},
         })
 
     for o in network.outfalls:
         features.append({
             "type": "Feature",
-            "properties": {"kind": "outfall", "id": o.name},
+            # "outfall_type", not "kind": the layer-splitting key is already "kind".
+            "properties": {"kind": "outfall", "id": o.name, "invert_m": round(o.invert_m, 2),
+                           "outfall_type": o.kind, "system": o.system},
             "geometry": {"type": "Point", "coordinates": [float(o.x), float(o.y)]},
         })
 
