@@ -47,6 +47,23 @@ docker run --rm -p 8000:8000 \
 - The GHCR package is **private** on first push (linked to the repo). To allow anonymous
   `docker pull`, make it public under the repo's **Packages** settings.
 
+### Optional: also publish to Docker Hub (for a public pull count)
+
+GHCR does **not** expose a pull/download count anywhere. Docker Hub does. The workflow will
+mirror each image to `docker.io/<user>/swmmcanada` **automatically once two repository secrets
+exist** — until then it publishes to GHCR exactly as before (no failure, no config needed).
+
+To turn it on:
+1. Create a Docker Hub account and an **access token** (Docker Hub → Account Settings →
+   Personal access tokens → *Read, Write, Delete*).
+2. Add two repository secrets (GitHub → repo **Settings → Secrets and variables → Actions**):
+   - `DOCKERHUB_USERNAME` — your Docker Hub username
+   - `DOCKERHUB_TOKEN` — the access token (never your password)
+3. Re-run `docker-publish` (push to `backend/**`, cut a `vX.Y.Z` tag, or **Actions → docker-publish
+   → Run workflow**). The pull count then shows on `hub.docker.com/r/<user>/swmmcanada`.
+
+The image name uses your Docker Hub username as the namespace and `swmmcanada` as the repo.
+
 ---
 
 ## Frontend — static site on GitHub Pages
