@@ -1,8 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Map, {
   Layer,
   NavigationControl,
-  Popup,
   ScaleControl,
   Source,
   type MapLayerMouseEvent,
@@ -11,7 +10,8 @@ import Map, {
 import type { FilterSpecification, LngLatBoundsLike, StyleSpecification } from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import type { Feature, FeatureCollection } from 'geojson'
-import { useStore } from '../store'
+import { Eye, EyeOff, Layers as LayersIcon, LocateFixed, X } from 'lucide-react'
+import { useStore, type LayerKey } from '../store'
 
 // Free CARTO Positron raster basemap — no API token. The glyphs endpoint (same CARTO
 // CDN as the tiles) serves the flow-direction arrows (symbol layers need a font
@@ -66,9 +66,15 @@ const CONDUIT_WIDTH = [
   1.8, 7,
 ]
 
-// Hovered feature gets emphasised (feature-state set from onMouseMove).
-const hoverCase = (on: unknown, off: unknown) =>
-  ['case', ['boolean', ['feature-state', 'hover'], false], on, off]
+// Hovered OR selected features get emphasised (feature-states set from
+// onMouseMove / onClick; the selected one stays lit while its info card is open).
+const hoverCase = (on: unknown, off: unknown) => [
+  'case',
+  ['any',
+    ['boolean', ['feature-state', 'hover'], false],
+    ['boolean', ['feature-state', 'selected'], false]],
+  on, off,
+]
 
 // MapLibre expression arrays vs react-map-gl's typed paint props.
 const expr = (e: unknown) => e as unknown as number
@@ -105,8 +111,15 @@ const POPUP_ROWS: Record<string, [string, string, string?][]> = {
 interface Picked {
   lng: number
   lat: number
+  fid: number | string | undefined // source feature id, keeps the selection lit
   props: Record<string, unknown>
 }
+
+const LAYER_ROWS: [LayerKey, string, string][] = [
+  ['subcatchments', 'Subcatchments', '#22c55e'],
+  ['storm', 'Storm network', STORM_COLOR],
+  ['sanitary', 'Sanitary network', SANITARY_COLOR],
+]
 
 function bboxOf(fc: FeatureCollection): LngLatBoundsLike | null {
   let minx = Infinity, miny = Infinity, maxx = -Infinity, maxy = -Infinity, found = false
@@ -138,9 +151,23 @@ export default function MapPanel() {
   const finishDraw = useStore((s) => s.finishDraw)
   const preview = useStore((s) => s.preview)
   const layers = useStore((s) => s.layers)
+  const toggleLayer = useStore((s) => s.toggleLayer)
   const [picked, setPicked] = useState<Picked | null>(null)
   const [hovering, setHovering] = useState(false)
   const hoverId = useRef<number | string | null>(null)
+
+  // Per-layer element counts for the floating Layers card.
+  const layerCounts = useMemo(() => {
+    const c: Record<LayerKey, number> = { subcatchments: 0, storm: 0, sanitary: 0 }
+    preview?.features.forEach((f) => {
+      const p = f.properties as { kind?: string; system?: string } | null
+      if (!p?.kind) return
+      if (p.kind === 'subcatchment') c.subcatchments++
+      else if (p.system === 'sanitary') c.sanitary++
+      else c.storm++
+    })
+    return c
+  }, [preview])
 
   // System toggles filter pipes AND their nodes together (an engineer hides a system,
   // not an element type). An empty allow-list must match nothing, hence the sentinel.
@@ -166,7 +193,21 @@ export default function MapPanel() {
     }
   }
 
-  // Fit the map to the model when a preview loads; a new build voids the old popup.
+  // Selection follows the info card: light the clicked feature, clear the previous one.
+  const select = (next: Picked | null) => {
+    const map = mapRef.current
+    setPicked((prev) => {
+      if (map && prev?.fid !== undefined && prev.fid !== next?.fid) {
+        map.setFeatureState({ source: 'model', id: prev.fid }, { selected: false })
+      }
+      if (map && next?.fid !== undefined) {
+        map.setFeatureState({ source: 'model', id: next.fid }, { selected: true })
+      }
+      return next
+    })
+  }
+
+  // Fit the map to the model when a preview loads; a new build voids the old selection.
   useEffect(() => {
     setPicked(null)
     if (preview && mapRef.current) {
@@ -174,6 +215,11 @@ export default function MapPanel() {
       if (b) mapRef.current.fitBounds(b, { padding: 50, duration: 800 })
     }
   }, [preview])
+
+  // Drawing owns the map: drop the info card while placing vertices.
+  useEffect(() => {
+    if (drawing) setPicked(null)
+  }, [drawing])
 
   // Fit the map to an uploaded boundary as soon as the backend has parsed it.
   useEffect(() => {
@@ -205,6 +251,7 @@ export default function MapPanel() {
   const model: FeatureCollection = preview ?? EMPTY
 
   return (
+    <div className="relative h-full w-full">
     <Map
       ref={mapRef}
       initialViewState={{ longitude: -123.363, latitude: 48.424, zoom: 14 }}
@@ -219,8 +266,11 @@ export default function MapPanel() {
         }
         // Topmost feature wins (outfall > junction > conduit > subcatchment).
         const f = e.features?.[0]
-        if (f?.properties) setPicked({ lng: e.lngLat.lng, lat: e.lngLat.lat, props: f.properties })
-        else setPicked(null)
+        if (f?.properties) {
+          select({ lng: e.lngLat.lng, lat: e.lngLat.lat, fid: f.id, props: f.properties })
+        } else {
+          select(null)
+        }
       }}
       onMouseMove={(e: MapLayerMouseEvent) => {
         if (drawing) return
@@ -292,51 +342,101 @@ export default function MapPanel() {
           paint={{ 'circle-radius': 4, 'circle-color': '#f59e0b', 'circle-stroke-width': 1.5, 'circle-stroke-color': '#ffffff' }} />
       </Source>
 
-      {/* Click-to-inspect popup (ADR 0019): first-pass QC, read-only */}
-      {picked && (
-        <Popup
-          longitude={picked.lng}
-          latitude={picked.lat}
-          anchor="bottom"
-          maxWidth="260px"
-          closeButton
-          closeOnClick={false}
-          onClose={() => setPicked(null)}
-        >
-          <div className="min-w-[176px]">
-            <div className="flex items-center gap-1.5 border-b border-slate-100 bg-slate-50 py-2 pl-3 pr-8">
-              <span
-                className="h-2.5 w-2.5 shrink-0 rounded-full"
-                style={{
-                  background:
-                    picked.props.system === 'sanitary'
-                      ? SANITARY_COLOR
-                      : KIND_COLORS[String(picked.props.kind)] ?? '#64748b',
-                }}
-              />
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-                {String(picked.props.kind)}
-              </span>
-              <span className="ml-auto font-mono text-xs font-semibold text-slate-700">
-                {String(picked.props.id ?? '')}
-              </span>
-            </div>
-            <div className="px-3 py-1.5">
-              {(POPUP_ROWS[String(picked.props.kind)] ?? [])
-                .filter(([, key]) => picked.props[key] !== undefined && picked.props[key] !== null)
-                .map(([label, key, unit]) => (
-                  <div key={key} className="flex items-baseline justify-between gap-4 py-[3px] text-xs">
-                    <span className="text-slate-400">{label}</span>
-                    <span className="font-medium text-slate-700">
-                      {String(picked.props[key])}
-                      {unit ? <span className="ml-0.5 font-normal text-slate-400">{unit}</span> : null}
-                    </span>
-                  </div>
-                ))}
-            </div>
-          </div>
-        </Popup>
-      )}
     </Map>
+
+    {/* Floating Layers card (top-left), Agentic-SWMM style */}
+    {preview && (
+      <div className="absolute left-3 top-3 z-10 w-52 overflow-hidden rounded-xl bg-white/95 shadow-lg ring-1 ring-slate-900/5 backdrop-blur">
+        <div className="flex items-center gap-1.5 border-b border-slate-100 px-3 py-2">
+          <LayersIcon size={13} className="text-slate-500" />
+          <span className="text-xs font-semibold text-slate-700">Layers</span>
+        </div>
+        <div className="p-1.5">
+          {LAYER_ROWS.filter(([key]) => key !== 'sanitary' || layerCounts.sanitary > 0).map(
+            ([key, label, color]) => (
+              <button
+                key={key}
+                onClick={() => toggleLayer(key)}
+                className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs hover:bg-slate-50"
+              >
+                <span
+                  className={`h-2.5 w-2.5 shrink-0 rounded-full ${layers[key] ? '' : 'opacity-25'}`}
+                  style={{ background: color }}
+                />
+                <span className={`flex-1 ${layers[key] ? 'text-slate-700' : 'text-slate-400'}`}>
+                  {label}
+                </span>
+                <span className="text-[10px] tabular-nums text-slate-400">{layerCounts[key]}</span>
+                {layers[key] ? (
+                  <Eye size={13} className="text-slate-400" />
+                ) : (
+                  <EyeOff size={13} className="text-slate-300" />
+                )}
+              </button>
+            ),
+          )}
+        </div>
+        <p className="border-t border-slate-100 px-3 py-1.5 text-[10px] leading-snug text-slate-400">
+          Width = pipe diameter · arrows = flow direction (zoom in) · click any element
+        </p>
+      </div>
+    )}
+
+    {/* Floating info card (bottom-left): click-to-inspect, first-pass QC (ADR 0019) */}
+    {picked && (
+      <div className="absolute bottom-6 left-3 z-10 w-60 overflow-hidden rounded-xl bg-white shadow-lg ring-1 ring-slate-900/5">
+        <div className="flex items-center gap-1.5 border-b border-slate-100 px-3 py-2">
+          <span
+            className="h-2.5 w-2.5 shrink-0 rounded-full"
+            style={{
+              background:
+                picked.props.system === 'sanitary'
+                  ? SANITARY_COLOR
+                  : KIND_COLORS[String(picked.props.kind)] ?? '#64748b',
+            }}
+          />
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+            {String(picked.props.kind)}
+          </span>
+          <span className="ml-auto font-mono text-xs font-semibold text-slate-700">
+            {String(picked.props.id ?? '')}
+          </span>
+          <button
+            onClick={() => select(null)}
+            className="rounded p-0.5 text-slate-300 hover:bg-slate-100 hover:text-slate-500"
+          >
+            <X size={13} />
+          </button>
+        </div>
+        <div className="px-3 py-1.5">
+          {(POPUP_ROWS[String(picked.props.kind)] ?? [])
+            .filter(([, key]) => picked.props[key] !== undefined && picked.props[key] !== null)
+            .map(([label, key, unit]) => (
+              <div key={key} className="flex items-baseline justify-between gap-4 py-[3px] text-xs">
+                <span className="text-slate-400">{label}</span>
+                <span className="font-medium text-slate-700">
+                  {String(picked.props[key])}
+                  {unit ? <span className="ml-0.5 font-normal text-slate-400">{unit}</span> : null}
+                </span>
+              </div>
+            ))}
+        </div>
+        <div className="px-2.5 pb-2.5">
+          <button
+            onClick={() =>
+              mapRef.current?.flyTo({
+                center: [picked.lng, picked.lat],
+                zoom: Math.max(mapRef.current.getZoom(), 16.5),
+                duration: 700,
+              })
+            }
+            className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
+          >
+            <LocateFixed size={13} /> Fly to
+          </button>
+        </div>
+      </div>
+    )}
+    </div>
   )
 }

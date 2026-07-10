@@ -12,24 +12,3 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
 }
-
-/* Click-to-inspect popup (ADR 0019): restyle MapLibre's default white box. */
-.maplibregl-popup-content {
-  padding: 0;
-  border-radius: 10px;
-  overflow: hidden;
-  box-shadow: 0 8px 24px rgb(15 23 42 / 0.16);
-  font-family: inherit;
-}
-.maplibregl-popup-close-button {
-  top: 5px;
-  right: 7px;
-  font-size: 15px;
-  line-height: 1;
-  color: #94a3b8;
-  border-radius: 4px;
-}
-.maplibregl-popup-close-button:hover {
-  background: #f1f5f9;
-  color: #475569;
-}
