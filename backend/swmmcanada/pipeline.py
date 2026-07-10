@@ -128,15 +128,19 @@ def _design_intensity_fn(aoi):
             "return_period_yr": 5, "reason": "idf_unavailable"}
 
 
-def _design_storm_fallback(aoi, start: date):
-    """Third rainfall tier (ADR 0015): no usable gauge at all -> an alternating-block
-    design storm from the nearest ECCC IDF station. Returns (RainfallSeries, forcing dict);
-    raises RuntimeError when even the IDF source is unreachable — rain is never invented
-    from nothing."""
+def _design_storm_event(aoi, start: date, choice=None):
+    """An alternating-block design storm from the nearest ECCC IDF station, serving two
+    paths: ``choice=None`` is the tier-3 fallback (ADR 0015 — no usable gauge, T=5
+    defaults, ``fallback_reason``); a ``DesignStormChoice`` is the user-selected mode
+    (ADR 0018 — the chosen T × duration, ``requested``). Returns (RainfallSeries,
+    forcing dict); raises RuntimeError when the IDF source is unreachable — rain is
+    never invented from nothing."""
     from swmmcanada.acquire.design_storm import (
         DEFAULT_DURATION_H, DEFAULT_RETURN_PERIOD_YR, alternating_block_series,
     )
 
+    return_period = choice.return_period_yr if choice else DEFAULT_RETURN_PERIOD_YR
+    duration_h = choice.duration_h if choice else DEFAULT_DURATION_H
     lat = (aoi.bbox[1] + aoi.bbox[3]) / 2
     lon = (aoi.bbox[0] + aoi.bbox[2]) / 2
     try:
@@ -144,21 +148,30 @@ def _design_storm_fallback(aoi, start: date):
 
         station = nearest_idf_station(lat, lon)
         table = fetch_idf_table(station)
-        rain = alternating_block_series(table, start)
+        rain = alternating_block_series(table, start, return_period=return_period,
+                                        duration_h=duration_h)
     except Exception as exc:
+        what = (f"The requested T={return_period} yr design storm needs the ECCC IDF source, which"
+                if choice else
+                "No climate station with usable rainfall for this AOI/period, and the ECCC "
+                "IDF design-storm fallback")
         raise RuntimeError(
-            "No climate station with usable rainfall for this AOI/period, and the ECCC IDF "
-            f"design-storm fallback is unreachable ({type(exc).__name__}). Try a different "
+            f"{what} is unreachable ({type(exc).__name__}). Try a different "
             "area or period.") from exc
     forcing = {
         "rainfall_resolution": "design_storm",
         "idf_station": station.station_id, "idf_station_name": station.name,
-        "return_period_yr": DEFAULT_RETURN_PERIOD_YR, "duration_h": DEFAULT_DURATION_H,
+        "return_period_yr": return_period, "duration_h": duration_h,
         "timestep_min": 60, "method": "alternating-block from ECCC IDF table",
         "total_mm": round(sum(rain.precip_mm), 1),
-        "fallback_reason": "no climate station with usable rainfall within reach "
-                           "(synthetic single-event storm — not for continuous hydrology)",
     }
+    if choice:
+        forcing["requested"] = True
+        forcing["note"] = ("user-selected design storm "
+                           "(synthetic single-event storm — not for continuous hydrology)")
+    else:
+        forcing["fallback_reason"] = ("no climate station with usable rainfall within reach "
+                                      "(synthetic single-event storm — not for continuous hydrology)")
     return rain, forcing
 
 
@@ -217,6 +230,7 @@ def _finish_build(
     ws: Path, aoi, network, subcatchments, *, start: date, end: date, method,
     config: BuildConfig, extra_provenance: dict, climate_client, climate_buffer_deg: float,
     report=None, sub_diag: Optional[dict] = None, dem=None, water=None, served=None,
+    design_storm=None,
 ) -> BuildResult:
     """The build spine (CONTEXT "Build spine") — the single shared tail of every build path.
 
@@ -229,21 +243,30 @@ def _finish_build(
             report(stage, pct)
 
     _r("CLIMATE", 80)
-    climate = fetch_climate(aoi, start, end, client=climate_client, near_buffer_deg=climate_buffer_deg)
-    series = next((s for s in climate.series if not s.frame.empty), None)
-    forcing = dict(climate.forcing)
-    if series is not None:
-        # Rainfall tiers 1-2 (ADR 0014): hourly series when a usable one was found, else the
-        # daily station; temperature/evaporation stay on the daily station either way.
-        rain = to_rainfall_series(climate.hourly_rain or series)
-        evaporation = to_evaporation_series(series)
-        temperature = to_temperature_series(series)
-    else:
-        # Tier 3 (ADR 0015): no usable gauge at all -> IDF design storm, honestly labelled;
-        # temperature/evaporation are honestly absent (no station to derive them from).
-        rain, forcing = _design_storm_fallback(aoi, start)
+    if design_storm is not None:
+        # User-selected design-storm mode (ADR 0018): skip the gauge hunt entirely — the
+        # chosen T × duration event from the nearest IDF station, same honesty labels as
+        # the fallback tier; temperature/evaporation are honestly absent (single synthetic
+        # event, not continuous hydrology).
+        rain, forcing = _design_storm_event(aoi, start, choice=design_storm)
         evaporation = None
         temperature = None
+    else:
+        climate = fetch_climate(aoi, start, end, client=climate_client, near_buffer_deg=climate_buffer_deg)
+        series = next((s for s in climate.series if not s.frame.empty), None)
+        forcing = dict(climate.forcing)
+        if series is not None:
+            # Rainfall tiers 1-2 (ADR 0014): hourly series when a usable one was found, else the
+            # daily station; temperature/evaporation stay on the daily station either way.
+            rain = to_rainfall_series(climate.hourly_rain or series)
+            evaporation = to_evaporation_series(series)
+            temperature = to_temperature_series(series)
+        else:
+            # Tier 3 (ADR 0015): no usable gauge at all -> IDF design storm, honestly labelled;
+            # temperature/evaporation are honestly absent (no station to derive them from).
+            rain, forcing = _design_storm_event(aoi, start)
+            evaporation = None
+            temperature = None
 
     _r("VALIDATING", 85)
     _validate_or_raise(network, subcatchments, aoi, method, ws, delineation=sub_diag,
@@ -295,6 +318,7 @@ def build_from_aoi(
     landcover_source=None,
     soil_source=None,
     infiltration=None,
+    design_storm=None,
     report=None,
 ) -> BuildResult:
     def _r(stage: str, pct: int):
@@ -376,7 +400,7 @@ def build_from_aoi(
             "pipe_sizing": sizing_diag,
         },
         climate_client=climate_client, climate_buffer_deg=climate_buffer_deg, report=report,
-        sub_diag=sub_diag, dem=dem, water=water, served=corridor,
+        sub_diag=sub_diag, dem=dem, water=water, served=corridor, design_storm=design_storm,
     )
 
 
@@ -385,7 +409,7 @@ def build_city(
     client=None,
     dem_source=None, climate_client=None, climate_buffer_deg: float = 0.3, derive: bool = True,
     landcover_source=None, soil_source=None, subcatchment_method: str = "parcel",
-    infiltration=None, report=None,
+    infiltration=None, design_storm=None, report=None,
 ) -> BuildResult:
     """Build a SWMM model from a real municipal network (ADR 0004/0005/0006). ``city`` is a
     registry key ("victoria") or a ``CitySpec``; the spec supplies the city's fetch/build
@@ -483,7 +507,7 @@ def build_city(
             "sanitary": san_diag,
         },
         climate_client=climate_client, climate_buffer_deg=climate_buffer_deg, report=report,
-        sub_diag=sub_diag, dem=dem, water=water,
+        sub_diag=sub_diag, dem=dem, water=water, design_storm=design_storm,
     )
 
 

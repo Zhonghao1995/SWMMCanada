@@ -24,12 +24,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from shapely.geometry import mapping as shp_mapping
 
+from swmmcanada.acquire.design_storm import DesignStormChoice
 from swmmcanada.api.tasks import TaskStore, run_task
 from swmmcanada.build.config import InfiltrationModel
 from swmmcanada.geo import aoi_from_geojson, aoi_from_shapefile
 from swmmcanada.geo.errors import AOIOversizeError, GeoError
 from swmmcanada.pipeline import pipeline_for_aoi
 from swmmcanada.sources.cities.registry import city_for_point, coverage_summary, in_canada_coarse
+from swmmcanada.sources.idf_eccc import IDF_RETURN_PERIODS
 
 
 def create_app(*, pipeline=None, workdir=None, run_inline: bool = False) -> FastAPI:
@@ -113,6 +115,8 @@ def create_app(*, pipeline=None, workdir=None, run_inline: bool = False) -> Fast
         polygon: Optional[str] = Form(None),
         file: Optional[UploadFile] = File(None),
         infiltration: Optional[str] = Form(None),
+        design_storm_yr: Optional[int] = Form(None),
+        design_storm_h: int = Form(24),
     ):
         aoi = await _aoi_from_request(polygon, file)
         try:
@@ -129,6 +133,17 @@ def create_app(*, pipeline=None, workdir=None, run_inline: bool = False) -> Fast
                 raise HTTPException(
                     422, f"Unknown infiltration method {infiltration!r} — "
                          f"one of: {', '.join(m.value for m in InfiltrationModel)}")
+        design_storm = None
+        if design_storm_yr is not None:            # ADR 0018: presence of a return period
+            if design_storm_yr not in IDF_RETURN_PERIODS:   # IS the mode selection
+                raise HTTPException(
+                    422, f"Unknown design-storm return period {design_storm_yr} — "
+                         f"one of: {', '.join(str(t) for t in IDF_RETURN_PERIODS)} (yr)")
+            if not 1 <= design_storm_h <= 24:
+                raise HTTPException(
+                    422, f"Design-storm duration {design_storm_h} h out of range (1–24).")
+            design_storm = DesignStormChoice(return_period_yr=design_storm_yr,
+                                             duration_h=design_storm_h)
 
         task_id = store.create()
         if pipeline is None:                       # auto-select the pathway by AOI location
@@ -137,6 +152,8 @@ def create_app(*, pipeline=None, workdir=None, run_inline: bool = False) -> Fast
             build_fn, mode = pipeline, "injected"
         if infiltration is not None:               # bind only when asked, so injected test
             build_fn = partial(build_fn, infiltration=infiltration)  # pipelines stay as-is
+        if design_storm is not None:               # same contract as infiltration (ADR 0018)
+            build_fn = partial(build_fn, design_storm=design_storm)
         args = (task_id, aoi, start, end, store, work_root, build_fn, mode)
         if run_inline:
             run_task(*args)

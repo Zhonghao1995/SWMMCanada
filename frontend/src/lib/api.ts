@@ -15,10 +15,18 @@ export interface SubmitParams {
   startDate: string
   endDate: string
   infiltration: InfiltrationMethod
+  designStorm: DesignStormChoice | null // null = historical observed rain (default)
 }
 
 // ADR 0013: build-time infiltration choice; Horton is the default (municipal practice).
 export type InfiltrationMethod = 'HORTON' | 'CURVE_NUMBER' | 'GREEN_AMPT'
+
+// ADR 0018: user-selected design storm (return period × duration from the nearest
+// ECCC IDF station) instead of historical observed rain.
+export interface DesignStormChoice {
+  returnPeriodYr: 2 | 5 | 10 | 25 | 50 | 100
+  durationH: number // 1–24 h
+}
 
 const API = `${import.meta.env.VITE_API_URL ?? ''}/api/v1`
 
@@ -68,6 +76,11 @@ export async function submitTask(params: SubmitParams): Promise<{ taskId: string
   body.append('start_date', params.startDate)
   body.append('end_date', params.endDate)
   body.append('infiltration', params.infiltration)
+  if (params.designStorm) {
+    // ADR 0018: presence of the return period IS the mode selection.
+    body.append('design_storm_yr', String(params.designStorm.returnPeriodYr))
+    body.append('design_storm_h', String(params.designStorm.durationH))
+  }
   if (params.aoi.source === 'upload') body.append('file', params.aoi.file)
   else body.append('polygon', JSON.stringify(params.aoi.polygon))
 
@@ -258,8 +271,10 @@ export interface ForcingInfo {
   coverage_pct?: number
   idf_station_name?: string
   return_period_yr?: number
+  duration_h?: number
   total_mm?: number
   fallback_reason?: string
+  requested?: boolean // true = user-selected design storm (ADR 0018), not a fallback
 }
 
 export async function fetchForcing(taskId: string): Promise<ForcingInfo | null> {

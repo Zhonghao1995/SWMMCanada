@@ -20,6 +20,8 @@ export default function ControlPanel() {
   const setDates = useStore((s) => s.setDates)
   const infiltration = useStore((s) => s.infiltration)
   const setInfiltration = useStore((s) => s.setInfiltration)
+  const designStorm = useStore((s) => s.designStorm)
+  const setDesignStorm = useStore((s) => s.setDesignStorm)
   const rainfall = useStore((s) => s.rainfall)
   const uploadError = useStore((s) => s.uploadError)
   const checkRainfall = useStore((s) => s.checkRainfall)
@@ -112,7 +114,63 @@ export default function ControlPanel() {
       </section>
 
       <section className="space-y-2">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-400">2 · Period</h2>
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-400">2 · Rainfall</h2>
+        <label className="block text-sm text-slate-600">
+          <span className="mb-1 block text-[11px] text-slate-400">Rainfall forcing</span>
+          <select
+            value={designStorm ? 'design' : 'historical'}
+            onChange={(e) =>
+              setDesignStorm(e.target.value === 'design' ? { returnPeriodYr: 100, durationH: 24 } : null)
+            }
+            className="w-full rounded-md border border-slate-300 px-2 py-1"
+          >
+            <option value="historical">Historical observed rain (ECCC gauges)</option>
+            <option value="design">Design storm (ECCC IDF — capacity check)</option>
+          </select>
+        </label>
+        {designStorm && (
+          <div className="flex items-center gap-2 text-sm">
+            <label className="flex-1 text-slate-600">
+              <span className="mb-1 block text-[11px] text-slate-400">Return period</span>
+              <select
+                value={designStorm.returnPeriodYr}
+                onChange={(e) =>
+                  setDesignStorm({
+                    ...designStorm,
+                    returnPeriodYr: Number(e.target.value) as 2 | 5 | 10 | 25 | 50 | 100,
+                  })
+                }
+                className="w-full rounded-md border border-slate-300 px-2 py-1"
+              >
+                {[2, 5, 10, 25, 50, 100].map((t) => (
+                  <option key={t} value={t}>
+                    1:{t} year
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex-1 text-slate-600">
+              <span className="mb-1 block text-[11px] text-slate-400">Duration</span>
+              <select
+                value={designStorm.durationH}
+                onChange={(e) => setDesignStorm({ ...designStorm, durationH: Number(e.target.value) })}
+                className="w-full rounded-md border border-slate-300 px-2 py-1"
+              >
+                {[1, 2, 6, 12, 24].map((h) => (
+                  <option key={h} value={h}>
+                    {h} h
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        )}
+        {designStorm && (
+          <p className="text-[11px] text-slate-400">
+            Synthetic alternating-block storm from the nearest ECCC IDF station — placed at the
+            start date 00:00; the rest of the period is dry drain-down. Not observed rain.
+          </p>
+        )}
         <div className="flex items-center gap-2 text-sm">
           <input
             type="date"
@@ -133,6 +191,8 @@ export default function ControlPanel() {
           Period (ISO): {startDate} → {endDate}
         </p>
 
+        {!designStorm && (
+        <>
         <button
           onClick={checkRainfall}
           disabled={!aoi || rainfall.status === 'checking'}
@@ -167,6 +227,8 @@ export default function ControlPanel() {
               </button>
             )}
           </div>
+        )}
+        </>
         )}
       </section>
 
@@ -215,8 +277,10 @@ export default function ControlPanel() {
               <div className="mt-1 text-[11px] text-slate-500">
                 {'🌧 Rain used: '}
                 {forcing.rainfall_resolution === 'design_storm'
-                  ? `synthetic design storm — T=${forcing.return_period_yr} yr, ${forcing.total_mm} mm ` +
-                    `(IDF: ${forcing.idf_station_name}). Not observed rain.`
+                  ? `synthetic design storm — T=${forcing.return_period_yr} yr` +
+                    `${forcing.duration_h ? ` / ${forcing.duration_h} h` : ''}, ${forcing.total_mm} mm ` +
+                    `(IDF: ${forcing.idf_station_name}). ` +
+                    (forcing.requested ? 'As requested — not observed rain.' : 'Not observed rain.')
                   : `${forcing.rainfall_resolution}${forcing.station_name ? ` · ${forcing.station_name}` : ''}` +
                     `${forcing.coverage_pct != null ? ` · ${forcing.coverage_pct}% coverage` : ''}`}
               </div>

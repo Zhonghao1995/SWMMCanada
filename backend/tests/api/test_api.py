@@ -136,3 +136,53 @@ def test_validation_endpoint_serves_report(tmp_path):
 
 def test_healthz(tmp_path):
     assert _client(tmp_path).get("/api/v1/healthz").json() == {"status": "ok"}
+
+
+# --- design-storm mode (ADR 0018) ----------------------------------------------
+
+
+def test_design_storm_choice_reaches_the_pipeline(tmp_path):
+    """Presence of design_storm_yr IS the mode selection: the pipeline receives a
+    DesignStormChoice carrying the requested T × duration."""
+    seen = {}
+
+    def recording_pipeline(aoi, start, end, ws, *, report=None, **kwargs):
+        seen.update(kwargs)
+        return fake_pipeline(aoi, start, end, ws, report=report)
+
+    client = TestClient(create_app(pipeline=recording_pipeline, workdir=tmp_path, run_inline=True))
+    r = client.post("/api/v1/tasks", data={
+        "start_date": "2022-06-01", "end_date": "2022-06-07",
+        "polygon": json.dumps(OTTAWA), "design_storm_yr": "100", "design_storm_h": "6",
+    })
+    assert r.status_code == 202
+    choice = seen["design_storm"]
+    assert choice.return_period_yr == 100 and choice.duration_h == 6
+
+
+def test_design_storm_absent_leaves_pipeline_untouched(tmp_path):
+    seen = {}
+
+    def recording_pipeline(aoi, start, end, ws, *, report=None, **kwargs):
+        seen.update(kwargs)
+        return fake_pipeline(aoi, start, end, ws, report=report)
+
+    client = TestClient(create_app(pipeline=recording_pipeline, workdir=tmp_path, run_inline=True))
+    assert _submit(client, OTTAWA).status_code == 202
+    assert "design_storm" not in seen                       # bind only when asked
+
+
+def test_design_storm_bad_return_period_422(tmp_path):
+    r = _client(tmp_path).post("/api/v1/tasks", data={
+        "start_date": "2022-06-01", "end_date": "2022-06-07",
+        "polygon": json.dumps(OTTAWA), "design_storm_yr": "7",
+    })
+    assert r.status_code == 422 and "return period" in r.json()["detail"]
+
+
+def test_design_storm_bad_duration_422(tmp_path):
+    r = _client(tmp_path).post("/api/v1/tasks", data={
+        "start_date": "2022-06-01", "end_date": "2022-06-07",
+        "polygon": json.dumps(OTTAWA), "design_storm_yr": "100", "design_storm_h": "48",
+    })
+    assert r.status_code == 422 and "duration" in r.json()["detail"]

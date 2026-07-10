@@ -11,6 +11,7 @@ Single-event synthetic rain: fine for structural/design checks, not continuous h
 the forcing record and validation report carry that label (ADR 0015 §5).
 """
 import math
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import Dict, List, Tuple
 
@@ -19,6 +20,15 @@ from swmmcanada.build.models import RainfallSeries
 DEFAULT_RETURN_PERIOD_YR = 5      # matches rational-method pipe sizing (#56)
 DEFAULT_DURATION_H = 24
 DEFAULT_TIMESTEP_MIN = 60         # same resolution as the hourly gauge tier (ADR 0014)
+
+
+@dataclass(frozen=True)
+class DesignStormChoice:
+    """User-selected design-storm forcing (ADR 0018): the pipeline skips the gauge hunt
+    and builds this event instead. T=100 default — the major-system check the mode exists
+    for — deliberately differs from the tier-3 fallback's T=5 (pipe-sizing parity)."""
+    return_period_yr: int = 100
+    duration_h: int = DEFAULT_DURATION_H
 
 
 def _depth_curve(intensities_mm_h: Dict[int, float]) -> List[Tuple[float, float]]:
