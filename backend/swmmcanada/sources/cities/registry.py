@@ -149,6 +149,21 @@ def in_canada_coarse(lon: float, lat: float) -> bool:
     """Whether a point falls inside the coarse Canada envelope."""
     min_lon, min_lat, max_lon, max_lat = CANADA_COARSE_BBOX
     return min_lon <= lon <= max_lon and min_lat <= lat <= max_lat
+def coverage_summary() -> list:
+    """The public shape of the registry for the /coverage endpoint.
+
+    Everything here is already public in result packages (labels,
+    provenance strings); this is discovery metadata, not new exposure.
+    """
+    return [
+        {
+            "key": spec.key,
+            "label": spec.label,
+            "coverage_bbox": list(spec.coverage),
+            "has_sanitary": spec.sanitary is not None,
+        }
+        for spec in CITIES
+    ]
 
 
 def city_for_point(lon: float, lat: float) -> Optional[CitySpec]:
