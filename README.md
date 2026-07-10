@@ -27,9 +27,9 @@ You draw (or upload) a boundary on the map. SWMMCanada pulls the Canadian open d
 > The demo runs on a small server (**~2 GB RAM**), so it works best for **small areas**; large regions can run out of memory and fail. For large-scale modeling, self-host the frontend **and** backend on a bigger machine or an **HPC** cluster. Both run well as shipped in this repo (see **[DEPLOY.md](DEPLOY.md)**).
 
 <p align="center">
-  <img src="results/victoria_app.png" width="820" alt="The SWMMCanada web app after building downtown Victoria: real storm network and parcel-shaped subcatchments on the map, with the build mode and model layers in the side panel" />
+  <img src="results/victoria_app.png" width="820" alt="The SWMMCanada web app after building downtown Victoria: storm (blue) and sanitary (brick) networks with flow arrows and diameter-scaled pipes, floating layer toggles, and a click-to-inspect card showing subcatchment attributes" />
 </p>
-<p align="center"><sub>The app after building a downtown Victoria area: real storm network (blue), outfalls (red), and parcel-shaped subcatchments (green), with the model ready to download.</sub></p>
+<p align="center"><sub>The app after building a downtown Victoria area: storm (blue) and sanitary (brick) networks with flow arrows, pipe width scaled by diameter, per-system layer toggles, and click-to-inspect attributes, with the model package (SWMM, MIKE+, ICM) ready to download.</sub></p>
 
 ## Two modes (picked automatically)
 
