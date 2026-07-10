@@ -177,8 +177,8 @@ export default function MapPanel() {
   ]
   const sysFilter = ['in', ['get', 'system'],
     ['literal', allowedSystems.length ? allowedSystems : ['__none__']]]
-  const conduitFilter = ['all', kindIs('conduit'), sysFilter] as FilterSpecification
-  const junctionFilter = ['all', kindIs('junction'), sysFilter] as FilterSpecification
+  const conduitFilter = ['all', kindIs('conduit'), sysFilter] as unknown as FilterSpecification
+  const junctionFilter = ['all', kindIs('junction'), sysFilter] as unknown as FilterSpecification
 
   const setHover = (id: number | string | undefined) => {
     const map = mapRef.current
