@@ -208,7 +208,7 @@ export async function checkRainfall(bbox: Bbox, startDate: string, endDate: stri
     // tens of km away (ECCC gauges are sparse); say so, with the distance, instead of
     // letting the user think we grabbed the wrong city's data.
     const km = _kmFromAoi(best.lon, best.lat, bbox)
-    const where = km != null ? ` — nearest gauge with records: ${best.name}, ~${km} km from your area` : ` (gauge: ${best.name})`
+    const where = km != null ? `; nearest gauge with records: ${best.name}, ~${km} km from your area` : ` (gauge: ${best.name})`
     return {
       available: true,
       spanDays,
@@ -225,7 +225,7 @@ export async function checkRainfall(bbox: Bbox, startDate: string, endDate: stri
     return {
       available: false,
       spanDays,
-      message: 'No ECCC climate gauge within ~50 km — the build will fall back to a synthetic IDF design storm (T=5 yr, alternating block), clearly labelled in the result. Fine for structural checks; not real observed rain.',
+      message: 'No ECCC climate gauge within ~50 km; the build will fall back to a synthetic IDF design storm (T=5 yr, alternating block), clearly labelled in the result. Fine for structural checks; not real observed rain.',
     }
   }
   const range = await stationRange(station.id)

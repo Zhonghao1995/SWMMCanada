@@ -140,12 +140,12 @@ export default function MapPanel() {
       {/* AOI (committed) */}
       <Source id="aoi" type="geojson" data={aoiFc}>
         <Layer id="aoi-fill" type="fill" paint={{ 'fill-color': '#2563eb', 'fill-opacity': 0.10 }} />
-        <Layer id="aoi-line" type="line" paint={{ 'line-color': '#2563eb', 'line-width': 2, 'line-dasharray': [2, 1] }} />
+        <Layer id="aoi-line" type="line" paint={{ 'line-color': '#2563eb', 'line-width': 2 }} />
       </Source>
 
       {/* In-progress draft */}
       <Source id="draft" type="geojson" data={draftFc}>
-        <Layer id="draft-line" type="line" paint={{ 'line-color': '#f59e0b', 'line-width': 2, 'line-dasharray': [2, 1] }} />
+        <Layer id="draft-line" type="line" paint={{ 'line-color': '#f59e0b', 'line-width': 2 }} />
         <Layer id="draft-pts" type="circle"
           paint={{ 'circle-radius': 4, 'circle-color': '#f59e0b', 'circle-stroke-width': 1.5, 'circle-stroke-color': '#ffffff' }} />
       </Source>

@@ -518,8 +518,8 @@ def pipeline_for_aoi(aoi):
     min_lon, min_lat, max_lon, max_lat = aoi.bbox
     spec = city_for_point((min_lon + max_lon) / 2, (min_lat + max_lat) / 2)
     if spec is not None:
-        return partial(build_city, spec), f"Real municipal network — {spec.label}"
-    return build_from_aoi, ("Synthetic network from open data — streets-based routing, "
+        return partial(build_city, spec), f"Real municipal network: {spec.label}"
+    return build_from_aoi, ("Synthetic network from open data: streets-based routing, "
                             "not municipal pipe records")
 
 

@@ -45,10 +45,15 @@ export default function ControlPanel() {
   return (
     <aside className="flex h-full w-full flex-col gap-5 overflow-y-auto bg-white p-4">
       <header>
-        <div className="flex items-center gap-2">
+        <a
+          href="https://www.h2ox.me/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-2 hover:opacity-80"
+        >
           <img src={logoMark} alt="" className="h-8 w-8" />
           <h1 className="text-lg font-semibold text-slate-800">SWMMCanada</h1>
-        </div>
+        </a>
         <p className="mt-1 text-xs text-slate-500">
           Draw or upload an area. Get a ready-to-run drainage model from Canadian open data,
           in SWMM, MIKE+ and InfoWorks ICM formats.
@@ -125,7 +130,7 @@ export default function ControlPanel() {
             className="w-full rounded-md border border-slate-300 px-2 py-1"
           >
             <option value="historical">Historical observed rain (ECCC gauges)</option>
-            <option value="design">Design storm (ECCC IDF — capacity check)</option>
+            <option value="design">Design storm (ECCC IDF capacity check)</option>
           </select>
         </label>
         {designStorm && (
@@ -167,7 +172,7 @@ export default function ControlPanel() {
         )}
         {designStorm && (
           <p className="text-[11px] text-slate-400">
-            Synthetic alternating-block storm from the nearest ECCC IDF station — placed at the
+            Synthetic alternating-block storm from the nearest ECCC IDF station, placed at the
             start date 00:00; the rest of the period is dry drain-down. Not observed rain.
           </p>
         )}
@@ -241,7 +246,7 @@ export default function ControlPanel() {
             onChange={(e) => setInfiltration(e.target.value as InfiltrationMethod)}
             className="w-full rounded-md border border-slate-300 px-2 py-1"
           >
-            <option value="HORTON">Horton (default — municipal practice)</option>
+            <option value="HORTON">Horton (default, municipal practice)</option>
             <option value="CURVE_NUMBER">SCS Curve Number</option>
             <option value="GREEN_AMPT">Green-Ampt (soil-texture based)</option>
           </select>
@@ -277,10 +282,10 @@ export default function ControlPanel() {
               <div className="mt-1 text-[11px] text-slate-500">
                 {'🌧 Rain used: '}
                 {forcing.rainfall_resolution === 'design_storm'
-                  ? `synthetic design storm — T=${forcing.return_period_yr} yr` +
+                  ? `synthetic design storm: T=${forcing.return_period_yr} yr` +
                     `${forcing.duration_h ? ` / ${forcing.duration_h} h` : ''}, ${forcing.total_mm} mm ` +
                     `(IDF: ${forcing.idf_station_name}). ` +
-                    (forcing.requested ? 'As requested — not observed rain.' : 'Not observed rain.')
+                    (forcing.requested ? 'As requested, not observed rain.' : 'Not observed rain.')
                   : `${forcing.rainfall_resolution}${forcing.station_name ? ` · ${forcing.station_name}` : ''}` +
                     `${forcing.coverage_pct != null ? ` · ${forcing.coverage_pct}% coverage` : ''}`}
               </div>
