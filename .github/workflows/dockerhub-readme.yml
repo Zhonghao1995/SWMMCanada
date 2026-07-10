@@ -1,0 +1,42 @@
+name: Sync README to Docker Hub
+
+# Docker Hub does not read the GitHub README on its own. This mirrors README.md into the
+# repository overview (and the short description) whenever the README changes, so the two
+# never drift. Runs only when the Docker Hub secrets exist; a no-secret repo skips cleanly.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - README.md
+      - .github/workflows/dockerhub-readme.yml
+  workflow_dispatch:
+
+jobs:
+  sync-readme:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Detect Docker Hub credentials
+        id: dockerhub
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          if [ -n "$DOCKERHUB_USERNAME" ] && [ -n "$DOCKERHUB_TOKEN" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.dockerhub.outputs.enabled == 'true'
+        name: Update Docker Hub overview + description
+        uses: peter-evans/dockerhub-description@v5
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          # Namespace from the secret — same source docker-publish uses — so this always
+          # targets the account that was actually configured, no hardcoded username.
+          repository: ${{ secrets.DOCKERHUB_USERNAME }}/swmmcanada
+          readme-filepath: ./README.md
+          short-description: "Ready-to-run EPA SWMM models anywhere in Canada, from open data"
+          enable-url-completion: true
