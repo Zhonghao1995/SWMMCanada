@@ -304,14 +304,15 @@ export default function MapPanel() {
           layout={{ 'line-cap': 'round' }}
           paint={{ 'line-color': exprColor(CONDUIT_COLOR),
                    'line-width': expr(hoverCase(['+', CONDUIT_WIDTH, 1.6], CONDUIT_WIDTH)) }} />
-        {/* Flow direction: glyph arrows along the digitised (= flow) direction, close zooms only. */}
-        <Layer id="m-flow" type="symbol" filter={conduitFilter} minzoom={15}
-          layout={{ 'symbol-placement': 'line', 'symbol-spacing': 90,
-                    'text-field': '>', 'text-size': 11, 'text-font': ['Open Sans Regular'],
+        {/* Flow direction: white chevrons with a system-coloured halo riding the pipe —
+            same-colour arrows disappear into the line; white cores read on any background. */}
+        <Layer id="m-flow" type="symbol" filter={conduitFilter} minzoom={14}
+          layout={{ 'symbol-placement': 'line', 'symbol-spacing': 64,
+                    'text-field': '>', 'text-size': 13, 'text-font': ['Open Sans Bold'],
                     'text-keep-upright': false, 'text-allow-overlap': true,
                     'text-rotation-alignment': 'map' }}
-          paint={{ 'text-color': exprColor(CONDUIT_COLOR), 'text-opacity': 0.9,
-                   'text-halo-color': '#ffffff', 'text-halo-width': 1.2 }} />
+          paint={{ 'text-color': '#ffffff',
+                   'text-halo-color': exprColor(CONDUIT_COLOR), 'text-halo-width': 1.6 }} />
         <Layer id="m-junction" type="circle" filter={junctionFilter}
           paint={{ 'circle-radius': expr(hoverCase(5, 3.4)),
                    'circle-color': exprColor(NODE_COLOR),
