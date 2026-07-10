@@ -137,6 +137,20 @@ CITIES: Tuple[CitySpec, ...] = (
 )
 
 
+# Canada's coarse WGS84 envelope. The honest "is this even Canada" gate for
+# preview/UX responses: deliberately generous (a northern-US border town can
+# pass), because city dispatch stays exact via each spec's coverage bbox and
+# the build itself fails on non-Canadian data. Downstream consumers (aiswmm's
+# geofence pre-check) mirror this envelope; this is the authoritative copy.
+CANADA_COARSE_BBOX: Bbox = (-141.1, 41.6, -52.5, 83.2)
+
+
+def in_canada_coarse(lon: float, lat: float) -> bool:
+    """Whether a point falls inside the coarse Canada envelope."""
+    min_lon, min_lat, max_lon, max_lat = CANADA_COARSE_BBOX
+    return min_lon <= lon <= max_lon and min_lat <= lat <= max_lat
+
+
 def city_for_point(lon: float, lat: float) -> Optional[CitySpec]:
     """The city whose coverage bbox contains the point, else None. First match wins;
     coverage boxes must not overlap (same rule the old pipeline table had)."""

@@ -1,6 +1,6 @@
 """FastAPI app for the async tasks-api (integration spec §2.1):
 
-  POST   /api/v1/aoi/preview        -> 200 {geometry, bbox, area_km2}  (parse only, no build)
+  POST   /api/v1/aoi/preview        -> 200 {geometry, bbox, area_km2, mode, city, in_canada}  (parse only, no build)
   POST   /api/v1/tasks              -> 202 {task_id, status}   (json polygon or multipart shp)
   GET    /api/v1/tasks/{id}         -> 200 {state, progress_pct, stage, error}
   GET    /api/v1/tasks/{id}/result  -> 200 zip | 409 not ready | 404
@@ -28,6 +28,7 @@ from swmmcanada.build.config import InfiltrationModel
 from swmmcanada.geo import aoi_from_geojson, aoi_from_shapefile
 from swmmcanada.geo.errors import AOIOversizeError, GeoError
 from swmmcanada.pipeline import pipeline_for_aoi
+from swmmcanada.sources.cities.registry import city_for_point, in_canada_coarse
 
 
 def create_app(*, pipeline=None, workdir=None, run_inline: bool = False) -> FastAPI:
@@ -73,11 +74,24 @@ def create_app(*, pipeline=None, workdir=None, run_inline: bool = False) -> Fast
         geometry on the map, its true area, and any parse error (bad CRS, oversize AOI)
         the moment the user picks the file instead of minutes into a build."""
         aoi = await _aoi_from_request(polygon, file)
+        # Pre-flight routing facts (aiswmm integration spec follow-up): which
+        # pathway a submit of this AOI would take, before any build starts.
+        # ``mode`` comes from the SAME dispatcher submit uses, so preview and
+        # submit can never disagree; ``in_canada`` is the coarse envelope
+        # (generous by design; the build is the real authority).
+        min_lon, min_lat, max_lon, max_lat = aoi.bbox
+        centre_lon = (min_lon + max_lon) / 2
+        centre_lat = (min_lat + max_lat) / 2
+        spec = city_for_point(centre_lon, centre_lat)
+        _, mode = pipeline_for_aoi(aoi)
         return {
             "geometry": shp_mapping(aoi.geometry),
             "bbox": list(aoi.bbox),
             "area_km2": aoi.area_km2,
             "source": aoi.source,
+            "mode": mode,
+            "city": spec.key if spec is not None else None,
+            "in_canada": in_canada_coarse(centre_lon, centre_lat),
         }
 
     @app.post("/api/v1/tasks", status_code=202)
