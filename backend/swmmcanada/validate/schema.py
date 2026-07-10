@@ -44,3 +44,5 @@ OUTLET_DIST_HIGH_M = 50.0      # outlet >50 m from its cell -> high-risk tier
 
 SHAPE_AREA_OUTLIER_FACTOR = 20.0   # cell area >20× or <1/20× the median -> flag
 SHAPE_THINNESS_MAX = 8.0           # perimeter² / (4π·area) above this -> elongated
+
+INVERT_RISE_TOL_M = 0.01           # conduit rising more than this (m) -> adverse slope

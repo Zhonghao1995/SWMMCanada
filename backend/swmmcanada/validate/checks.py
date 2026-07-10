@@ -7,7 +7,7 @@ and use `unary_union` so coverage/overlap stay O(n) rather than O(n²) pairwise.
 import math
 from typing import Dict, List, Tuple
 
-from swmmcanada.build.models import SubcatchmentIn
+from swmmcanada.build.models import NetworkIn, SubcatchmentIn
 from swmmcanada.validate import schema
 
 
@@ -49,6 +49,38 @@ def check_geometry_absent(subs: List[SubcatchmentIn]):
                    "every subcatchment carries a polygon" if not missing
                    else f"{len(missing)} cell(s) have no polygon (geometric checks skipped for them)",
                    n_missing=len(missing), sample=missing[:10])
+
+
+# --- network invert checks (issue #77) -----------------------------------------
+
+
+def check_invert_consistency(network: NetworkIn):
+    """Adverse/back-filled inverts (issue #77). Conduit inverts are node inverts (no
+    offsets), so a conduit whose downstream node sits higher than its upstream node by
+    more than INVERT_RISE_TOL_M runs uphill; a junction whose EVERY outgoing conduit
+    rises is a local pit — inflow ponds there and shows up as a node-continuity blow-up
+    only after the engine run (the Kelowna N16 symptom)."""
+    inv = {n.name: n.invert_m for n in list(network.junctions) + list(network.outfalls)}
+    rises: Dict[str, float] = {}
+    out_by_node: Dict[str, List[str]] = {}
+    for c in network.conduits:
+        if c.from_node not in inv or c.to_node not in inv:
+            continue   # dangling endpoint is a different defect; don't crash the check
+        out_by_node.setdefault(c.from_node, []).append(c.name)
+        rise = inv[c.to_node] - inv[c.from_node]
+        if rise > schema.INVERT_RISE_TOL_M:
+            rises[c.name] = rise
+    pits = [j.name for j in network.junctions
+            if out_by_node.get(j.name) and all(c in rises for c in out_by_node[j.name])]
+    max_rise = max(rises.values()) if rises else 0.0
+    return _result("invert_consistency", schema.WARNING, not rises,
+                   "conduit inverts fall along the flow direction" if not rises
+                   else f"{len(rises)} conduit(s) run uphill (max rise {max_rise:.2f} m); "
+                        f"{len(pits)} junction(s) are local pits (every outgoing conduit rises)",
+                   n_adverse_conduits=len(rises), n_pit_junctions=len(pits),
+                   max_rise_m=round(max_rise, 3),
+                   sample_conduits=sorted(rises, key=rises.get, reverse=True)[:10],
+                   sample_pits=pits[:10])
 
 
 # --- geometric context (one reprojection, shared) -----------------------------

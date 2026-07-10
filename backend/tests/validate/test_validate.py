@@ -3,7 +3,7 @@
 Tests assert external behaviour — which checks pass/fail and the report's verdict — on
 hand-built models, not the internal merge steps.
 """
-from swmmcanada.build.models import JunctionIn, NetworkIn, SubcatchmentIn
+from swmmcanada.build.models import ConduitIn, JunctionIn, NetworkIn, SubcatchmentIn
 from swmmcanada.geo import aoi_from_geojson
 from swmmcanada.validate import MethodDescriptor, validate_model
 
@@ -117,6 +117,57 @@ def test_polygon_none_warns_but_topology_still_ok():
     r = validate_model(NET, subs, AOI, method=METHOD)
     assert not _ids(r)["geometry_absent"].passed            # the None cell is flagged (warning)
     assert r.ok                                              # ...but topology is fine -> not blocked
+
+
+# --- invert consistency (issue #77) --------------------------------------------
+
+
+def _j(name, invert, lon=-123.3695, lat=48.421):
+    return JunctionIn(name, invert, lon, lat)
+
+
+def test_descending_conduit_inverts_pass():
+    net = NetworkIn(junctions=[_j("J1", 10.0, -123.371, 48.420), _j("J2", 9.0, -123.369, 48.420)],
+                    outfalls=[], conduits=[ConduitIn("C1", "J1", "J2", length_m=100.0)])
+    r = validate_model(net, _clean_subs(), AOI, method=METHOD)
+    assert _ids(r)["invert_consistency"].passed
+
+
+def test_local_pit_junction_is_flagged_by_name():
+    # The Kelowna N16 shape: J2 back-filled below both neighbours -> its only exit rises.
+    net = NetworkIn(
+        junctions=[_j("J1", 10.0, -123.371, 48.420), _j("J2", 8.0, -123.369, 48.420), _j("J3", 9.0)],
+        outfalls=[],
+        conduits=[ConduitIn("C1", "J1", "J2", length_m=100.0),
+                  ConduitIn("C2", "J2", "J3", length_m=100.0)])
+    r = validate_model(net, _clean_subs(), AOI, method=METHOD)
+    chk = _ids(r)["invert_consistency"]
+    assert not chk.passed
+    assert chk.metrics["n_adverse_conduits"] == 1 and chk.metrics["sample_conduits"] == ["C2"]
+    assert chk.metrics["n_pit_junctions"] == 1 and chk.metrics["sample_pits"] == ["J2"]
+    assert chk.metrics["max_rise_m"] == 1.0
+    assert r.ok                                              # data-quality warning, never blocks
+
+
+def test_rise_within_tolerance_passes():
+    net = NetworkIn(junctions=[_j("J1", 10.0, -123.371, 48.420), _j("J2", 10.005, -123.369, 48.420)],
+                    outfalls=[], conduits=[ConduitIn("C1", "J1", "J2", length_m=100.0)])
+    r = validate_model(net, _clean_subs(), AOI, method=METHOD)
+    assert _ids(r)["invert_consistency"].passed
+
+
+def test_adverse_conduit_with_a_falling_sibling_is_not_a_pit():
+    # J1 has one falling exit and one rising exit -> water can still leave: adverse, no pit.
+    net = NetworkIn(
+        junctions=[_j("J1", 10.0, -123.371, 48.420), _j("J2", 9.0, -123.369, 48.420), _j("J3", 11.0)],
+        outfalls=[],
+        conduits=[ConduitIn("C1", "J1", "J2", length_m=100.0),
+                  ConduitIn("C2", "J1", "J3", length_m=100.0)])
+    r = validate_model(net, _clean_subs(), AOI, method=METHOD)
+    chk = _ids(r)["invert_consistency"]
+    assert not chk.passed
+    assert chk.metrics["n_adverse_conduits"] == 1
+    assert chk.metrics["n_pit_junctions"] == 0
 
 
 # --- serialisation ------------------------------------------------------------
