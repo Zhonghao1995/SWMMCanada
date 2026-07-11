@@ -18,7 +18,7 @@ repository-code: "https://github.com/Zhonghao1995/SWMMCanada"
 url: "https://swmm.h2ox.me/"
 doi: "10.5281/zenodo.21058544"
 license: MIT
-version: 0.3.3
+version: 0.3.4
 date-released: "2026-07-10"
 identifiers:
   - type: doi
