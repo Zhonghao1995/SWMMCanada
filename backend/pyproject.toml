@@ -1,6 +1,6 @@
 [project]
 name = "swmmcanada"
-version = "0.2.0"
+version = "0.3.4"
 description = "SWMMCanada backend — AOI → Canadian open data → SWMM model generator"
 requires-python = ">=3.10"
 dependencies = [

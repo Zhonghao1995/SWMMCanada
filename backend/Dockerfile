@@ -10,11 +10,13 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends libexpat1 \
  && rm -rf /var/lib/apt/lists/*
 
-# Install the package (runtime deps only). Copy the dependency manifest and the
+# Install the package (runtime deps only), version-locked: constraints.txt pins every
+# dependency to the exact versions the test suite runs on, so image builds stay
+# reproducible as upstream geo packages move. Copy the dependency manifests and the
 # package first so the pip layer is cached when only app code below changes.
-COPY pyproject.toml ./
+COPY pyproject.toml constraints.txt ./
 COPY swmmcanada/ ./swmmcanada/
-RUN pip install --no-cache-dir .
+RUN pip install --no-cache-dir -c constraints.txt .
 
 # Fail the build early if any geo wheel is missing a bundled system lib.
 RUN python -c "import geopandas, rasterio, netCDF4, osmnx, fastapi, uvicorn; print('imports ok')"
