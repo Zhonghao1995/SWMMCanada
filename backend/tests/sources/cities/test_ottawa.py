@@ -56,3 +56,34 @@ def test_sanitary_skeleton_assembles_from_fixture():
     assert all(c.from_node in node_names and c.to_node in node_names for c in net.conduits)
     assert all(f["properties"]["LIFE_CYCLE_STATUS"] == "IN_SERVICE"
                for f in _load("sanitary_pipes.geojson"))
+
+
+# --- combined system joins storm (ADR 0021) + audit fixes ---------------------------
+
+def test_combined_pipes_merge_into_the_storm_build():
+    """ADR 0021: downtown Ottawa is largely combined (the fixture clip has MORE combined
+    than storm mains). The merged build must count them and keep every name unique."""
+    storm = {"pipes": _load("storm_pipes.geojson"),
+             "combined_pipes": _load("combined_pipes.geojson"),
+             "outfalls": _load("outfalls.geojson")}
+    res = build_ottawa_network(storm)
+    assert res.diagnostics["n_combined_included"] == len(storm["combined_pipes"]) > 0
+    baseline = build_ottawa_network({"pipes": storm["pipes"], "outfalls": storm["outfalls"]})
+    assert len(res.network.conduits) > len(baseline.network.conduits)
+    names = [j.name for j in res.network.junctions] + [o.name for o in res.network.outfalls]
+    assert len(names) == len(set(names))
+
+
+def test_negative_width_sentinel_is_missing():
+    """Audit 2026-07-14: sanitary/combined rows carry WIDTH=-2 as a sentinel; it must not
+    become a -0.002 m diameter."""
+    from swmmcanada.sources.cities.ottawa import _num
+    assert _num(-2) is None and _num(0) is None and _num(300) == 300.0
+
+
+def test_building_footprints_fixture_is_polygonal():
+    """TopographicMapping/3 (found by the audit) supplies real building polygons."""
+    feats = _load("buildings.geojson")
+    assert len(feats) > 100
+    assert all((f.get("geometry") or {}).get("type") in ("Polygon", "MultiPolygon")
+               for f in feats[:50])

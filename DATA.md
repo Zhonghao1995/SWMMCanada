@@ -15,7 +15,7 @@ All data is free. Most is under the **Open Government Licence – Canada** (or a
 | HYDAT (hydrometric) | ECCC — Water Survey of Canada | observed streamflow (validation) | OGL – Canada |
 | OpenStreetMap | OSM contributors | street graph for synthesized networks | ODbL |
 | Storm Drain + Land | City of Victoria Open Data | real storm network, parcels, buildings | OGL – Victoria |
-| Wastewater Infrastructure | City of Ottawa Open Data | real storm network | OGL – Ottawa |
+| Wastewater Infrastructure | City of Ottawa Open Data | real storm + combined network, buildings | OGL – Ottawa |
 | Storm network + land | City of Calgary Open Data | real storm network, parcels, buildings | OGL – Calgary |
 | Drainage + Lot/Buildings | City of Surrey Open Data | real storm network, parcels, buildings | OGL – Surrey |
 | Sewer + land (BaseMaps) | City of London Open Data | real storm network, parcels, buildings | City of London ToU |
