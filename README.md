@@ -37,7 +37,7 @@ SWMMCanada chooses how to build the network from **where you draw**. You don't s
 
 | Mode | What it does | Where it kicks in |
 |---|---|---|
-| **Real network** | uses the city's published storm pipes (real inverts, diameters, manholes, and outfalls) | **8 cities** that publish a storm network: Victoria, Ottawa, Calgary, Surrey, London, Kitchener–Waterloo, Kelowna, Regina |
+| **Real network** | uses the city's published storm pipes (real inverts, diameters, manholes, and outfalls) | **9 cities** that publish a storm network: Victoria, Ottawa, Calgary, Surrey, London, Kitchener–Waterloo, Kelowna, Regina, Vancouver |
 | **Synthesize** | builds a realistic network from the street map + open data: DEM-delineated subcatchments where the terrain earns it, pipes sized by the rational method with real ECCC IDF intensities | anywhere else in Canada |
 
 Either mode then gives you the same things: subcatchments, rainfall, and a shareable data package. Where a city also publishes parcels (like Victoria), the subcatchments follow real lot lines. Where a city publishes its **sanitary sewer** too (Regina), the model carries it as a second tagged system in the same `.inp` — the foundation for dual-drainage and separated-sewer studies.
@@ -90,14 +90,14 @@ backend/swmmcanada/      # Python pipeline: open data -> SWMM model
   geo/         AOI parsing, station selection, CRS
   acquire/     ECCC climate · NRCan DEM (MRDEM + HRDEM LiDAR) · NALCMS land cover · SoilGrids soil · HYDAT flow
   sources/     live data adapters (climate, DEM incl. 1 m LiDAR auto-select, ECCC IDF design storms, land cover, soil, OSM streets)
-    cities/    base.py (shared assembler) + 8 real-network adapters (victoria · ottawa · calgary · surrey · london · kitchener · kelowna · regina)
+    cities/    base.py (shared assembler) + 9 real-network adapters (victoria · ottawa · calgary · surrey · london · kitchener · kelowna · regina · vancouver)
   network/     street-graph synthesis · DEM subcatchments behind a terrain honesty gate (Voronoi fallback) · rational-method pipe sizing
   derive/      clip + zonal stats -> subcatchment parameters
   build/       assemble + validate the SWMM .inp
   datastore/   model-ready datastore (GeoPackage + netCDF + JSON)
   export/      model exporters reading the datastore: SWMM · MIKE+ CS import package · InfoWorks ICM ODIC package
   api/         FastAPI async tasks API
-  pipeline.py  build_from_aoi · build_from_<city> (8 real-network cities)
+  pipeline.py  build_from_aoi · build_from_<city> (9 real-network cities)
 
 frontend/src/            # React + Vite + MapLibre web app
   components/   MapPanel.tsx (map + draw AOI) · ControlPanel.tsx (build, layers, download)
@@ -128,7 +128,7 @@ SWMMCanada is the **first half** of a closed loop: it turns an area into a compl
 ## More
 
 - **[ASSUMPTIONS.md](ASSUMPTIONS.md)**: what's real, derived, or approximated in a model, layer by layer. Most of it is grounded in real data; the approximations (and the uncalibrated caveat) are called out.
-- **[DATA.md](DATA.md)**: every dataset used, with links, licences, and how each one is used (ECCC rainfall, NRCan terrain & land cover, SoilGrids soil, OpenStreetMap, and the eight municipal storm networks). All free / open.
+- **[DATA.md](DATA.md)**: every dataset used, with links, licences, and how each one is used (ECCC rainfall, NRCan terrain & land cover, SoilGrids soil, OpenStreetMap, and the nine municipal storm networks). All free / open.
 - **[RESULTS.md](RESULTS.md)**: real-city validation, figures, and the EPA SWMM numbers.
 - **[DEPLOY.md](DEPLOY.md)**: run the backend as a container (GHCR image) and the frontend as a static site (GitHub Pages), and how the two are wired.
 - **Built with** Python (geopandas, swmm-api, FastAPI) and React + MapLibre. Full dependency lists in `backend/pyproject.toml` and `frontend/package.json`.
