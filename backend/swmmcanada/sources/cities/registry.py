@@ -31,6 +31,10 @@ from swmmcanada.sources.cities.regina import (
 from swmmcanada.sources.cities.surrey import (
     build_surrey_network, fetch_surrey_land, fetch_surrey_sanitary, fetch_surrey_storm,
 )
+from swmmcanada.sources.cities.vancouver import (
+    build_vancouver_network, fetch_vancouver_land, fetch_vancouver_sanitary,
+    fetch_vancouver_storm,
+)
 from swmmcanada.sources.cities.victoria import (
     build_victoria_network, fetch_victoria_land, fetch_victoria_sanitary, fetch_victoria_storm,
 )
@@ -133,6 +137,18 @@ CITIES: Tuple[CitySpec, ...] = (
         storm=lambda bbox, client: build_regina_network(fetch_regina_storm(bbox, client=client)),
         land=lambda bbox, client: fetch_regina_land(bbox, client=client),
         sanitary=lambda bbox, client: build_regina_network(fetch_regina_sanitary(bbox, client=client)),
+    ),
+    # Vancouver (ADR 0020): explicit frommh/tomh manhole topology from the VanMap public
+    # FeatureServer (real diameter/slope/material; combined mains join the storm system);
+    # rim-anchored inverts (no inverts published); land kit from the open-data portal.
+    CitySpec(
+        key="vancouver", label="Vancouver, BC",
+        coverage=(-123.26, 49.19, -123.02, 49.32), sub_crs="EPSG:32610",
+        network_source="City of Vancouver sewer network via VanMap (real municipal network; "
+                       "storm + combined mains)",
+        storm=lambda bbox, client: build_vancouver_network(fetch_vancouver_storm(bbox, client=client)),
+        land=lambda bbox, client: fetch_vancouver_land(bbox, client=client),
+        sanitary=lambda bbox, client: build_vancouver_network(fetch_vancouver_sanitary(bbox, client=client)),
     ),
 )
 

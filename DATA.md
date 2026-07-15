@@ -22,6 +22,7 @@ All data is free. Most is under the **Open Government Licence – Canada** (or a
 | Storm (Region of Waterloo) | Kitchener / Region of Waterloo | real storm network, buildings | OGL – Kitchener |
 | Storm utilities + land | City of Kelowna Open Data | real storm network, parcels, buildings | OGL – Kelowna |
 | Storm Sewer Network + land | City of Regina Open Data | real storm network, parcels, buildings | OGL – Regina |
+| Sewer network (VanMap) + land | City of Vancouver (VanMap public services + Open Data) | real storm+combined network, parcels, buildings | OGL – Vancouver (land); VanMap public services (network) |
 | Positron basemap | CARTO + OSM | web-map background (display only) | © OSM, © CARTO |
 
 ---
@@ -148,6 +149,7 @@ the city registry (`sources/cities/registry.py`).
 | **Kitchener–Waterloo, ON** | `services1.arcgis.com/qAo1OsXi67t7XgmS/.../FeatureServer` | `Storm_Pipes` (UP/DN_INVERT) · `Storm_Manholes` · `Storm_Outlets` · `Storm_Catchbasins` · `Sanitary_Pipes`, ACTIVE GRAVITY (separated **sanitary** skeleton, second tagged system) | explicit integer node IDs | `Building_Outlines` only (no parcel polygons) | OGL – Kitchener |
 | **Kelowna, BC** | `geoportal.kelowna.ca/arcgis/rest/services/ArcGISOnline/OpenData_Utilities_Storm/MapServer` | `22` Storm Main (INVERT_IN_Z/OUT_Z) · `7` Manholes · `4` Outfalls · `19` Catch Basins · `OpenData_Utilities_Sanitary` `11` Sanitary Main, `STATUS='A'` (separated **sanitary** skeleton, second tagged system) | geometry-inferred | Planning `3` Legal Parcel · `17` Building Outlines | OGL – Kelowna |
 | **Regina, SK** | `opengis.regina.ca/arcgis/rest/services/OpenData` ([open.regina.ca](https://open.regina.ca)) | StormSewerNetwork `5` Storm Sewer Line, `STATUS='ACTIVE'` non-Force (START/ENDELEVATION) · `2` Manholes · `4` Outfalls · `3` Catch Basins · DomesticSewerNetwork `3` Domestic Sewer Line (separated **sanitary** skeleton, second tagged system) | geometry-inferred | `Parcels` (ASSESSMENT_REGIONS lots) · `BuildingFootprint` | [OGL – Regina](https://www.regina.ca/city-government/open-data/open-government-licence/) |
+| **Vancouver, BC** | `maps.vancouver.ca/server/rest/services/Hosted` (VanMap public) + [opendata.vancouver.ca](https://opendata.vancouver.ca) | `swGravityMain/11`, `eflnttype IN ('Storm','Combined')` + `In Service` (diameter mm, slope %, material; **Combined joins the storm system**, ADR 0020) · `swManhole/12` (rimelev → **rim-anchored inverts**: no inverts published) · same layer `Sanitary` (separated **sanitary** skeleton, second tagged system) | explicit manhole IDs (frommh/tomh) | Open data: `sewer-catch-basins` · `property-parcel-polygons` · `building-footprints-2015` | OGL – Vancouver (open-data layers); VanMap services published `access=public` |
 
 One feed covers the whole **Region of Waterloo** (Kitchener / Waterloo / Cambridge). How each
 city's data turns into a model — and which parts are real vs derived vs synthesized — is in
