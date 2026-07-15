@@ -37,6 +37,17 @@ VANMAP = "https://maps.vancouver.ca/server/rest/services/Hosted"
 MAINS = f"{VANMAP}/swGravityMain/FeatureServer/11"
 MANHOLES = f"{VANMAP}/swManhole/FeatureServer/12"
 
+# The Hosted layers are slimmed copies; the VanMapViewer composite MapServer exposes the
+# FULL as-built table — including real UPSTREAM_INVERT/DWNSTREAM_INVERT (plus the city's
+# own "estimated" flags), joinable to the Hosted mains by COV_SOURCE_KEY == facilityid
+# (verified 134/135 on the fixture bbox, 2026-07-11). Layer ids: 36 Storm, 37 Combined,
+# 35 Sanitary.
+INFRA = "https://maps.vancouver.ca/server/rest/services/VanMapViewer/Infrastructure_Sewer/MapServer"
+INVERT_LAYERS_STORM = (36, 37)
+INVERT_LAYERS_SANITARY = (35,)
+_INVERT_FIELDS = ("COV_SOURCE_KEY,UPSTREAM_INVERT,DWNSTREAM_INVERT,"
+                  "UPSTRM_INVERT_ESTIMATED,DNSTRM_INVERT_ESTIMATED")
+
 OPEN_DATA = "https://opendata.vancouver.ca/api/explore/v2.1/catalog/datasets"
 CATCHBASINS = f"{OPEN_DATA}/sewer-catch-basins/exports/geojson"
 PARCELS = f"{OPEN_DATA}/property-parcel-polygons/exports/geojson"
@@ -100,15 +111,27 @@ def _fetch_manholes_by_id(manhole_ids, client) -> list:
     return features
 
 
+def _fetch_invert_rows(bbox, client, layers) -> list:
+    """As-built invert rows from the Infrastructure_Sewer MapServer (Esri JSON — the
+    MapServer does not serve geojson; only attributes are needed for the facilityid join)."""
+    rows = []
+    for lid in layers:
+        rows += base.fetch_paged(client, f"{INFRA}/{lid}/query", bbox, fmt="json",
+                                 out_fields=_INVERT_FIELDS, page_size=_PAGE_SIZE)
+    return rows
+
+
 def fetch_vancouver_storm(bbox, *, client=None) -> dict:
-    """Storm + combined gravity mains intersecting ``bbox`` (EPSG:4326), plus every manhole
-    the mains reference (fetched by facilityid). Returns ``{"mains", "manholes"}``."""
+    """Storm + combined gravity mains intersecting ``bbox`` (EPSG:4326), every manhole the
+    mains reference (fetched by facilityid), and the as-built invert rows for the same bbox.
+    Returns ``{"mains", "manholes", "invert_rows"}``."""
     if hasattr(bbox, "bbox"):
         bbox = bbox.bbox
     client = client or VancouverMapClient()
     mains = _fetch_layer_bbox(MAINS, bbox, client, where=_STORM_WHERE)
     manholes = _fetch_manholes_by_id(_referenced_manhole_ids(mains), client)
-    return {"mains": mains, "manholes": manholes}
+    invert_rows = _fetch_invert_rows(bbox, client, INVERT_LAYERS_STORM)
+    return {"mains": mains, "manholes": manholes, "invert_rows": invert_rows}
 
 
 def fetch_vancouver_sanitary(bbox, *, client=None) -> dict:
@@ -119,7 +142,8 @@ def fetch_vancouver_sanitary(bbox, *, client=None) -> dict:
     client = client or VancouverMapClient()
     mains = _fetch_layer_bbox(MAINS, bbox, client, where=_SANITARY_WHERE)
     manholes = _fetch_manholes_by_id(_referenced_manhole_ids(mains), client)
-    return {"mains": mains, "manholes": manholes}
+    invert_rows = _fetch_invert_rows(bbox, client, INVERT_LAYERS_SANITARY)
+    return {"mains": mains, "manholes": manholes, "invert_rows": invert_rows}
 
 
 def _fetch_opendata_bbox(url: str, bbox, client) -> list:
@@ -177,14 +201,44 @@ def _rim(v) -> Optional[float]:
     return e
 
 
+# Inverts may sit slightly below sea level near tidewater outfalls; 0 is the source's
+# missing-data sentinel (verified: rows with UPSTREAM=DWNSTREAM=GRADE=0).
+_INV_BAND = (-20.0, 300.0)
+
+
+def _invert(v) -> Optional[float]:
+    e = base.num(v, zero_missing=True)
+    if e is None or not (_INV_BAND[0] <= e <= _INV_BAND[1]):
+        return None
+    return e
+
+
+def _invert_index(invert_rows) -> Dict[str, tuple]:
+    """COV_SOURCE_KEY -> (up_invert, dn_invert, n_estimated_flags). The MapServer rows are
+    Esri JSON ({'attributes': ...}); COV_SOURCE_KEY equals the Hosted mains' facilityid."""
+    idx: Dict[str, tuple] = {}
+    for r in invert_rows or []:
+        a = r.get("attributes") or r.get("properties") or {}
+        key = str(a.get("COV_SOURCE_KEY") or "").strip()
+        if not key:
+            continue
+        up, dn = _invert(a.get("UPSTREAM_INVERT")), _invert(a.get("DWNSTREAM_INVERT"))
+        n_est = sum(str(a.get(f) or "").strip().upper() == "YES"
+                    for f in ("UPSTRM_INVERT_ESTIMATED", "DNSTRM_INVERT_ESTIMATED"))
+        idx[key] = (up, dn, n_est)
+    return idx
+
+
 def build_vancouver_network(
     storm: dict, *, config: VancouverNetworkConfig = VancouverNetworkConfig(),
 ) -> VancouverNetworkResult:
-    """Assemble the Vancouver network from explicit frommh/tomh topology with rim-anchored
-    inverts (ADR 0020): pipe-end invert = manhole rim − default node depth where the rim is
-    plausible, else None for the base assembler's neighbour backfill."""
+    """Assemble the Vancouver network from explicit frommh/tomh topology. Vertical tiers
+    (ADR 0020, amended): (1) as-built UPSTREAM/DWNSTREAM inverts joined from the
+    Infrastructure_Sewer MapServer by facilityid; (2) manhole rim − default node depth
+    for ends the as-built table misses; (3) the base assembler's neighbour backfill."""
     mains = (storm or {}).get("mains") or []
     manhole_feats = (storm or {}).get("manholes") or []
+    inv_idx = _invert_index((storm or {}).get("invert_rows"))
 
     coords: Dict[str, Coord] = {}
     rim: Dict[str, float] = {}
@@ -210,7 +264,9 @@ def build_vancouver_network(
 
     raw_pipes: List[base.RawPipe] = []
     effluent_hist: Dict[str, int] = {}
+    n_real_invert_ends = 0
     n_rim_anchored_ends = 0
+    n_city_estimated_flags = 0
     n_dangling = 0
     n_with_slope = 0
     for m in mains:
@@ -227,8 +283,15 @@ def build_vancouver_network(
         n_dangling += int(frommh not in coords) + int(tomh not in coords)
         if up_xy is None or dn_xy is None:
             continue
-        inv_a, inv_b = _end_invert(frommh), _end_invert(tomh)
-        n_rim_anchored_ends += int(inv_a is not None) + int(inv_b is not None)
+        # Vertical tier 1: as-built inverts joined by facilityid; tier 2: rim − depth.
+        real_up, real_dn, n_est = inv_idx.get(str(p.get("facilityid") or "").strip(),
+                                              (None, None, 0))
+        n_city_estimated_flags += n_est
+        inv_a = real_up if real_up is not None else _end_invert(frommh)
+        inv_b = real_dn if real_dn is not None else _end_invert(tomh)
+        n_real_invert_ends += int(real_up is not None) + int(real_dn is not None)
+        n_rim_anchored_ends += int(real_up is None and _end_invert(frommh) is not None)
+        n_rim_anchored_ends += int(real_dn is None and _end_invert(tomh) is not None)
         diameter_mm = base.num(p.get("diameter"))
         raw_pipes.append(base.RawPipe(
             name=str(p.get("facilityid") or p.get("objectid")),
@@ -250,11 +313,16 @@ def build_vancouver_network(
     diagnostics = {
         **result.diagnostics,
         "n_mains_in": len(mains), "n_manholes_in": len(manhole_feats),
+        "n_invert_rows_in": len(inv_idx),
         "effluent_histogram": effluent_hist,
         "n_combined_included": effluent_hist.get("Combined", 0),
+        "n_real_invert_ends": n_real_invert_ends,
+        "n_city_estimated_flags": n_city_estimated_flags,
         "n_rim_anchored_ends": n_rim_anchored_ends,
         "n_dangling_nodes": n_dangling,
         "n_with_slope": n_with_slope,
-        "vertical_basis": f"rim minus {config.default_node_depth_m} m default node depth (ADR 0020)",
+        "vertical_basis": (
+            "as-built inverts (Infrastructure_Sewer, city 'estimated' flags counted) with "
+            f"rim minus {config.default_node_depth_m} m fallback (ADR 0020 amended)"),
     }
     return VancouverNetworkResult(network=result.network, diagnostics=diagnostics)

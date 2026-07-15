@@ -6,10 +6,15 @@ functions** (bbox `-123.125, 49.275, -123.117, 49.281`, ~600 m):
 - `mains.geojson` — 137 gravity mains, `eflnttype IN ('Storm','Combined') AND
   servstatus='In Service'`, from VanMap `Hosted/swGravityMain/FeatureServer/11`
 - `manholes.geojson` — 140 manholes the mains reference, fetched by `facilityid`
-  from `Hosted/swManhole/FeatureServer/12` (carry `rimelev` for the rim-anchored vertical)
-- `sanitary_mains.geojson` / `sanitary_manholes.geojson` — the Sanitary-only tracer
-  (104 / 113 features)
+  from `Hosted/swManhole/FeatureServer/12` (carry `rimelev` for the fallback vertical)
+- `invert_rows.geojson` — 136 as-built invert rows (Esri-JSON attributes) from
+  `VanMapViewer/Infrastructure_Sewer/MapServer` layers 36 (Storm) + 37 (Combined);
+  `COV_SOURCE_KEY` joins to the mains' `facilityid`. Contains real 0/0 sentinel rows
+  (the source's missing-data marker) so the fallback tier is exercised.
+- `sanitary_mains.geojson` / `sanitary_manholes.geojson` / `sanitary_invert_rows.geojson`
+  — the Sanitary-only tracer (104 / 113 / 103 features; inverts from layer 35)
 
 Attributes of note: `frommh`/`tomh` (explicit manhole topology), `diameter` (mm),
-`slope` (%), `length` (m), `material` (full words, e.g. "Vitrified Clay").
-Vancouver publishes **no inverts** — the adapter anchors them to rims (ADR 0020).
+`slope` (%), `length` (m), `material` (full words, e.g. "Vitrified Clay"),
+`UPSTREAM_INVERT`/`DWNSTREAM_INVERT` + the city's own `..._ESTIMATED` flags.
+Vertical tiers: as-built inverts first, rim − default depth fallback (ADR 0020 amended).
