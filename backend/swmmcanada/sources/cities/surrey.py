@@ -1,23 +1,33 @@
-"""City of Surrey storm-drain open data -> SWMM ``NetworkIn`` (geometry-inferred topology).
+"""City of Surrey storm-drain open data -> SWMM ``NetworkIn`` (EXPLICIT node topology).
 
-Surrey publishes inverts (UP_ELEVATION/DOWN_ELEVATION, in m), SLOPE, MAIN_SIZE (mm),
-MAIN_SHAPE, MATERIAL and SHAPE.LEN on its Drn Mains layer, but **no node ids on the mains**,
-so topology is inferred from pipe polyline endpoints by ``cities.base`` (coordinate snapping) —
-the same approach as Ottawa. Unlike Ottawa, Surrey also publishes parcels (Lot) and Buildings,
-so subcatchment imperviousness can use the real parcel/building override (ADR 0005).
+The 2026-07-14 audit found Surrey's OpenData view strips topology columns the city actually
+publishes: the token-free ``Public/Drainage/MapServer`` serves the SAME mains assets
+(FACILITYID-identical) **plus UP_NODE/DOWN_NODE (100% populated)**, and its node layers
+(Manholes 4 / Catch Basins 2 / Devices 3) all carry the joining ``NODE_NO`` along with
+RIM_ELEVATION and OUTFLOW_ELEVATION. So topology is now an explicit node-link join
+(Kitchener/Vancouver style) with the polyline-vertex fallback for out-of-bbox refs; the old
+geometry-inferred path is kept for inputs without node data (legacy fixtures/tests).
 
-Surrey's service is a MapServer on the city's own ArcGIS Server; ``f=geojson`` returns real
-geometry, so features are fetched as GeoJSON directly (no Esri-JSON conversion needed). A
-``base.esri_to_geojson`` fallback path is kept so a layer that only serves Esri JSON still works.
-See ``tests/fixtures/surrey/README.md``.
+Mains also carry UP/DOWN_ELEVATION (m), SLOPE, MAIN_SIZE (mm), MAIN_SHAPE, MATERIAL and
+STATUS — the audit caught Abandoned mains slipping through, so the storm filter now requires
+``STATUS='In Service'`` like the sanitary one always did. Surrey publishes parcels (Lot) and
+Buildings, so subcatchment imperviousness uses the real parcel/building override (ADR 0005).
+
+``f=geojson`` returns real geometry on both services; the ``_as_geojson`` fallback converts
+any layer that answers in Esri JSON. See ``tests/fixtures/surrey/README.md``.
 """
 from swmmcanada.sources.cities import base
 
 ARC = "https://gisservices.surrey.ca/arcgis/rest/services/OpenData/MapServer"
-STORM_MAINS = 18        # Drn Mains (polyline) — UP/DOWN_ELEVATION, MAIN_SIZE, MATERIAL, MAIN_TYPE2
-MANHOLES = 23           # Drainage Manholes — NODE_NO, RIM_ELEVATION, OUTFLOW_ELEVATION
-CATCHBASINS = 24        # Drainage Catch Basins
-DRAINAGE_DEVICES = 25   # Drainage Devices — filter DEVICE_CLASSIFICATION='Outlet' for outfalls
+PUB = "https://gisservices.surrey.ca/arcgis/rest/services/Public/Drainage/MapServer"
+STORM_MAINS = 18        # OpenData Drn Mains — legacy layer (no node ids); kept for reference
+PUB_MAINS = 14          # Public/Drainage Drainage Mains — same assets + UP_NODE/DOWN_NODE
+PUB_MANHOLES = 4        # Public/Drainage Manholes — NODE_NO, RIM_ELEVATION, OUTFLOW_ELEVATION
+PUB_CATCHBASINS = 2     # Public/Drainage Catch Basins — NODE_NO, RIM_ELEVATION
+PUB_DEVICES = 3         # Public/Drainage Devices — NODE_NO, DEVICE_CLASSIFICATION ('Outlet')
+MANHOLES = 23           # OpenData Drainage Manholes (legacy)
+CATCHBASINS = 24        # Drainage Catch Basins (land seeding)
+DRAINAGE_DEVICES = 25   # OpenData Drainage Devices (legacy outfall source)
 SAN_MAINS = 41          # San Mains (polyline) — same schema as Drn Mains (UP/DOWN_ELEVATION, ...)
 LAND_PARCELS = 148      # Lot (polygon)
 BUILDINGS = 155         # Buildings (polygon)
@@ -26,7 +36,8 @@ _PAGE = 2000               # layer maxRecordCount
 
 # Surrey publishes only gravity mains as a routable network; the other MAIN_TYPE2 values
 # (Culvert, Stub, Foundation Drain, Forcemain, ...) are not part of the gravity storm graph.
-_GRAVITY_WHERE = "MAIN_TYPE2='Gravity'"
+# STATUS keeps Abandoned/Proposed lines out (audit 2026-07-14: 7 Abandoned in one bbox).
+_GRAVITY_WHERE = "MAIN_TYPE2='Gravity' AND STATUS='In Service'"
 _OUTLET_WHERE = "DEVICE_CLASSIFICATION='Outlet'"
 # The sanitary layer additionally carries Abandoned/Proposed lines (STATUS), unlike the storm
 # adapter's gravity filter alone; only in-service gravity mains join the sanitary skeleton.
@@ -37,11 +48,11 @@ _SAN_WHERE = "MAIN_TYPE2='Gravity' AND STATUS='In Service'"
 SurreyClient = base.ArcGISClient
 
 
-def _fetch(layer, bbox, client, where="1=1") -> list:
-    """Paginated bbox query returning GeoJSON Features. Surrey's MapServer serves real
+def _fetch(layer, bbox, client, where="1=1", service=ARC) -> list:
+    """Paginated bbox query returning GeoJSON Features. Surrey's MapServers serve real
     geometry under ``f=geojson``; if a layer ever returns Esri JSON instead (``attributes``
     rather than ``properties``), ``_as_geojson`` converts each feature."""
-    return base.fetch_paged(client, f"{ARC}/{layer}/query", bbox,
+    return base.fetch_paged(client, f"{service}/{layer}/query", bbox,
                             where=where, page_size=_PAGE, transform=_as_geojson)
 
 
@@ -54,17 +65,20 @@ def _as_geojson(feat: dict) -> dict:
 
 def fetch_surrey_storm(bbox, *, client=None) -> dict:
     """Storm network intersecting ``bbox`` (EPSG:4326 tuple, or object with ``.bbox``):
-    gravity Drn Mains + 'Outlet' Drainage Devices + Drainage Manholes (RIM_ELEVATION for
-    node ground/max-depth). Returns ``{"pipes": [...], "outfalls": [...], "manholes": [...]}``
-    (lists of GeoJSON Features)."""
+    in-service gravity mains from ``Public/Drainage/14`` (with UP_NODE/DOWN_NODE) plus the
+    NODE_NO-carrying node layers (manholes + catch basins + devices) that resolve them.
+    Returns ``{"pipes": [...], "nodes": [...], "outfalls": [...]}`` — ``outfalls`` stays the
+    'Outlet'-classified devices for the assembler's direct-outfall detection."""
     if hasattr(bbox, "bbox"):
         bbox = bbox.bbox
     client = client or SurreyClient()
-    return {
-        "pipes": _fetch(STORM_MAINS, bbox, client, where=_GRAVITY_WHERE),
-        "outfalls": _fetch(DRAINAGE_DEVICES, bbox, client, where=_OUTLET_WHERE),
-        "manholes": _fetch(MANHOLES, bbox, client),
-    }
+    pipes = _fetch(PUB_MAINS, bbox, client, where=_GRAVITY_WHERE, service=PUB)
+    nodes = (_fetch(PUB_MANHOLES, bbox, client, service=PUB)
+             + _fetch(PUB_CATCHBASINS, bbox, client, service=PUB)
+             + _fetch(PUB_DEVICES, bbox, client, service=PUB))
+    outfalls = [f for f in nodes
+                if str((f.get("properties") or {}).get("DEVICE_CLASSIFICATION") or "") == "Outlet"]
+    return {"pipes": pipes, "nodes": nodes, "outfalls": outfalls}
 
 
 def fetch_surrey_sanitary(bbox, *, client=None) -> dict:
@@ -136,11 +150,36 @@ def build_surrey_network(storm, *, config: base.AssembleConfig = _SURREY_ASSEMBL
         pipes_f = _features(storm)
         outfalls_f = []
 
-    pipes, seen, n_no_geom = [], {}, 0
+    # Explicit topology (audit 2026-07-14): NODE_NO -> coordinates/rims from the fetched
+    # node layers. Inputs without node data (legacy fixtures, the OpenData view, sanitary)
+    # keep the geometry-inferred path: every lookup below just misses and the polyline
+    # fallback takes over.
+    node_xy, node_rim = {}, {}
+    label_points = []
+    nodes_f = _features(storm.get("nodes")) if isinstance(storm, dict) else []
+    for f in nodes_f:
+        p = f.get("properties") or {}
+        nid = str(p.get("NODE_NO") or "").strip()
+        c = (f.get("geometry") or {}).get("coordinates")
+        if not nid or nid in node_xy or not c or len(c) < 2:
+            continue
+        node_xy[nid] = (c[0], c[1])
+        label_points.append(((c[0], c[1]), nid))
+        rim = _rim(p.get("RIM_ELEVATION"))
+        if rim is not None:
+            node_rim[nid] = rim
+
+    pipes, seen, n_no_geom, n_dangling = [], {}, 0, 0
     shape_hist = {}
     for f in pipes_f:
         p = f.get("properties") or {}
-        a, b = _line_ends(f.get("geometry"))
+        p0, p1 = _line_ends(f.get("geometry"))
+        up_id = str(p.get("UP_NODE") or "").strip()
+        dn_id = str(p.get("DOWN_NODE") or "").strip()
+        a = node_xy.get(up_id) or p0
+        b = node_xy.get(dn_id) or p1
+        if node_xy:                              # only meaningful on the explicit path
+            n_dangling += int(up_id not in node_xy) + int(dn_id not in node_xy)
         if a is None or b is None:
             n_no_geom += 1
             continue
@@ -165,9 +204,9 @@ def build_surrey_network(storm, *, config: base.AssembleConfig = _SURREY_ASSEMBL
         if c and len(c) >= 2:
             outfall_points.append((c[0], c[1]))
 
-    # Manhole RIM_ELEVATION (100% populated on the fixture bbox, verified 2026-07-03) -> node
-    # ground elevation, so max depth becomes rim - invert instead of the 2 m default.
-    ground_points = []
+    # Node RIM_ELEVATION -> ground (max depth = rim - invert). Explicit path: rims ride the
+    # NODE_NO join above; legacy path: the OpenData manhole features carry them directly.
+    ground_points = [(node_xy[nid], rim) for nid, rim in node_rim.items()]
     manholes_f = _features(storm.get("manholes")) if isinstance(storm, dict) else []
     for f in manholes_f:
         c = (f.get("geometry") or {}).get("coordinates")
@@ -176,8 +215,11 @@ def build_surrey_network(storm, *, config: base.AssembleConfig = _SURREY_ASSEMBL
             ground_points.append(((c[0], c[1]), rim))
 
     result = base.assemble_network(pipes, outfall_points=outfall_points,
-                                   ground_points=ground_points, config=config)
+                                   ground_points=ground_points, label_points=label_points,
+                                   config=config)
     diag = {**result.diagnostics, "city": "surrey", "n_pipes_in": len(pipes_f),
             "n_no_geom": n_no_geom, "shape_histogram": shape_hist,
-            "n_ground_points": len(ground_points)}
+            "n_ground_points": len(ground_points),
+            "n_nodes_in": len(node_xy), "n_dangling_nodes": n_dangling,
+            "topology": "explicit_node_ids" if node_xy else "geometry_inferred"}
     return base.NetworkResult(network=result.network, diagnostics=diag)
