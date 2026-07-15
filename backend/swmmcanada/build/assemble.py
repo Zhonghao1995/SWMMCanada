@@ -140,9 +140,15 @@ def assemble_inp(
     xsections = CrossSection.create_section()
     for c in network.conduits:
         conduits.add_obj(
-            Conduit(c.name, c.from_node, c.to_node, length=c.length_m, roughness=c.roughness_n)
+            Conduit(c.name, c.from_node, c.to_node, length=c.length_m, roughness=c.roughness_n,
+                    offset_upstream=c.inlet_offset_m, offset_downstream=c.outlet_offset_m)
         )
-        xsections.add_obj(CrossSection(c.name, "CIRCULAR", height=c.diameter_m))
+        # #130: real cross-sections where the city published them; equivalent circular else.
+        if c.shape and c.shape != "CIRCULAR" and c.height_m and c.width_m:
+            xsections.add_obj(CrossSection(c.name, c.shape, height=c.height_m,
+                                           parameter_2=c.width_m))
+        else:
+            xsections.add_obj(CrossSection(c.name, "CIRCULAR", height=c.diameter_m))
     inp[SEC.CONDUITS] = conduits
     inp[SEC.XSECTIONS] = xsections
 

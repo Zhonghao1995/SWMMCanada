@@ -34,6 +34,15 @@ class ConduitIn:
     diameter_m: float = 0.30
     roughness_n: float = 0.013
     system: str = "storm_minor"
+    # Model fidelity (#130): pipe inverts are node inverts PLUS these offsets, so published
+    # pipe-end elevations above the node bottom (drop structures) survive into the .inp.
+    inlet_offset_m: float = 0.0
+    outlet_offset_m: float = 0.0
+    # Non-circular cross-sections: SWMM shape name + real dims where a city publishes them;
+    # the default stays the equivalent-circular pipe (diameter_m).
+    shape: str = "CIRCULAR"
+    height_m: Optional[float] = None
+    width_m: Optional[float] = None
 
 
 @dataclass(frozen=True)

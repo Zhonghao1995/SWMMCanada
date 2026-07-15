@@ -140,6 +140,32 @@ class RawPipe:
     diameter_m: Optional[float] = None
     roughness_n: float = 0.013
     length_m: Optional[float] = None    # geodesic from geometry when missing/zero
+    shape: Optional[str] = None         # city cross-section code; None -> circular (#130)
+    height_m: Optional[float] = None    # real section dims for non-circular shapes
+    width_m: Optional[float] = None
+
+
+# City shape vocab -> SWMM XSECTIONS shape (#130). Unknown/missing -> CIRCULAR, and any
+# non-circular shape without BOTH dims falls back to the equivalent-circular pipe.
+SHAPE_MAP = {
+    "ROUND": "CIRCULAR", "CIRC": "CIRCULAR", "CIRCULAR": "CIRCULAR", "R": "CIRCULAR",
+    "RECT": "RECT_CLOSED", "RECTANGULAR": "RECT_CLOSED", "BOX": "RECT_CLOSED",
+    "SQUARE": "RECT_CLOSED", "RECT_CLOSED": "RECT_CLOSED",
+    "EGG": "EGG", "E": "EGG",
+    "ARCH": "ARCH", "CMPA": "ARCH",
+    "ELLIPSE": "HORIZ_ELLIPSE", "ELLIPTICAL": "HORIZ_ELLIPSE", "ELH": "HORIZ_ELLIPSE",
+    "HORSESHOE": "HORSESHOE", "HS": "HORSESHOE",
+    "TRAPEZOIDAL": "TRAPEZOIDAL",
+}
+
+
+def swmm_shape(raw_shape, height_m, width_m):
+    """(shape, height_m, width_m) for the ConduitIn: a mapped non-circular shape only when
+    the city gave BOTH dimensions, else CIRCULAR with no dims (diameter_m rules)."""
+    mapped = SHAPE_MAP.get(str(raw_shape or "").strip().upper())
+    if mapped and mapped != "CIRCULAR" and height_m and width_m and height_m > 0 and width_m > 0:
+        return mapped, height_m, width_m
+    return "CIRCULAR", None, None
 
 
 @dataclass(frozen=True)
@@ -209,7 +235,8 @@ def assemble_network(
             inv_cands[ka].append(p.inv_a)
         if p.inv_b is not None:
             inv_cands[kb].append(p.inv_b)
-        edges.append((p.name, ka, kb, p.diameter_m, p.roughness_n, length))
+        edges.append((p.name, ka, kb, p.diameter_m, p.roughness_n, length,
+                      p.inv_a, p.inv_b, p.shape, p.height_m, p.width_m))
 
     if not edges:
         return NetworkResult(NetworkIn([], [], []), {"reason": "no usable pipes", "dropped": dropped})
@@ -282,17 +309,34 @@ def assemble_network(
     ]
 
     conduits: List[ConduitIn] = []
-    for name, ka, kb, dia, rough, length in edges:
+    n_offset_ends = 0
+    n_noncircular = 0
+    for name, ka, kb, dia, rough, length, inv_a, inv_b, raw_shape, h_m, w_m in edges:
         if kb in direct:
             fr, to = ka, kb
+            inv_fr, inv_to = inv_a, inv_b
         elif ka in direct:
             fr, to = kb, ka
+            inv_fr, inv_to = inv_b, inv_a
         else:
-            fr, to = (ka, kb) if node_inv[ka] >= node_inv[kb] else (kb, ka)
+            if node_inv[ka] >= node_inv[kb]:
+                fr, to, inv_fr, inv_to = ka, kb, inv_a, inv_b
+            else:
+                fr, to, inv_fr, inv_to = kb, ka, inv_b, inv_a
+        # #130: pipe invert = node invert + offset. Node inverts are min-of-ends, so a
+        # published end elevation above the node bottom is a drop structure the offset
+        # preserves; a missing end elevation means offset 0 (today's behaviour).
+        inlet_off = max(0.0, inv_fr - node_inv[fr]) if inv_fr is not None else 0.0
+        outlet_off = max(0.0, inv_to - node_inv[to]) if inv_to is not None else 0.0
+        n_offset_ends += int(inlet_off > 0) + int(outlet_off > 0)
+        shape, height_m, width_m = swmm_shape(raw_shape, h_m, w_m)
+        n_noncircular += int(shape != "CIRCULAR")
         conduits.append(ConduitIn(
             name=name, from_node=nid(fr), to_node=nid(to), length_m=length,
             diameter_m=dia if (dia and dia > 0) else config.default_diameter_m,
             roughness_n=rough or config.default_roughness,
+            inlet_offset_m=round(inlet_off, 3), outlet_offset_m=round(outlet_off, 3),
+            shape=shape, height_m=height_m, width_m=width_m,
         ))
 
     outfalls = [OutfallIn(name=nid(k), invert_m=node_inv[k], x=node_xy[k][0], y=node_xy[k][1]) for k in direct]
@@ -313,6 +357,7 @@ def assemble_network(
         "n_nodes": len(node_xy), "n_inverts_gapfilled": n_missing,
         "n_direct_outfalls": len(direct), "n_dedicated_outfalls": len(dedicated),
         "n_components": n_components, "n_dropped": len(dropped), "dropped": dropped[:20],
+        "n_offset_ends": n_offset_ends, "n_noncircular": n_noncircular,
     }
     return NetworkResult(network=network, diagnostics=diagnostics)
 

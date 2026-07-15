@@ -95,3 +95,32 @@ def test_shape_method_flows_into_public_diag():
     subs, _, diag = base.delineate_catchbasin_subcatchments(net, cbs, [], [], AOI, crs="EPSG:32610")
     assert diag["method"] == "catchbasin+parcel/building (voronoi-shaped)"
     assert len(subs) == len(SEEDS)
+
+
+# --- #130: conduit offsets + non-circular cross-sections through the assembler --------
+
+def test_drop_structure_survives_as_inlet_offset():
+    """A pipe entering a node ABOVE the node bottom (published end elevation higher than
+    the min-of-ends node invert) must carry the difference as an offset, not lose it."""
+    from swmmcanada.sources.cities.base import RawPipe, assemble_network
+    deep = RawPipe("DEEP", (0.0, 0.0), (0.001, 0.0), inv_a=10.0, inv_b=9.0)
+    drop = RawPipe("DROP", (0.001, 0.001), (0.001, 0.0), inv_a=12.0, inv_b=11.5)  # lands 2.5 m up
+    res = assemble_network([deep, drop])
+    by = {c.name: c for c in res.network.conduits if c.name in ("DEEP", "DROP")}
+    assert by["DEEP"].inlet_offset_m == 0.0 and by["DEEP"].outlet_offset_m == 0.0
+    assert by["DROP"].outlet_offset_m == 2.5              # 11.5 above the node's 9.0 bottom
+    assert res.diagnostics["n_offset_ends"] >= 1
+
+
+def test_noncircular_shape_maps_and_falls_back():
+    from swmmcanada.sources.cities.base import RawPipe, assemble_network, swmm_shape
+    assert swmm_shape("BOX", 1.2, 2.4) == ("RECT_CLOSED", 1.2, 2.4)
+    assert swmm_shape("EGG", 0.9, 0.6) == ("EGG", 0.9, 0.6)
+    assert swmm_shape("BOX", None, 2.4) == ("CIRCULAR", None, None)   # missing a dim
+    assert swmm_shape("ROUND", 0.3, 0.3) == ("CIRCULAR", None, None)
+    box = RawPipe("BOX1", (0.0, 0.0), (0.001, 0.0), inv_a=10.0, inv_b=9.0,
+                  shape="BOX", height_m=1.2, width_m=2.4)
+    res = assemble_network([box])
+    c = next(c for c in res.network.conduits if c.name == "BOX1")
+    assert c.shape == "RECT_CLOSED" and c.height_m == 1.2 and c.width_m == 2.4
+    assert res.diagnostics["n_noncircular"] == 1
