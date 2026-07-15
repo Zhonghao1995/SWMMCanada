@@ -30,7 +30,8 @@ def _load(name: str) -> list:
 
 @pytest.fixture(scope="module")
 def storm_inputs():
-    return {"mains": _load("mains"), "manholes": _load("manholes")}
+    return {"mains": _load("mains"), "manholes": _load("manholes"),
+            "invert_rows": _load("invert_rows")}
 
 
 @pytest.fixture(scope="module")
@@ -94,13 +95,18 @@ def test_combined_mains_join_the_storm_system(result):
     assert result.diagnostics["n_combined_included"] == hist["Combined"]
 
 
-def test_rim_anchored_vertical_is_not_flat(result):
-    """Zero published inverts, yet the network must carry a real terrain gradient
-    (rim - default depth), not the all-equal fallback of an invert-less build."""
+def test_as_built_inverts_dominate_the_vertical(result, storm_inputs):
+    """Vertical tiers (ADR 0020 amended): the Infrastructure_Sewer as-built inverts must
+    carry most pipe ends; the rim - default depth fallback stays for the rest (the fixture
+    contains real 0/0 sentinel rows, so the fallback tier must actually fire)."""
+    d = result.diagnostics
+    n_ends = 2 * d["n_mains_in"]
+    assert d["n_real_invert_ends"] > 0.85 * n_ends
+    assert d["n_rim_anchored_ends"] > 0                 # zero-sentinel rows fell through
+    assert d["n_invert_rows_in"] > 0.9 * d["n_mains_in"]
+    assert "as-built" in d["vertical_basis"] and "rim minus" in d["vertical_basis"]
     inv = [j.invert_m for j in result.network.junctions]
     assert max(inv) - min(inv) > 5.0                    # downtown slopes to False Creek
-    assert result.diagnostics["n_rim_anchored_ends"] > 0
-    assert "rim minus" in result.diagnostics["vertical_basis"]
 
 
 def test_real_diameters_survive(result):
@@ -112,9 +118,11 @@ def test_real_diameters_survive(result):
 
 def test_sanitary_fixture_is_sanitary_only():
     san = build_vancouver_network(
-        {"mains": _load("sanitary_mains"), "manholes": _load("sanitary_manholes")})
+        {"mains": _load("sanitary_mains"), "manholes": _load("sanitary_manholes"),
+         "invert_rows": _load("sanitary_invert_rows")})
     hist = san.diagnostics["effluent_histogram"]
     assert set(hist) == {"Sanitary"}
+    assert san.diagnostics["n_real_invert_ends"] > 0    # the join works for the tracer too
 
 
 def test_diagnostics_counts_match_network(result):

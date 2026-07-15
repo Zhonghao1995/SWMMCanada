@@ -31,6 +31,12 @@ class FakeClient:
                 "properties": {"facilityid": "MH1", "rimelev": 30.0},
                 "geometry": {"type": "Point", "coordinates": [-123.12, 49.276]},
             }]}
+        if "Infrastructure_Sewer" in url:
+            return {"features": [{
+                "attributes": {"COV_SOURCE_KEY": "P1", "UPSTREAM_INVERT": 27.5,
+                               "DWNSTREAM_INVERT": 27.1, "UPSTRM_INVERT_ESTIMATED": "No",
+                               "DNSTRM_INVERT_ESTIMATED": "No"},
+            }]}
         return {"features": []}
 
 
@@ -59,6 +65,23 @@ def test_manholes_fetched_by_quoted_facilityid():
     mh_where = _params_for(client.calls, "swManhole")[0]["where"]
     assert "facilityid IN ('MH1','MH2')" == mh_where
     assert len(out["manholes"]) == 1
+
+
+def test_storm_pulls_asbuilt_inverts_from_layers_36_and_37():
+    client = FakeClient()
+    out = fetch_vancouver_storm(BBOX, client=client)
+    urls = [u for u, _ in client.calls if "Infrastructure_Sewer" in u]
+    assert any("/36/query" in u for u in urls) and any("/37/query" in u for u in urls)
+    params = _params_for(client.calls, "Infrastructure_Sewer")[0]
+    assert "COV_SOURCE_KEY" in params["outFields"] and params["f"] == "json"
+    assert len(out["invert_rows"]) == 2                 # one row per layer from the fake
+
+
+def test_sanitary_pulls_asbuilt_inverts_from_layer_35_only():
+    client = FakeClient()
+    fetch_vancouver_sanitary(BBOX, client=client)
+    urls = [u for u, _ in client.calls if "Infrastructure_Sewer" in u]
+    assert urls and all("/35/query" in u for u in urls)
 
 
 def test_opendata_in_bbox_is_lat_lon_ordered():
