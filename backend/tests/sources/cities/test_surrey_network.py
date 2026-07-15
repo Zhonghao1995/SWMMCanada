@@ -251,3 +251,23 @@ def test_sanitary_skeleton_assembles_from_fixture():
     assert len(net.outfalls) >= 1                           # per-component sinks exist
     node_names = {j.name for j in net.junctions} | {o.name for o in net.outfalls}
     assert all(c.from_node in node_names and c.to_node in node_names for c in net.conduits)
+
+
+# --- explicit topology (audit 2026-07-14: Public/Drainage UP_NODE/DOWN_NODE) --------
+
+def test_explicit_topology_from_pub_fixtures():
+    """The Public/Drainage fixtures must assemble on the explicit path: junctions named by
+    NODE_NO, dangling out-of-bbox refs fall back to polyline vertices, rims ride the join."""
+    res = build_surrey_network({"pipes": _load("pub_mains"), "nodes": _load("pub_nodes")})
+    d = res.diagnostics
+    assert d["topology"] == "explicit_node_ids"
+    assert d["n_nodes_in"] > 0 and d["n_ground_points"] > 0
+    node_ids = {str((f.get("properties") or {}).get("NODE_NO")) for f in _load("pub_nodes")}
+    named = [j.name for j in res.network.junctions if j.name in node_ids]
+    assert len(named) > len(res.network.junctions) * 0.5
+    assert d["n_inverts_gapfilled"] == 0            # pipe elevations are ~99% real
+
+
+def test_legacy_inputs_keep_geometry_inferred_path():
+    res = build_surrey_network({"pipes": _load("storm_pipes"), "outfalls": _load("outfalls")})
+    assert res.diagnostics["topology"] == "geometry_inferred"
