@@ -256,3 +256,18 @@ def test_sanitary_skeleton_assembles_from_fixture():
     node_names = {j.name for j in net.junctions} | {o.name for o in net.outfalls}
     assert all(c.from_node in node_names and c.to_node in node_names for c in net.conduits)
     assert all(f["properties"]["WaterType"] == "SEW" for f in _load("sanitary_mains"))
+
+
+def test_sanitary_nodes_resolve_via_the_smh_join():
+    """Audit 2026-07-14: the sewer AssetID join WORKS (the old 'different id scheme' note
+    was wrong). With the recorded sewer node fixtures, sanitary junctions must be named by
+    SMH/SFG AssetIDs and carry real manhole Elevations instead of the all-fallback build."""
+    res = build_victoria_network(
+        _load("sanitary_mains"), _load("sanitary_manholes"),
+        _load("sanitary_fittings"), _load("sanitary_outfalls"))
+    net = res.network
+    named = [j for j in net.junctions if j.name.startswith(("SMH", "SFG"))]
+    assert len(named) > len(net.junctions) * 0.8
+    # real rims rode the join -> most max depths differ from the 2.0 m default
+    non_default = [j for j in named if j.max_depth_m != 2.0]
+    assert len(non_default) > len(named) * 0.5

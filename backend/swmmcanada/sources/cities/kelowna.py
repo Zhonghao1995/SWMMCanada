@@ -48,13 +48,24 @@ def _fetch(url_root, layer, bbox, client, where="1=1") -> list:
 
 
 def fetch_kelowna_storm(bbox, *, client=None) -> dict:
+    """Pipes + outfalls, plus Building Outlines whose ``Ground_Z`` (97.6% populated, audit
+    2026-07-14) is the only public ground-elevation source in Kelowna — node rims are
+    genuinely unpublished (locked in internal Cityworks), so nearby building ground
+    elevations serve as a rim PROXY for node max depths (ADR 0021 §7; mitigation, not
+    measurement — inverts are untouched)."""
     if hasattr(bbox, "bbox"):
         bbox = bbox.bbox
     client = client or KelownaClient()
-    return {
+    result = {
         "pipes": _fetch(ARC, STORM_PIPES, bbox, client),
         "outfalls": _fetch(ARC, STORM_OUTFALLS, bbox, client),
+        "buildings": [],
     }
+    try:    # the rim PROXY is additive and must never block the network fetch
+        result["buildings"] = _fetch(PLANNING, BUILDINGS, bbox, client)
+    except Exception:  # noqa: BLE001 — slow/unreachable PLANNING -> default max depths
+        pass
+    return result
 
 
 def fetch_kelowna_sanitary(bbox, *, client=None) -> dict:
@@ -107,9 +118,48 @@ _line_ends = base.line_ends
 _KELOWNA_ASSEMBLE = base.AssembleConfig(snap_decimals=5)
 
 
+# Kelowna terrain runs ~340-650 m AMSL; a Ground_Z outside the band is a placeholder.
+_GROUND_BAND = (300.0, 700.0)
+_GROUND_TOL_M = 60.0     # a building within this distance of a node is a usable rim proxy
+
+
+def _building_ground_points(buildings, node_coords):
+    """Nearest building ``Ground_Z`` within ``_GROUND_TOL_M`` of each node coordinate ->
+    ``[(xy, elev)]`` for the assembler's max-depth logic. O(nodes x buildings) is fine at
+    AOI scale; the proxy never touches inverts (ADR 0021 §7)."""
+    import math
+    samples = []
+    for f in buildings or []:
+        gz = base.num((f.get("properties") or {}).get("Ground_Z"), zero_missing=True)
+        if gz is None or not (_GROUND_BAND[0] <= gz <= _GROUND_BAND[1]):
+            continue
+        g = f.get("geometry") or {}
+        ring = (g.get("coordinates") or [[]])[0]
+        if g.get("type") == "MultiPolygon":
+            ring = (g.get("coordinates") or [[[]]])[0][0]
+        if not ring:
+            continue
+        cx = sum(x for x, *_ in ring) / len(ring)
+        cy = sum(y for _, y, *_ in ring) / len(ring)
+        samples.append((cx, cy, gz))
+    if not samples:
+        return []
+    out = []
+    for (nx, ny) in node_coords:
+        best, best_d = None, None
+        for (cx, cy, gz) in samples:
+            d = math.hypot((cx - nx) * 71500.0, (cy - ny) * 111320.0)
+            if best_d is None or d < best_d:
+                best, best_d = gz, d
+        if best is not None and best_d <= _GROUND_TOL_M:
+            out.append(((nx, ny), best))
+    return out
+
+
 def build_kelowna_network(storm, *, config: base.AssembleConfig = _KELOWNA_ASSEMBLE) -> base.NetworkResult:
     pipes_f = storm["pipes"] if isinstance(storm, dict) else list(storm)
     outfalls_f = storm.get("outfalls", []) if isinstance(storm, dict) else []
+    buildings_f = storm.get("buildings", []) if isinstance(storm, dict) else []
 
     pipes, seen, n_no_geom = [], {}, 0
     for f in pipes_f:
@@ -137,8 +187,15 @@ def build_kelowna_network(storm, *, config: base.AssembleConfig = _KELOWNA_ASSEM
         if c and len(c) >= 2:
             outfall_points.append((c[0], c[1]))
 
-    # Manholes (layer 7) carry no rim/invert, so we pass no ground_points: base back-fills
-    # every node invert from the connected pipe INVERT_IN_Z/INVERT_OUT_Z ends.
-    result = base.assemble_network(pipes, outfall_points=outfall_points, config=config)
-    diag = {**result.diagnostics, "city": "kelowna", "n_pipes_in": len(pipes_f), "n_no_geom": n_no_geom}
+    # Manholes (layer 7) carry no rim/invert (genuinely unpublished — locked in internal
+    # Cityworks, audit 2026-07-14). Building Ground_Z within 60 m serves as a rim PROXY so
+    # node max depths beat the flat 2.0 m default; inverts stay pipe-end-derived.
+    node_coords = {pt for p_ in pipes for pt in (p_.end_a, p_.end_b)}
+    ground_points = _building_ground_points(buildings_f, node_coords)
+    result = base.assemble_network(pipes, outfall_points=outfall_points,
+                                   ground_points=ground_points, config=config)
+    diag = {**result.diagnostics, "city": "kelowna", "n_pipes_in": len(pipes_f),
+            "n_no_geom": n_no_geom, "n_ground_proxy_points": len(ground_points),
+            "ground_basis": "building Ground_Z proxy (<=60 m), ADR 0021 §7" if ground_points
+                            else "none (default max depths)"}
     return base.NetworkResult(network=result.network, diagnostics=diag)

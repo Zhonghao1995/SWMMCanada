@@ -266,3 +266,24 @@ def test_sanitary_skeleton_assembles_from_fixture():
     node_names = {j.name for j in net.junctions} | {o.name for o in net.outfalls}
     assert all(c.from_node in node_names and c.to_node in node_names for c in net.conduits)
     assert all(f["properties"]["STATUS"] == "A" for f in _load("sanitary_mains.geojson"))
+
+
+# --- building Ground_Z rim proxy (ADR 0021 §7; audit 2026-07-14) ---------------------
+
+def test_building_ground_z_proxies_node_max_depths():
+    """Node rims are genuinely unpublished (internal Cityworks); nearby building Ground_Z
+    (<=60 m) must lift max depths off the flat 2.0 m default, inverts untouched."""
+    import json
+    load = lambda n: json.load(open(FIX / f"{n}.geojson"))["features"]
+    with_b = build_kelowna_network({"pipes": load("storm_pipes"), "outfalls": load("outfalls"),
+                                    "buildings": load("buildings")})
+    without = build_kelowna_network({"pipes": load("storm_pipes"), "outfalls": load("outfalls")})
+    assert with_b.diagnostics["n_ground_proxy_points"] > 0
+    assert "Ground_Z proxy" in with_b.diagnostics["ground_basis"]
+    assert without.diagnostics["n_ground_proxy_points"] == 0
+    nd = sum(1 for j in with_b.network.junctions if j.max_depth_m != 2.0)
+    assert nd > len(with_b.network.junctions) * 0.5
+    # inverts identical with/without the proxy — it must never touch the vertical profile
+    inv_a = sorted(j.invert_m for j in with_b.network.junctions)
+    inv_b = sorted(j.invert_m for j in without.network.junctions)
+    assert inv_a == inv_b

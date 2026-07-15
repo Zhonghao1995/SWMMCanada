@@ -29,6 +29,11 @@ LAND_PARCELS, LAND_BUILDINGS = 5, 1            # Parcels (Folio based), Building
 SEWER_BASE = "https://maps.victoria.ca/server/rest/services/OpenData/OpenData_Sewer/MapServer"
 SEWER_MAINS = 4                                # Sewer Gravity Mains — same schema as storm mains
 _PREFIX_LAYER = {"DMH": MANHOLES, "DFG": FITTINGS, "DOF": OUTFALLS}
+# Sewer node layers mirror the storm prefix scheme on OpenData_Sewer (audit 2026-07-14:
+# the join WORKS — e.g. SMH001837 resolves with Elevation 13.452; the old "different id
+# scheme" claim was wrong): SMH -> Sewer Manholes(11), SFG -> Fittings(16), SOF -> Outfalls(8).
+SEWER_MANHOLES, SEWER_FITTINGS, SEWER_OUTFALLS = 11, 16, 8
+_SEWER_PREFIX_LAYER = {"SMH": SEWER_MANHOLES, "SFG": SEWER_FITTINGS, "SOF": SEWER_OUTFALLS}
 _PAGE_SIZE, _ID_CHUNK = 1000, 80
 
 # Separated sanitary gravity mains only: WaterType SEW (not the two CWW combined relics) and
@@ -66,8 +71,8 @@ def fetch_victoria_storm(bbox, *, client=None) -> dict:
     return result
 
 
-def _node_ids_by_layer(mains) -> dict:
-    by_layer = {MANHOLES: [], FITTINGS: [], OUTFALLS: []}
+def _node_ids_by_layer(mains, prefix_layer=_PREFIX_LAYER) -> dict:
+    by_layer = {layer: [] for layer in prefix_layer.values()}
     seen = set()
     for feat in mains:
         props = feat.get("properties") or {}
@@ -75,7 +80,7 @@ def _node_ids_by_layer(mains) -> dict:
             node_id = props.get(key)
             if not node_id:
                 continue
-            layer = _PREFIX_LAYER.get(node_id[:3])
+            layer = prefix_layer.get(node_id[:3])
             if layer is None or node_id in seen:
                 continue
             seen.add(node_id)
@@ -83,10 +88,10 @@ def _node_ids_by_layer(mains) -> dict:
     return by_layer
 
 
-def _fetch_nodes_by_assetid(layer: int, asset_ids, client) -> list:
+def _fetch_nodes_by_assetid(layer: int, asset_ids, client, base_url: str = BASE) -> list:
     if not asset_ids:
         return []
-    url = f"{BASE}/{layer}/query"
+    url = f"{base_url}/{layer}/query"
     features, seen = [], set()
     for start in range(0, len(asset_ids), _ID_CHUNK):
         in_list = ",".join(f"'{a}'" for a in asset_ids[start: start + _ID_CHUNK])
@@ -103,16 +108,21 @@ def _fetch_nodes_by_assetid(layer: int, asset_ids, client) -> list:
 
 def fetch_victoria_sanitary(bbox, *, client=None) -> dict:
     """Separated sanitary (Sewer Gravity Mains) lines intersecting ``bbox`` — the second
-    tagged system (ADR 0011). Same publication schema as the storm mains, so
-    :func:`build_victoria_network` assembles it unchanged. The sewer node layers use a
-    different id scheme than the storm DMH/DFG/DOF join, so no node layers are fetched:
-    every endpoint takes the documented polyline-vertex fallback, and per-component sinks
-    stand in for the treatment-bound trunk exits."""
+    tagged system (ADR 0011). Same publication schema as the storm mains AND the same
+    AssetID node join, just SMH/SFG/SOF-prefixed on OpenData_Sewer (audit 2026-07-14 —
+    the old claim that the sewer id scheme prevents the join was wrong). Real node
+    coordinates + manhole Elevations now ride the sanitary tracer too."""
     if hasattr(bbox, "bbox"):
         bbox = bbox.bbox
     client = client or VicMapClient()
     mains = _fetch_layer_bbox(SEWER_BASE, SEWER_MAINS, bbox, client, where=_SANITARY_WHERE)
-    return {"mains": mains, "manholes": [], "fittings": [], "outfalls": []}
+    by_layer = _node_ids_by_layer(mains, prefix_layer=_SEWER_PREFIX_LAYER)
+    result = {"mains": mains, "manholes": [], "fittings": [], "outfalls": []}
+    for layer, key in {SEWER_MANHOLES: "manholes", SEWER_FITTINGS: "fittings",
+                       SEWER_OUTFALLS: "outfalls"}.items():
+        result[key] = _fetch_nodes_by_assetid(layer, by_layer.get(layer, []), client,
+                                              base_url=SEWER_BASE)
+    return result
 
 
 def fetch_victoria_land(bbox, *, client=None) -> dict:

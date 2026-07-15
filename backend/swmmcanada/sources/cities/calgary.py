@@ -4,8 +4,9 @@ Calgary publishes inverts (UP_INVERT/DN_INVERT, m AMSL), HEIGHT/WIDTH (mm; equal
 diameter), MATERIAL, LENGTH and SLOPE on its STORM_PIPE layer, but **no node ids** — so, like
 Ottawa, topology is inferred from pipe polyline endpoints by ``cities.base`` (coordinate
 snapping at ~1 m). Outfalls come from the Inlet/Outfall layer: a feature is an outfall when its
-``OUT_INLET`` names a receiving water body (e.g. "BOW RIVER") — i.e. ``OUT_INLET`` is non-null —
-or its ``S_FUNCTION`` contains "OUTFALL"; inlets have a null ``OUT_INLET``.
+``OUT_INLET`` names a receiving water body (e.g. "BOW RIVER") — non-null and not the literal
+'UNKNOWN' (OPEN ENDED STUBs, excluded since the 2026-07-14 audit) — or its ``S_FUNCTION``
+contains "OUTFALL"; inlets have a null ``OUT_INLET``.
 
 Unlike Ottawa, Calgary DOES publish polygon parcels and buildings, so ``fetch_calgary_land``
 returns them for the ADR 0005 parcel/building subcatchment method:
@@ -53,9 +54,12 @@ def _fetch(service, bbox, client, where="1=1") -> list:
                             where=where, page_size=_PAGE, transform=_as_geojson)
 
 
-# A feature is an outfall when OUT_INLET names a receiving water body (non-null) OR S_FUNCTION
-# says OUTFALL. Inlets carry a null OUT_INLET.
-_OUTFALL_WHERE = "OUT_INLET IS NOT NULL"
+# A feature is an outfall when OUT_INLET names a receiving water body OR S_FUNCTION says
+# OUTFALL. Inlets carry a null OUT_INLET — and OPEN ENDED STUBs carry the literal string
+# 'UNKNOWN' (audit 2026-07-14: half a downtown bbox's "outfalls" were such stubs), which is
+# a dead pipe end, not a receiving water body; the base assembler's per-component sinks
+# handle any component that loses its only stub this way.
+_OUTFALL_WHERE = "OUT_INLET IS NOT NULL AND OUT_INLET <> 'UNKNOWN'"
 
 
 def fetch_calgary_storm(bbox, *, client=None) -> dict:

@@ -79,7 +79,7 @@ class FakeClient:
 
 def test_storm_returns_pipes_and_outfalls_as_features():
     res = fetch_kelowna_storm(BBOX, client=FakeClient())
-    assert set(res) == {"pipes", "outfalls"}
+    assert set(res) == {"pipes", "outfalls", "buildings"}   # buildings = rim proxy (ADR 0021)
     assert res["pipes"] and res["outfalls"]
     for f in res["pipes"]:
         assert f["type"] == "Feature"
@@ -115,7 +115,10 @@ def test_storm_hits_pipe_and_outfall_layers_on_storm_service():
     fetch_kelowna_storm(BBOX, client=client)
     layers = {layer for (url, layer, p) in client.calls}
     assert STORM_PIPES in layers and STORM_OUTFALLS in layers
-    assert all("OpenData_Utilities_Storm" in url for (url, layer, p) in client.calls)
+    storm_calls = [u for (u, layer, p) in client.calls if "Planning" not in u]
+    assert all("OpenData_Utilities_Storm" in u for u in storm_calls)
+    # the rim-proxy buildings pull hits the Planning service (additive, may legally fail)
+    assert any("Planning" in u for (u, layer, p) in client.calls)
 
 
 def test_accepts_object_with_bbox_attribute():

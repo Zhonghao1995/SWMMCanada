@@ -214,3 +214,11 @@ def test_land_accepts_object_with_bbox_attribute():
 
     res = fetch_calgary_land(AOI(), client=FakeClient())
     assert res["catchbasins"]
+
+
+def test_outfall_where_excludes_unknown_stubs():
+    """Audit 2026-07-14: OPEN ENDED STUBs carry OUT_INLET='UNKNOWN' and are dead pipe ends,
+    not receiving waters — the where-clause must exclude them."""
+    from swmmcanada.sources.cities.calgary import _OUTFALL_WHERE
+    assert "OUT_INLET IS NOT NULL" in _OUTFALL_WHERE
+    assert "UNKNOWN" in _OUTFALL_WHERE
