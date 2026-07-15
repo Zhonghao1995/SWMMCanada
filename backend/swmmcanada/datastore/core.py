@@ -155,6 +155,11 @@ def _write_network_gpkg(
             "diameter_m": [float(c.diameter_m) for c in network.conduits],
             "roughness_n": [float(c.roughness_n) for c in network.conduits],
             "system": [c.system for c in network.conduits],
+            "inlet_offset_m": [float(c.inlet_offset_m) for c in network.conduits],
+            "outlet_offset_m": [float(c.outlet_offset_m) for c in network.conduits],
+            "shape": [c.shape for c in network.conduits],
+            "height_m": [(float(c.height_m) if c.height_m else None) for c in network.conduits],
+            "width_m": [(float(c.width_m) if c.width_m else None) for c in network.conduits],
         },
         geometry=conduit_geoms,
         crs=schema.CRS,
@@ -284,6 +289,10 @@ def _read_network(gpkg: Path) -> NetworkIn:
         for geom, r in zip(odf.geometry, odf.to_dict("records"))
     ]
 
+    def _opt(r, key):
+        v = r.get(key)
+        return float(v) if v is not None and v == v else None   # NaN-safe
+
     cdf = gpd.read_file(gpkg, layer=schema.LAYER_CONDUITS)
     conduits = [
         ConduitIn(
@@ -294,6 +303,12 @@ def _read_network(gpkg: Path) -> NetworkIn:
             diameter_m=float(r["diameter_m"]),
             roughness_n=float(r["roughness_n"]),
             system=str(r.get("system") or "storm_minor"),
+            # #130 columns; pre-#130 packages read back with today's defaults
+            inlet_offset_m=_opt(r, "inlet_offset_m") or 0.0,
+            outlet_offset_m=_opt(r, "outlet_offset_m") or 0.0,
+            shape=str(r.get("shape") or "CIRCULAR"),
+            height_m=_opt(r, "height_m"),
+            width_m=_opt(r, "width_m"),
         )
         for r in cdf.to_dict("records")
     ]

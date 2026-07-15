@@ -263,6 +263,9 @@ def build_kitchener_network(
             diameter_m=diameter_m,
             roughness_n=material_roughness(p.get("MATERIAL"), config),
             length_m=_num(p.get("LENGTH")),
+            shape=shape,                                   # #130: real sections survive
+            height_m=(height_mm / 1000.0) if height_mm and height_mm > 0 else None,
+            width_m=(width_mm / 1000.0) if width_mm and width_mm > 0 else None,
         ))
 
     result = base.assemble_network(

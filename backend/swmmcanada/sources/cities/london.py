@@ -294,6 +294,7 @@ def build_london_network(
         n_dangling += dangling
         n_geom_fixed += gf
         diameter_mm = _num(p.get("Diameter"))
+        h_mm, w_mm = _num(p.get("Height")), _num(p.get("Width"))
         pipes.append(base.RawPipe(
             name=_sanitize(p.get("GIS_FeatureKey") or p.get("OBJECTID")),
             end_a=up_xy, end_b=dn_xy,
@@ -301,6 +302,9 @@ def build_london_network(
             diameter_m=(diameter_mm / 1000.0) if diameter_mm and diameter_mm > 0 else None,
             roughness_n=material_roughness(p.get("Material"), config),
             length_m=_num(p.get("Length")),
+            shape=p.get("PipeShape"),                      # #130: real sections survive
+            height_m=(h_mm / 1000.0) if h_mm and h_mm > 0 else None,
+            width_m=(w_mm / 1000.0) if w_mm and w_mm > 0 else None,
         ))
 
     result = base.assemble_network(
