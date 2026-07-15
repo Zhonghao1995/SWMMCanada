@@ -42,6 +42,7 @@ from swmmcanada.build.models import (
     RainfallSeries,
     SubcatchmentIn,
     TemperatureSeries,
+    TideSeries,
 )
 
 # Snowmelt defaults (issue #55; ASSUMPTIONS.md documents these with sources). Melt
@@ -102,6 +103,7 @@ def assemble_inp(
     config: BuildConfig,
     evaporation: Optional[EvaporationSeries] = None,
     temperature: Optional[TemperatureSeries] = None,
+    tide: Optional["TideSeries"] = None,
 ) -> SwmmInput:
     inp = SwmmInput()
     with_snow = temperature is not None and bool(temperature.timestamps)
@@ -133,7 +135,14 @@ def assemble_inp(
 
     outfalls = Outfall.create_section()
     for o in network.outfalls:
-        outfalls.add_obj(Outfall(o.name, elevation=o.invert_m, kind=o.kind))
+        # #130: a TIMESERIES stage boundary needs the tide series; without one the outfall
+        # honestly falls back to FREE instead of emitting a dangling reference.
+        if o.kind == "TIMESERIES" and tide is not None:
+            outfalls.add_obj(Outfall(o.name, elevation=o.invert_m, kind="TIMESERIES",
+                                     data=tide.ts_name))
+        else:
+            kind = "FREE" if o.kind == "TIMESERIES" else o.kind
+            outfalls.add_obj(Outfall(o.name, elevation=o.invert_m, kind=kind))
     inp[SEC.OUTFALLS] = outfalls
 
     conduits = Conduit.create_section()
@@ -207,6 +216,8 @@ def assemble_inp(
 
     series = Timeseries.create_section()
     series.add_obj(TimeseriesData(rain.ts_name, list(zip(rain.timestamps, rain.precip_mm))))
+    if tide is not None and tide.timestamps:
+        series.add_obj(TimeseriesData(tide.ts_name, list(zip(tide.timestamps, tide.level_m))))
 
     # Evaporation forcing (optional): a daily PET timeseries (mm/day) referenced by
     # [EVAPORATION] TIMESERIES. Absent → SWMM assumes evaporation = 0.
@@ -315,13 +326,14 @@ def build_model(
     config: BuildConfig,
     evaporation: Optional[EvaporationSeries] = None,
     temperature: Optional[TemperatureSeries] = None,
+    tide: Optional["TideSeries"] = None,
     observed=None,
     aoi=None,
 ) -> BuildResult:
     out_dir = Path(config.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    inp = assemble_inp(network, subcatchments, rain, config, evaporation=evaporation,
+    inp = assemble_inp(network, subcatchments, rain, config, evaporation=evaporation, tide=tide,
                        temperature=temperature)
     inp_path = out_dir / "model.inp"
     inp.write_file(str(inp_path))

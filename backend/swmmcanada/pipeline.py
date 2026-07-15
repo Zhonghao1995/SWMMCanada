@@ -268,6 +268,40 @@ def _finish_build(
             evaporation = None
             temperature = None
 
+    # Coastal outfall boundary (#130 gap 3): predicted tides from the nearest CHS station
+    # (<=15 km) become a TIMESERIES stage on the outfalls the water can physically reach
+    # (invert <= max predicted level + 0.5 m). Inland AOIs no-op; any CHS failure degrades
+    # to today's FREE outfalls with an honest note — the boundary is additive, never
+    # load-bearing.
+    tide = None
+    try:
+        from dataclasses import replace as _dc_replace
+
+        from swmmcanada.build.models import NetworkIn as _NetworkIn
+        from swmmcanada.sources.tides_chs import (
+            fetch_tide_predictions, nearest_tide_station, tidal_outfall_names)
+
+        _st = nearest_tide_station((aoi.bbox[1] + aoi.bbox[3]) / 2,
+                                   (aoi.bbox[0] + aoi.bbox[2]) / 2)
+        if _st is not None:
+            _t = fetch_tide_predictions(_st, start, end)
+            _names = set(tidal_outfall_names(network.outfalls, max(_t.level_m)))
+            if _names:
+                network = _NetworkIn(
+                    junctions=network.junctions,
+                    outfalls=[_dc_replace(o, kind="TIMESERIES") if o.name in _names else o
+                              for o in network.outfalls],
+                    conduits=network.conduits)
+                tide = _t
+                forcing = {**(forcing or {}), "tide_boundary": {
+                    "station": _st.name, "n_tidal_outfalls": len(_names),
+                    "level_range_m": [round(min(_t.level_m), 2), round(max(_t.level_m), 2)],
+                    "source": "CHS IWLS predicted water levels (wlp)"}}
+    except Exception as _exc:  # noqa: BLE001 — degrade to FREE, never block the build
+        forcing = {**(forcing or {}),
+                   "tide_boundary_note": f"CHS tide boundary unavailable ({type(_exc).__name__}); "
+                                         "outfalls stay FREE"}
+
     _r("VALIDATING", 85)
     _validate_or_raise(network, subcatchments, aoi, method, ws, delineation=sub_diag,
                        forcing=forcing or None, water=water, served=served)
@@ -276,7 +310,7 @@ def _finish_build(
     # Datastore is the PRIMARY build path (ADR 0007): write it, then build the .inp from it.
     write_datastore(
         ws / result_package.DATASTORE_DIR, network=network, subcatchments=subcatchments, rain=rain,
-        config=config, evaporation=evaporation, temperature=temperature,
+        config=config, evaporation=evaporation, temperature=temperature, tide=tide,
         provenance={
             "aoi_bbox": list(aoi.bbox), "crs": "EPSG:4326",
             "start": start.isoformat(), "end": end.isoformat(),
