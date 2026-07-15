@@ -56,3 +56,52 @@ def test_datastore_roundtrips_offsets_and_shapes(tmp_path):
     assert by["C_BOX"].shape == "RECT_CLOSED"
     assert by["C_BOX"].height_m == 1.2 and by["C_BOX"].width_m == 2.4
     assert by["C_DROP"].shape == "CIRCULAR" and by["C_DROP"].height_m is None
+
+
+# --- #130 gap 3: tide stage boundary --------------------------------------------------
+
+def _tide():
+    from swmmcanada.build.models import TideSeries
+    return TideSeries(timestamps=[datetime(2022, 6, 1, 0), datetime(2022, 6, 1, 1)],
+                      level_m=[2.1, 2.4], station_name="Victoria Harbour")
+
+
+def test_tidal_outfall_emits_timeseries_boundary(tmp_path):
+    from dataclasses import replace
+    net = NetworkIn(junctions=NET.junctions,
+                    outfalls=[replace(NET.outfalls[0], kind="TIMESERIES")],
+                    conduits=NET.conduits)
+    res = build_model(network=net, subcatchments=[SUB], rain=RAIN, tide=_tide(),
+                      config=BuildConfig(out_dir=tmp_path, start=date(2022, 6, 1),
+                                         end=date(2022, 6, 2)))
+    inp = read_inp_file(str(res.inp_path))
+    of = inp.OUTFALLS["OF1"]
+    assert str(of.kind) == "TIMESERIES" and str(of.data) == "tide"
+    assert "tide" in inp.TIMESERIES
+
+
+def test_timeseries_kind_without_tide_falls_back_to_free(tmp_path):
+    from dataclasses import replace
+    net = NetworkIn(junctions=NET.junctions,
+                    outfalls=[replace(NET.outfalls[0], kind="TIMESERIES")],
+                    conduits=NET.conduits)
+    res = build_model(network=net, subcatchments=[SUB], rain=RAIN,
+                      config=BuildConfig(out_dir=tmp_path, start=date(2022, 6, 1),
+                                         end=date(2022, 6, 2)))
+    inp = read_inp_file(str(res.inp_path))
+    assert str(inp.OUTFALLS["OF1"].kind) == "FREE"      # never a dangling reference
+
+
+def test_datastore_roundtrips_tide(tmp_path):
+    from swmmcanada.datastore import build_from_datastore, read_datastore, write_datastore
+
+    ws = tmp_path / "ds"
+    write_datastore(ws, network=NET, subcatchments=[SUB], rain=RAIN, tide=_tide(),
+                    config=BuildConfig(out_dir=tmp_path, start=date(2022, 6, 1),
+                                       end=date(2022, 6, 2)))
+    data = read_datastore(ws)
+    assert data.tide is not None
+    assert data.tide.level_m == [2.1, 2.4]
+    assert data.tide.station_name == "Victoria Harbour"
+    out = build_from_datastore(ws, tmp_path / "build")
+    assert out.inp_path.exists()                        # tide rides the primary build path

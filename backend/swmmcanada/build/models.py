@@ -109,3 +109,13 @@ class TemperatureSeries:
     """Daily mean air temperature — the climate-forcing record (and Hargreaves' input)."""
     timestamps: List[datetime]
     tmean_c: List[float]
+
+
+@dataclass(frozen=True)
+class TideSeries:
+    """Predicted water levels (CHS wlp) — the stage boundary for tide-affected outfalls
+    (#130): SWMM ``[OUTFALLS] ... TIMESERIES <ts_name>``."""
+    timestamps: List[datetime]
+    level_m: List[float]
+    ts_name: str = "tide"
+    station_name: str = ""

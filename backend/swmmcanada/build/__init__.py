@@ -15,6 +15,7 @@ from swmmcanada.build.models import (
     RainfallSeries,
     SubcatchmentIn,
     TemperatureSeries,
+    TideSeries,
 )
 
 __all__ = [
@@ -34,4 +35,5 @@ __all__ = [
     "RainfallSeries",
     "EvaporationSeries",
     "TemperatureSeries",
+    "TideSeries",
 ]

@@ -37,6 +37,7 @@ from swmmcanada.build import (
     RainfallSeries,
     SubcatchmentIn,
     TemperatureSeries,
+    TideSeries,
     build_model,
 )
 from swmmcanada.datastore import schema
@@ -53,6 +54,7 @@ class ModelReadyDatastore:
     provenance: dict
     evaporation: Optional[EvaporationSeries] = None
     temperature: Optional[TemperatureSeries] = None
+    tide: Optional[TideSeries] = None
 
 
 # --------------------------------------------------------------------------- #
@@ -68,6 +70,7 @@ def write_datastore(
     provenance: Optional[dict] = None,
     evaporation: Optional[EvaporationSeries] = None,
     temperature: Optional[TemperatureSeries] = None,
+    tide: Optional[TideSeries] = None,
 ) -> Path:
     """Write the three carrier files into ``out_dir`` and return ``out_dir``.
 
@@ -79,7 +82,7 @@ def write_datastore(
     out.mkdir(parents=True, exist_ok=True)
 
     _write_network_gpkg(out / schema.NETWORK_GPKG, network, subcatchments)
-    _write_forcing_nc(out / schema.FORCING_NC, rain, evaporation, temperature)
+    _write_forcing_nc(out / schema.FORCING_NC, rain, evaporation, temperature, tide)
     _write_datastore_json(
         out / schema.DATASTORE_JSON, config, _with_forcing_provenance(provenance or {}, evaporation, temperature)
     )
@@ -189,6 +192,7 @@ def _write_forcing_nc(
     rain: RainfallSeries,
     evaporation: Optional[EvaporationSeries] = None,
     temperature: Optional[TemperatureSeries] = None,
+    tide: Optional[TideSeries] = None,
 ) -> None:
     ds = xr.Dataset(
         {schema.PRECIP_VAR: (schema.TIME_DIM, [float(p) for p in rain.precip_mm])},
@@ -211,6 +215,14 @@ def _write_forcing_nc(
         ds[schema.EVAP_VAR].attrs["units"] = schema.EVAP_UNITS
         ds[schema.EVAP_VAR].attrs["long_name"] = "potential evaporation (Hargreaves)"
         ds[schema.EVAP_VAR].attrs["ts_name"] = evaporation.ts_name
+
+    if tide is not None and tide.timestamps:
+        ds[schema.TIDE_VAR] = (schema.TIDE_TIME_DIM, [float(v) for v in tide.level_m])
+        ds = ds.assign_coords({schema.TIDE_TIME_DIM: pd.to_datetime(list(tide.timestamps))})
+        ds[schema.TIDE_VAR].attrs["units"] = schema.TIDE_UNITS
+        ds[schema.TIDE_VAR].attrs["long_name"] = "predicted water level (CHS wlp)"
+        ds[schema.TIDE_VAR].attrs["ts_name"] = tide.ts_name
+        ds[schema.TIDE_VAR].attrs["station_name"] = tide.station_name
 
     ds.attrs["Conventions"] = schema.CF_CONVENTIONS
     ds.to_netcdf(path)
@@ -250,6 +262,7 @@ def read_datastore(path) -> ModelReadyDatastore:
     rain = _read_forcing(base / schema.FORCING_NC)
     evaporation = _read_evaporation(base / schema.FORCING_NC)
     temperature = _read_temperature(base / schema.FORCING_NC)
+    tide = _read_tide(base / schema.FORCING_NC)
     config, provenance = _read_datastore_json(base / schema.DATASTORE_JSON)
     return ModelReadyDatastore(
         network=network,
@@ -259,6 +272,7 @@ def read_datastore(path) -> ModelReadyDatastore:
         provenance=provenance,
         evaporation=evaporation,
         temperature=temperature,
+        tide=tide,
     )
 
 
@@ -391,6 +405,24 @@ def _read_evaporation(nc: Path) -> Optional[EvaporationSeries]:
     return EvaporationSeries(timestamps=timestamps, evap_mm_day=evap, ts_name=ts_name)
 
 
+def _read_tide(nc: Path) -> Optional[TideSeries]:
+    """Reconstruct the tide stage boundary if forcing.nc carries it, else None (#130)."""
+    ds = xr.open_dataset(nc)
+    try:
+        if schema.TIDE_VAR not in ds:
+            return None
+        times = pd.to_datetime(ds[schema.TIDE_TIME_DIM].values)
+        timestamps = [pd.Timestamp(t).to_pydatetime() for t in times]
+        levels = [float(v) for v in ds[schema.TIDE_VAR].values]
+        attrs = ds[schema.TIDE_VAR].attrs
+        ts_name = str(attrs.get("ts_name", "tide"))
+        station = str(attrs.get("station_name", ""))
+    finally:
+        ds.close()
+    return TideSeries(timestamps=timestamps, level_m=levels, ts_name=ts_name,
+                      station_name=station)
+
+
 def _read_temperature(nc: Path) -> Optional[TemperatureSeries]:
     """Reconstruct the temperature forcing if forcing.nc carries it, else None — build now
     consumes it (snowmelt, #55), so the ADR 0007 parity invariant applies to it too."""
@@ -429,6 +461,7 @@ def build_from_datastore(datastore_dir, out_dir) -> BuildResult:
         config=config,
         evaporation=ds.evaporation,
         temperature=ds.temperature,
+        tide=ds.tide,
     )
 
 

@@ -13,6 +13,7 @@ All data is free. Most is under the **Open Government Licence – Canada** (or a
 | NALCMS 2020 | CEC / NRCan | land cover → imperviousness | free use with attribution |
 | SoilGrids / HYSOGs | ISRIC | soil → hydrologic soil group → curve number | CC BY 4.0 |
 | HYDAT (hydrometric) | ECCC — Water Survey of Canada | observed streamflow (validation) | OGL – Canada |
+| Tide predictions (IWLS wlp) | DFO — Canadian Hydrographic Service | stage boundary for tide-affected outfalls | OGL – Canada |
 | OpenStreetMap | OSM contributors | street graph for synthesized networks | ODbL |
 | Storm Drain + Land | City of Victoria Open Data | real storm network, parcels, buildings | OGL – Victoria |
 | Wastewater Infrastructure | City of Ottawa Open Data | real storm + combined network, buildings | OGL – Ottawa |
