@@ -8,15 +8,17 @@ resolved from those node points, with a polyline-vertex fallback for the (~1.5%)
 handing canonical pipes to the shared ``cities.base`` assembler.
 
 Outfalls are detected by membership in the outfall layer (NOT an id prefix). Manhole ``LidElevation``
-gives node ground (for max-depth); outfall ``PipeInvert`` is usually 0/unpopulated, so outfall inverts
-are gap-filled from connected pipe ends by the assembler. The build target is circular-only, so each
+gives node ground (for max-depth); where the lid is missing but ``Depth`` is published (91%
+city-wide, audit 2026-07-14), the depth backfills the node's max depth. Outfall ``PipeInvert``
+is REAL data (76.8% populated city-wide — the old "usually 0/unpopulated" note was wrong) and
+overrides the assembler's pipe-end-derived outfall inverts where present. The build target is circular-only, so each
 pipe maps to the city's ``Diameter`` (mm) as an equivalent circular diameter; the original ``PipeShape``
 is kept in diagnostics. London land layers (catch basins / parcels / buildings) feed the ADR 0005
 subcatchment method (UTM 17N). See ``tests/fixtures/london/README.md``.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Dict, List, Optional, Tuple
 
 from swmmcanada.sources.cities import base
@@ -308,10 +310,47 @@ def build_london_network(
             default_diameter_m=config.default_diameter_m, default_roughness=config.default_roughness,
             outfall_link_len_m=config.outfall_link_len_m),
     )
+
+    # Audit 2026-07-14 upgrades, both patched by node label after assembly:
+    # (a) outfall PipeInvert is real data (76.8% city-wide) — the city's own number for the
+    #     structure beats the pipe-end derivation;
+    # (b) manhole Depth (91%) backfills max depth where LidElevation was missing (only nodes
+    #     that got the default, so a real rim-derived depth is never overwritten).
+    published_outfall_inv = {}
+    for f in outfall_feats:
+        p = f.get("properties") or {}
+        pi = _num(p.get("PipeInvert"))
+        if p.get("GIS_FeatureKey") and pi is not None and pi > 0:
+            published_outfall_inv[_sanitize(p.get("GIS_FeatureKey"))] = pi
+    depth_by_label = {}
+    for f in manhole_feats:
+        p = f.get("properties") or {}
+        d = _num(p.get("Depth"))
+        lid = _num(p.get("LidElevation"))
+        if p.get("GIS_FeatureKey") and d is not None and d > 0 and not (lid is not None and lid > 0):
+            depth_by_label[_sanitize(p.get("GIS_FeatureKey"))] = d
+
+    net = result.network
+    outfalls_patched = [
+        replace(o, invert_m=published_outfall_inv[o.name]) if o.name in published_outfall_inv else o
+        for o in net.outfalls]
+    n_outfall_inv = sum(1 for o in net.outfalls if o.name in published_outfall_inv)
+    junctions_patched = [
+        replace(j, max_depth_m=depth_by_label[j.name])
+        if (j.name in depth_by_label and j.max_depth_m == config.default_max_depth_m) else j
+        for j in net.junctions]
+    n_depth_backfilled = sum(
+        1 for j in net.junctions
+        if j.name in depth_by_label and j.max_depth_m == config.default_max_depth_m)
+    net = base.NetworkIn(junctions=junctions_patched, outfalls=outfalls_patched,
+                         conduits=net.conduits)
+
     diagnostics = {**result.diagnostics, "n_dangling_nodes": n_dangling,
                    "n_geom_fixed": n_geom_fixed, "shape_histogram": shape_hist,
-                   "inventory_type_histogram": inv_type_hist, "n_mains_in": len(mains)}
-    return LondonNetworkResult(network=result.network, diagnostics=diagnostics)
+                   "inventory_type_histogram": inv_type_hist, "n_mains_in": len(mains),
+                   "n_outfall_inverts_published": n_outfall_inv,
+                   "n_depth_backfilled_max_depths": n_depth_backfilled}
+    return LondonNetworkResult(network=net, diagnostics=diagnostics)
 
 
 # --- subcatchments (catch-basin + parcel/building, ADR 0005; UTM 17N) ------------

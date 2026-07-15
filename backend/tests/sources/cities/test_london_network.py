@@ -303,3 +303,40 @@ def test_sanitary_skeleton_assembles_from_fixture():
     assert all(f["properties"]["FlowType"] == "SAN" and
                f["properties"]["ConstructedStatus"] == "Built"
                for f in _load("sanitary_mains"))
+
+
+# --- audit 2026-07-14 upgrades: published outfall inverts + depth-backfilled max depths --
+
+def test_outfall_pipeinvert_overrides_derived_invert(result):
+    """4 of the 6 fixture outfalls publish PipeInvert>0; the network outfall inverts must
+    equal the city's own numbers, not the pipe-end derivation."""
+    from swmmcanada.sources.cities.london import _sanitize
+    published = {}
+    for f in _load("outfalls"):
+        p = f["properties"]
+        if p.get("GIS_FeatureKey") and p.get("PipeInvert") and p["PipeInvert"] > 0:
+            published[_sanitize(p["GIS_FeatureKey"])] = p["PipeInvert"]
+    assert published, "fixture should carry published outfall inverts"
+    net_of = {o.name: o.invert_m for o in result.network.outfalls}
+    hits = {k: v for k, v in published.items() if k in net_of}
+    assert hits, "at least one published outfall must resolve into the network"
+    for k, v in hits.items():
+        assert net_of[k] == v
+    assert result.diagnostics["n_outfall_inverts_published"] == len(hits)
+
+
+def test_manhole_depth_backfills_default_max_depth(result):
+    """12 fixture manholes have Depth>0 but no LidElevation; junctions among them that would
+    otherwise carry the 2.0 m default must take the published depth instead."""
+    assert result.diagnostics["n_depth_backfilled_max_depths"] >= 1
+    from swmmcanada.sources.cities.london import LondonNetworkConfig, _sanitize
+    default = LondonNetworkConfig().default_max_depth_m
+    depths = {}
+    for f in _load("manholes"):
+        p = f["properties"]
+        lid_ok = p.get("LidElevation") and p["LidElevation"] > 0
+        if p.get("GIS_FeatureKey") and p.get("Depth") and p["Depth"] > 0 and not lid_ok:
+            depths[_sanitize(p["GIS_FeatureKey"])] = p["Depth"]
+    patched = [j for j in result.network.junctions
+               if j.name in depths and j.max_depth_m == depths[j.name] != default]
+    assert patched, "expected at least one junction with a depth-backfilled max depth"
