@@ -1,12 +1,13 @@
-"""Street service corridor + sliver merging (ADR 0017) — the municipal worldview for
+"""Street frontage split + sliver merging (ADR 0017 / ADR 0022) — the municipal look for
 synthesis-mode subcatchments.
 
-Real municipal delineation starts from WHERE WATER ENTERS THE SYSTEM: streets collect
-(gutters → inlets), lots drain to the street they front, and land beyond a lot's depth is
-simply not served by the network. The corridor encodes that: street edges buffered by one
-lot depth each side; everything outside is honestly unserved. Inside the corridor, the
-ADR 0010 machinery (DEM basins behind the honesty gate, else junction Voronoi) still
-decides WHICH junction each piece drains to — terrain is demoted from landlord to referee.
+ADR 0022 (#118) reversed the CORRIDOR's exclusion semantics: the pipeline now passes the
+whole AOI as the mask, so every piece of land is a subcatchment — forests and deep lots
+participate with landcover-driven parameters (low imperviousness, high infiltration)
+instead of being deleted, exactly like rain physics wants. What survives from ADR 0017 is
+the LOOK: ``edge_split_cells`` still assigns ground to its nearest street segment with
+midpoint gutter divides (the rectangular hand-drawn municipal cells). The corridor
+functions below are retained for diagnostics and the city-path fallbacks.
 """
 from dataclasses import replace
 from typing import Dict, List, Tuple

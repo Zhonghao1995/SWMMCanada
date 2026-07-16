@@ -31,7 +31,7 @@ from swmmcanada.geo.crs import utm_crs_for
 from swmmcanada.network import synthesise_network
 from swmmcanada.network.delineate_dem import delineate_junction_subcatchments
 from swmmcanada.network.sizing import size_conduits
-from swmmcanada.network.service_area import MIN_CELL_HA, block_aware_service_area
+from swmmcanada.network.service_area import MIN_CELL_HA
 from swmmcanada.network.water import subtract_water, water_union
 from swmmcanada.preview import network_geojson
 from swmmcanada.validate import (
@@ -47,7 +47,7 @@ from swmmcanada.sources.soil_constant import ConstantHsgSoilSource
 from swmmcanada.sources.soil_hysogs import HysogsSoilSource
 from swmmcanada.sources.soil_soilgrids import SoilGridsSource
 from swmmcanada.sources.streets_osm import (
-    fetch_building_footprints, fetch_street_graph, sample_elevations,
+    fetch_street_graph, sample_elevations,
 )
 from swmmcanada.sources.cities import base
 from swmmcanada.sources.cities.registry import CitySpec, city_for_point, city_spec
@@ -383,25 +383,21 @@ def build_from_aoi(
 
     _r("NETWORK", 55)
     synth = synthesise_network(streets, aoi=aoi, water=water)
-    # Municipal worldview (ADR 0017): the street service corridor bounds what the network
-    # serves; inside it, ADR 0010's gate still picks DEM basins vs Voronoi as the referee.
-    buildings = fetch_building_footprints(tuple(aoi.bbox))   # evidence for block interiors
-    corridor = block_aware_service_area(streets, aoi, buildings=buildings)
+    # Full-coverage semantics (ADR 0022, #118): every piece of AOI land is a subcatchment —
+    # forests and yards participate with landcover-driven parameters (low imperviousness,
+    # high infiltration) instead of being deleted by the ADR 0017 corridor, whose exclusion
+    # biased runoff low in suburbs. The municipal LOOK stays: passing the whole AOI as the
+    # mask keeps the nearest-street-segment frontage split shaping the cells; open water is
+    # still carved out afterwards (ADR 0016 — lakes are receiving waters, not land).
     junction_xy = {j.name: (j.x, j.y) for j in synth.network.junctions}
     subcatchments, sub_diag = delineate_junction_subcatchments(
         junction_xy, aoi, dem_path=dem.path, streets=streets,
-        service_mask=corridor, min_cell_ha=MIN_CELL_HA)
+        service_mask=aoi.geometry, min_cell_ha=MIN_CELL_HA)
     subcatchments, water_diag = subtract_water(subcatchments, water, junction_xy, aoi)
     sub_diag = {**(sub_diag or {}), "water": water_diag}
-    if corridor is not None:  # the service promise, quantified (ADR 0017)
-        from shapely.ops import transform as _shpt
-        from swmmcanada.geo.crs import lonlat_projector as _llp, utm_crs_for as _utm
-        _to_m = _llp(_utm(aoi))
-        corr_ha = _shpt(_to_m, corridor).area / 10_000.0
-        sub_diag.setdefault("service", {}).update(
-            corridor_ha=round(corr_ha, 1),
-            unserved_frac=round(max(0.0, 1.0 - corr_ha / (aoi.area_km2 * 100.0)), 3),
-            lot_depth_m=50.0)
+    sub_diag.setdefault("service", {}).update(
+        semantics="full-coverage (ADR 0022): AOI minus open water; pervious land "
+                  "contributes via parameters, not exclusion")
 
     if derive:
         _r("SOIL", 62)
@@ -434,7 +430,7 @@ def build_from_aoi(
             "pipe_sizing": sizing_diag,
         },
         climate_client=climate_client, climate_buffer_deg=climate_buffer_deg, report=report,
-        sub_diag=sub_diag, dem=dem, water=water, served=corridor, design_storm=design_storm,
+        sub_diag=sub_diag, dem=dem, water=water, served=None, design_storm=design_storm,
     )
 
 
