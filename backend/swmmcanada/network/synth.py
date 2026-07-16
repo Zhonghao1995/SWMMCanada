@@ -89,12 +89,24 @@ def synthesise_network(
     children = defaultdict(list)
     for node, par in parent.items():
         children[par].append(node)
+    # Ground constraint (F-006/ADR 0024 §5): an upstream invert must stay at least one
+    # node-depth below its own ground. Monotonicity always wins — where even an epsilon
+    # slope pierces the surface (downstream deeper than upstream ground), the violation
+    # is counted instead of hidden.
+    eps_slope = 1e-4
+    n_cover_violations = 0
     queue = deque(sinks)
     while queue:
         node = queue.popleft()
         for child in children[node]:
             length = _edge_length(g, child, node)
-            inverts[child] = inverts[node] + length * config.min_slope
+            floor = inverts[node] + length * eps_slope          # monotone, always
+            target = inverts[node] + length * config.min_slope
+            cap = g.nodes[child]["elev"] - config.min_node_depth_m
+            inv = max(floor, min(target, cap))
+            if inv > cap + 1e-9:
+                n_cover_violations += 1
+            inverts[child] = inv
             queue.append(child)
 
     # 6) Emit: every street node is a junction (incl. the sink); subcatchments per junction.
@@ -142,6 +154,7 @@ def synthesise_network(
         network=NetworkIn(junctions=junctions, outfalls=outfalls, conduits=conduits),
         subcatchments=subs,
         diagnostics={
+            "n_cover_violations": n_cover_violations,
             "n_nodes": g.number_of_nodes(),
             "n_conduits": len(conduits),
             "n_outfalls": len(outfalls),

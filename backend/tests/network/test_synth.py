@@ -124,3 +124,32 @@ def test_network_feeds_build(tmp_path):
     )
     assert res.inp_path.exists()  # build's own round-trip validation already passed
     assert "SUBCATCHMENTS" in res.sections_written
+
+
+# --- F-006 (ADR 0024 §5): inverts obey the ground surface ------------------------------
+
+def test_long_flat_chain_keeps_cover():
+    """On flat terrain a long path at minimum slope used to climb above ground; the
+    constraint caps every invert at ground - min_node_depth while staying monotone."""
+    import networkx as nx
+    from swmmcanada.network.synth import NetworkConfig, synthesise_network
+
+    g = nx.Graph()
+    n = 30
+    for i in range(n):                       # 30 nodes x 100 m = 3 km dead-flat chain
+        g.add_node(i, x=-123.50 + i * 0.00135, y=48.44, elev=10.0)
+        if i:
+            g.add_edge(i - 1, i, length=100.0)
+    res = synthesise_network(g, aoi=None)
+    # The REAL guarantees (ADR 0024 §5): no invert pierces the ground (old behaviour
+    # reached ~23.5 m on 10 m ground over this chain); monotone downhill holds; and where
+    # full cover is infeasible (the sink sits at outfall_depth=1.0 < min_node_depth=1.5,
+    # capping the whole flat chain) the compromise is COUNTED, not hidden.
+    for j in res.network.junctions:
+        assert j.invert_m < 10.0, f"{j.name} invert {j.invert_m} pierces the ground"
+    assert max(j.invert_m for j in res.network.junctions) < 9.5   # eps slope, not min_slope
+    assert res.diagnostics["n_cover_violations"] > 0
+    inv = {j.name: j.invert_m for j in res.network.junctions}
+    for c in res.network.conduits:
+        if c.to_node in inv and c.from_node in inv:
+            assert inv[c.from_node] >= inv[c.to_node] - 1e-9   # still monotone downhill

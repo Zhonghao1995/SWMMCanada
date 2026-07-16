@@ -108,19 +108,23 @@ def delineate_junction_subcatchments(
     gate["threshold_pct"] = threshold
     gate["cell_size_m"] = round(cell_size, 2)
 
-    filled, _ = pyflwdir.dem.fill_depressions(dem, nodata=config.nodata)
-    median_slope = _median_slope_pct(filled, aoi_mask, transform, config.nodata)
+    # Condition ONCE (F-003/ADR 0024): burn the streets into the RAW dem, then fill
+    # depressions on the burned surface. from_dem() downstream refills internally, but a
+    # conditioned (already depression-free) surface makes that a no-op — the burn is no
+    # longer erased by a second fill. Burned channels that drain out survive; dead-end
+    # trench stubs legitimately refill (they ARE pits).
+    burned, n_burned = _burn_streets(dem, transform, dem_crs, streets, config)
+    gate["streets_burned_cells"] = n_burned
+    conditioned, _ = pyflwdir.dem.fill_depressions(burned, nodata=config.nodata)
+    median_slope = _median_slope_pct(conditioned, aoi_mask, transform, config.nodata)
     gate["median_slope_pct"] = round(median_slope, 3)
     if median_slope < threshold:
         gate["decision"] = "below_slope_gate"
         return _voronoi(junction_xy, aoi, network_config, gate,
                         service_mask=service_mask, min_cell_ha=min_cell_ha)
 
-    burned, n_burned = _burn_streets(dem, transform, dem_crs, streets, config)
-    gate["streets_burned_cells"] = n_burned
-
     cells, widths, dem_diag = _dem_basins(
-        burned, transform, dem_crs, aoi_mask, junction_xy, aoi, config
+        conditioned, transform, dem_crs, aoi_mask, junction_xy, aoi, config
     )
     if cells is None:  # degenerate (e.g. every junction outside the DEM window)
         gate["decision"] = "dem_degenerate"
