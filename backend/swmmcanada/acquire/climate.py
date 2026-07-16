@@ -33,6 +33,8 @@ MIN_HOURLY_COVERAGE = 0.90
 # gaps that DO pass are zero-filled and counted honestly in the forcing record.
 DAILY_COVERAGE_MIN = 0.90
 DAILY_MAX_GAP_D = 3
+HOURLY_MAX_GAP_H = 24      # ADR 0024 §2: hourly usability needs bounded gaps, not just coverage
+_MAX_PAGES = 50            # runaway-pagination guard (upstream ignoring startindex)
 MISMATCH_WARN_PCT = 15.0
 
 
@@ -102,7 +104,7 @@ def fetch_climate(
         frame = _fetch_daily(client, s.climate_id, start, end)
         comp = daily_completeness(frame, start, end)
         if _daily_usable(comp):
-            series.append(ClimateSeries(station=s, frame=frame))
+            series.append(ClimateSeries(station=s, frame=reindex_daily(frame, start, end)))
             chosen.append(s)
             if not daily_comp:
                 daily_comp = {**comp, "station": s.climate_id}
@@ -124,7 +126,7 @@ def fetch_climate(
                 break                     # a complete record this close: stop looking
         if best is not None:
             _, s, frame, comp = best
-            series.append(ClimateSeries(station=s, frame=frame))
+            series.append(ClimateSeries(station=s, frame=reindex_daily(frame, start, end)))
             chosen = [s]
             daily_comp = {**comp, "station": s.climate_id}
             warnings.append(
@@ -166,20 +168,20 @@ def fetch_climate(
 def _hourly_tier(client, candidates, start: date, end: date, *, daily_series):
     """Pick the first candidate station whose hourly rain is usable (ADR 0014) and build the
     honest forcing record. Returns (hourly ClimateSeries | None, forcing dict)."""
-    expected_h = ((end - start).days + 1) * 24
     tried = 0
     for s in candidates:
         frame = _fetch_hourly(client, s.climate_id, start, end)
         tried += 1
-        n_valid = int(frame["precip_mm"].notna().sum()) if not frame.empty else 0
-        coverage = n_valid / expected_h if expected_h else 0.0
-        if coverage >= MIN_HOURLY_COVERAGE:
-            n_missing = expected_h - n_valid
+        comp = hourly_completeness(frame, start, end)
+        if comp["coverage"] >= MIN_HOURLY_COVERAGE and comp["max_gap_h"] <= HOURLY_MAX_GAP_H:
+            frame = reindex_hourly(comp["frame"], start, end)
             forcing = {
                 "rainfall_resolution": "hourly",
                 "station": s.climate_id, "station_name": s.name,
-                "coverage_pct": round(100.0 * coverage, 1),
-                "n_missing_hours": n_missing,
+                "coverage_pct": round(100.0 * comp["coverage"], 1),
+                "n_missing_hours": comp["n_missing"],
+                "max_gap_h": comp["max_gap_h"],
+                "n_duplicate_hours_dropped": comp["n_duplicates"],
                 "hourly_total_mm": round(float(frame["precip_mm"].sum(skipna=True)), 2),
             }
             if daily_series is not None and not daily_series.frame.empty:
@@ -198,8 +200,9 @@ def _hourly_tier(client, candidates, start: date, end: date, *, daily_series):
     return None, {
         "rainfall_resolution": "daily",
         "fallback_reason": (
-            f"no station within reach has hourly PRECIP_AMOUNT covering "
-            f">={int(MIN_HOURLY_COVERAGE * 100)}% of the period ({tried} candidates tried)"),
+            f"no station within reach has hourly PRECIP_AMOUNT with >="
+            f"{int(MIN_HOURLY_COVERAGE * 100)}% coverage AND max gap <="
+            f"{HOURLY_MAX_GAP_H} h ({tried} candidates tried)"),
     }
 
 
@@ -240,7 +243,9 @@ def _fetch_all_pages(client: ClimateHttpClient, collection: str, climate_id: str
     ~416 days). Concatenates features across startindex pages until a short page."""
     features: list = []
     startindex = 0
-    while True:
+    pages = 0
+    while pages < _MAX_PAGES:
+        pages += 1
         fc = client.get_json(
             f"{BASE}/collections/{collection}/items",
             {
@@ -418,6 +423,60 @@ def daily_completeness(frame, start: date, end: date) -> dict:
 
 def _daily_usable(comp: dict) -> bool:
     return comp["coverage"] >= DAILY_COVERAGE_MIN and comp["max_gap_d"] <= DAILY_MAX_GAP_D
+
+
+def reindex_daily(frame, start: date, end: date):
+    """Round-2 F-001 closure: the OUTPUT timeline must be the expected timeline. Dedup by
+    date (first wins), then reindex onto every day in [start, end] — wholly-missing dates
+    become explicit NaN rows so the zero-fill in to_rainfall_series actually fills them
+    and n_days_zero_filled matches the shipped series."""
+    axis = pd.date_range(start, end, freq="D")
+    if frame is None or frame.empty:
+        return pd.DataFrame({"timestamp_local": axis}).reindex(
+            columns=_DAILY_COLS).assign(timestamp_local=axis)
+    df = frame.copy()
+    df["timestamp_local"] = pd.to_datetime(df["timestamp_local"]).dt.normalize()
+    df = df[(df["timestamp_local"] >= axis[0]) & (df["timestamp_local"] <= axis[-1])]
+    df = df.drop_duplicates(subset="timestamp_local", keep="first")
+    df = df.set_index("timestamp_local").reindex(axis)
+    df.index.name = "timestamp_local"
+    return df.reset_index().reindex(columns=_DAILY_COLS)
+
+
+def hourly_completeness(frame, start: date, end: date) -> dict:
+    """Coverage AND gap structure of the hourly record on the expected hourly axis
+    (round-2 F-001: coverage alone let a 72 h hole through, and duplicated hours
+    inflated it). Returns the deduped/clipped frame too so acceptance reindexes it."""
+    axis = pd.date_range(start, end + timedelta(days=1), freq="h", inclusive="left")
+    n_expected = len(axis)
+    if frame is None or frame.empty:
+        return {"coverage": 0.0, "max_gap_h": n_expected, "n_missing": n_expected,
+                "n_expected": n_expected, "n_duplicates": 0, "frame": None}
+    df = frame.copy()
+    df["timestamp_local"] = pd.to_datetime(df["timestamp_local"])
+    df = df[(df["timestamp_local"] >= axis[0]) & (df["timestamp_local"] <= axis[-1])]
+    n0 = len(df)
+    df = df.drop_duplicates(subset="timestamp_local", keep="first")
+    have = {t for t, v in zip(df["timestamp_local"], df["precip_mm"])
+            if not (isinstance(v, float) and math.isnan(v))}
+    missing_run = max_gap = n_missing = 0
+    for t in axis:
+        if t in have:
+            missing_run = 0
+        else:
+            n_missing += 1
+            missing_run += 1
+            max_gap = max(max_gap, missing_run)
+    return {"coverage": (n_expected - n_missing) / n_expected if n_expected else 0.0,
+            "max_gap_h": max_gap, "n_missing": n_missing, "n_expected": n_expected,
+            "n_duplicates": n0 - len(df), "frame": df}
+
+
+def reindex_hourly(df, start: date, end: date):
+    axis = pd.date_range(start, end + timedelta(days=1), freq="h", inclusive="left")
+    out = df.set_index("timestamp_local").reindex(axis)
+    out.index.name = "timestamp_local"
+    return out.reset_index().reindex(columns=_HOURLY_COLS)
 
 
 def _has_precip(frame) -> bool:

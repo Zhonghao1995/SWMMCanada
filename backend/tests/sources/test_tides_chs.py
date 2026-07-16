@@ -43,8 +43,9 @@ def _fake_get(metadata=None):
         rows = []
         day = frm
         while day < to:
-            rows.append({"eventDate": f"{day.isoformat()}T08:00:00Z", "value": 1.0})
-            rows.append({"eventDate": f"{day.isoformat()}T09:00:00Z", "value": 2.0})
+            for h in range(24):                      # dense hourly, like real wlp
+                rows.append({"eventDate": f"{day.isoformat()}T{h:02d}:00:00Z",
+                             "value": 1.0 if h % 2 == 0 else 2.0})
             day += _td(days=1)
         return rows
 
@@ -80,8 +81,9 @@ def test_levels_are_datum_shifted_and_clock_aligned(monkeypatch):
     assert t.datum == "CGVD28" and t.datum_offset_m == -1.87
     assert t.clock_utc_offset_h == -8.0                 # Victoria: PST
     assert all(v <= 2.0 - 1.87 + 1e-9 for v in t.level_m)   # CD 1.0/2.0 -> geodetic
-    # 08:00Z -> 00:00 local: timestamps live inside the local-time window
-    assert all(ts.hour in (0, 1) for ts in t.timestamps)
+    # half-open local window, exactly the expected hourly axis (round-2 discipline)
+    assert len(t.timestamps) == 48
+    assert t.timestamps[0].hour == 0 and t.timestamps[-1].hour == 23
     assert all(p["time-series-code"] == "wlp" for p in fake.calls)
 
 
@@ -98,6 +100,8 @@ def test_lst_offsets_cover_canada():
     assert lst_offset_hours(-123.4, 48.4) == -8.0       # Victoria
     assert lst_offset_hours(-75.7, 45.4) == -5.0        # Ottawa
     assert lst_offset_hours(-52.7, 47.6) == -3.5        # St. John's (half-hour zone)
+    assert lst_offset_hours(-105.5, 52.1) == -6.0       # Saskatoon: CST year-round
+    assert lst_offset_hours(-135.1, 60.7) == -7.0       # Whitehorse: MST year-round
 
 
 def test_tidal_selection_is_hydraulic_not_geographic():

@@ -230,7 +230,7 @@ def _finish_build(
     ws: Path, aoi, network, subcatchments, *, start: date, end: date, method,
     config: BuildConfig, extra_provenance: dict, climate_client, climate_buffer_deg: float,
     report=None, sub_diag: Optional[dict] = None, dem=None, water=None, served=None,
-    design_storm=None,
+    design_storm=None, network_kind: str = "synthesis",
 ) -> BuildResult:
     """The build spine (CONTEXT "Build spine") — the single shared tail of every build path.
 
@@ -255,7 +255,17 @@ def _finish_build(
         climate = fetch_climate(aoi, start, end, client=climate_client, near_buffer_deg=climate_buffer_deg)
         series = next((s for s in climate.series if not s.frame.empty), None)
         forcing = dict(climate.forcing)
-        if series is not None:
+        if series is None and climate.hourly_rain is not None:
+            # Round-2 F-001: a usable HOURLY station must not be discarded because the
+            # DAILY gate found no station — rainfall availability is not hostage to the
+            # temperature/evaporation record.
+            rain = to_rainfall_series(climate.hourly_rain)
+            evaporation = None
+            temperature = None
+            forcing["daily_station_note"] = (
+                "no daily station passed the completeness gate; hourly rainfall stands "
+                "alone (temperature/evaporation absent)")
+        elif series is not None:
             # Rainfall tiers 1-2 (ADR 0014): hourly series when a usable one was found, else the
             # daily station; temperature/evaporation stay on the daily station either way.
             rain = to_rainfall_series(climate.hourly_rain or series)
@@ -284,7 +294,13 @@ def _finish_build(
         _st = nearest_tide_station((aoi.bbox[1] + aoi.bbox[3]) / 2,
                                    (aoi.bbox[0] + aoi.bbox[2]) / 2)
         if _st is not None:
-            _t = fetch_tide_predictions(_st, start, end)
+            # Target datum follows the network's vertical frame (round-2): synthesis
+            # inverts derive from MRDEM/HRDEM (CGVD2013 spec); municipal as-builts are
+            # predominantly CGVD28. Still an ASSUMPTION about the network side — recorded
+            # as such until producers declare their datum (queued deepening).
+            _pref = (("CGVD28", "CGVD2013") if network_kind == "city"
+                     else ("CGVD2013", "CGVD28"))
+            _t = fetch_tide_predictions(_st, start, end, datum_preference=_pref)
             _names = set(tidal_outfall_names(network.outfalls, max(_t.level_m)))
             if _names:
                 network = _NetworkIn(
@@ -296,6 +312,9 @@ def _finish_build(
                 forcing = {**(forcing or {}), "tide_boundary": {
                     "station": _st.name, "n_tidal_outfalls": len(_names),
                     "level_range_m": [round(min(_t.level_m), 2), round(max(_t.level_m), 2)],
+                    "network_datum_assumption": (
+                        "CGVD28 (municipal as-builts)" if network_kind == "city"
+                        else "CGVD2013 (MRDEM/HRDEM spec)"),
                     "datum": _t.datum, "datum_offset_m": _t.datum_offset_m,
                     "clock_utc_offset_h": _t.clock_utc_offset_h,
                     "source": "CHS IWLS predicted water levels (wlp), datum-converted "
@@ -563,7 +582,7 @@ def build_city(
             "sanitary": san_diag,
         },
         climate_client=climate_client, climate_buffer_deg=climate_buffer_deg, report=report,
-        sub_diag=sub_diag, dem=dem, water=water, design_storm=design_storm,
+        sub_diag=sub_diag, dem=dem, water=water, design_storm=design_storm, network_kind="city",
     )
 
 

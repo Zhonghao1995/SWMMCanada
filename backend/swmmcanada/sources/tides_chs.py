@@ -36,7 +36,8 @@ class TideStation:
     lon: float
 
 
-def station_datum_offset(station_id: str) -> Optional[tuple]:
+def station_datum_offset(station_id: str,
+                         preference: tuple = _DATUM_PREFERENCE) -> Optional[tuple]:
     """(datum_code, offset_m) converting Chart Datum to a geodetic datum, from the CHS
     station metadata (``datums`` carries e.g. CGVD28: -1.87 for Victoria Harbour), or
     None when the station publishes no usable conversion — in which case the tide
@@ -44,7 +45,7 @@ def station_datum_offset(station_id: str) -> Optional[tuple]:
     meta = _get_json(f"{IWLS}/stations/{station_id}/metadata") or {}
     offsets = {str(d.get("code")): d.get("offset") for d in (meta.get("datums") or [])
                if d.get("offset") is not None}
-    for code in _DATUM_PREFERENCE:
+    for code in preference:
         if code in offsets:
             return code, float(offsets[code])
     return None
@@ -52,10 +53,15 @@ def station_datum_offset(station_id: str) -> Optional[tuple]:
 
 def lst_offset_hours(lon: float, lat: float) -> float:
     """Canada local STANDARD time offset from UTC for a coordinate. Longitude/15 rounding
-    lands every mainland zone (PST -8 ... AST -4); Newfoundland's half-hour zone is the
-    one exception worth special-casing. No DST — ECCC LOCAL_DATE is standard time."""
-    if lon > -59.0 and lat > 46.5:      # island of Newfoundland
+    lands most zones (PST -8 ... AST -4); the three jurisdictions whose legal clock
+    diverges from solar longitude get explicit boxes (round-2 review). No DST — ECCC
+    LOCAL_DATE is standard time."""
+    if lon > -59.0 and lat > 46.5:                       # island of Newfoundland: NST
         return -3.5
+    if -110.5 < lon < -101.4 and 49.0 <= lat < 60.0:     # Saskatchewan: CST year-round
+        return -6.0
+    if -141.1 < lon < -123.8 and lat >= 60.0:            # Yukon: MST year-round
+        return -7.0
     return float(round(lon / 15.0))
 
 
@@ -92,14 +98,15 @@ def nearest_tide_station(lat: float, lon: float, *, max_km: float = 15.0) -> Opt
                        lat=float(best["latitude"]), lon=float(best["longitude"]))
 
 
-def fetch_tide_predictions(station: TideStation, start: date, end: date) -> TideSeries:
+def fetch_tide_predictions(station: TideStation, start: date, end: date,
+                           datum_preference: tuple = _DATUM_PREFERENCE) -> TideSeries:
     """Hourly predicted water levels for [start, end] (inclusive), converted to the model
     reference frame (ADR 0024 §1): values shifted from Chart Datum to a geodetic datum
     via the station's published offset, timestamps shifted from UTC to the station's
     local STANDARD time (the clock ECCC rain uses). Chunked to respect the API's
     7-day-per-request cap. Raises when the station lacks a datum conversion or returns
     no data — a tide boundary is never fabricated and never left in the wrong frame."""
-    datum = station_datum_offset(station.id)
+    datum = station_datum_offset(station.id, preference=datum_preference)
     if datum is None:
         raise RuntimeError(
             f"CHS station {station.id} publishes no CGVD datum offset; tide boundary "
@@ -130,9 +137,16 @@ def fetch_tide_predictions(station: TideStation, start: date, end: date) -> Tide
         day = chunk_end
     lo = datetime(start.year, start.month, start.day)
     hi = datetime(end.year, end.month, end.day) + timedelta(days=1)
-    keep = [(t, v) for t, v in zip(timestamps, levels) if lo <= t <= hi]
+    keep = [(t, v) for t, v in zip(timestamps, levels) if lo <= t < hi]
     if not keep:
         raise RuntimeError(f"CHS station {station.id} returned no wlp data for {start}..{end}")
+    # Tide gets the same axis discipline as rainfall (round-2): predictions are dense by
+    # construction, so a sparse result means a broken station record — refuse it.
+    expected = (hi - lo).total_seconds() / 3600.0
+    if len(keep) < 0.9 * expected:
+        raise RuntimeError(
+            f"CHS station {station.id} covered only {len(keep)}/{int(expected)} hours "
+            f"for {start}..{end}; tide boundary stays off")
     return TideSeries(timestamps=[t for t, _ in keep], level_m=[v for _, v in keep],
                       station_name=station.name, datum=datum_code,
                       datum_offset_m=datum_off, clock_utc_offset_h=clock_h)

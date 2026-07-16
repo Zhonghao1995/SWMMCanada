@@ -118,3 +118,51 @@ def test_pagination_concatenates(monkeypatch):
                                                      page_size=2))
     assert frame.shape[0] == 6
     assert client.calls == [0, 2, 4, 6]   # trailing empty page confirms the end
+
+
+# --- round-2 counterexamples pinned as regressions -------------------------------------
+
+def test_missing_day_is_actually_zero_filled_in_output():
+    """Round-2 repro 1: 10 days with 1 wholly-missing DATE passed the gate but shipped
+    only 9 points. Reindexing onto the expected axis makes the output exactly 10 points
+    with an explicit 0.0 on the missing day."""
+    from swmmcanada.acquire.climate import (
+        ClimateSeries, ClimateStation, reindex_daily, to_rainfall_series)
+
+    start, end = date(2022, 6, 1), date(2022, 6, 10)
+    days = [(start + timedelta(days=i), 1.0) for i in range(10) if i != 4]
+    frame = reindex_daily(parse_daily(_daily_fc("X", days)), start, end)
+    rain = to_rainfall_series(ClimateSeries(
+        station=ClimateStation("X", "X", -123.37, 48.42), frame=frame))
+    assert len(rain.timestamps) == 10
+    assert rain.precip_mm[4] == 0.0 and sum(rain.precip_mm) == 9.0
+
+
+def test_72h_hole_at_90pct_coverage_is_rejected():
+    """Round-2 repro 2: coverage alone let a 72 h hole through; the max-gap rule kills it."""
+    from swmmcanada.acquire.climate import HOURLY_MAX_GAP_H, hourly_completeness
+    import pandas as pd
+
+    start, end = date(2022, 6, 1), date(2022, 6, 30)
+    axis = pd.date_range(start, end + timedelta(days=1), freq="h", inclusive="left")
+    rows = [{"eventDate": t.isoformat(), "value": 1.0}
+            for i, t in enumerate(axis) if not 100 <= i < 172]        # 72 h hole
+    frame = pd.DataFrame({"timestamp_local": [pd.Timestamp(r["eventDate"]) for r in rows],
+                          "precip_mm": [r["value"] for r in rows]})
+    comp = hourly_completeness(frame, start, end)
+    assert comp["coverage"] >= 0.90                     # coverage alone would pass
+    assert comp["max_gap_h"] == 72 > HOURLY_MAX_GAP_H   # the gap rule rejects
+
+
+def test_duplicated_hours_do_not_inflate_coverage():
+    """Round-2 repro: the same hour repeated 24x must count once, not as a full day."""
+    from swmmcanada.acquire.climate import hourly_completeness
+    import pandas as pd
+
+    start = end = date(2022, 6, 1)
+    frame = pd.DataFrame({
+        "timestamp_local": [pd.Timestamp("2022-06-01T08:00:00")] * 24,
+        "precip_mm": [1.0] * 24})
+    comp = hourly_completeness(frame, start, end)
+    assert comp["n_duplicates"] == 23
+    assert comp["coverage"] < 0.05                      # one real hour of 24
