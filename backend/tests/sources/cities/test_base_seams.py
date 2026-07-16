@@ -47,12 +47,13 @@ def test_full_parcel_imperv_is_the_roof_share():
     assert pct == pytest.approx(25.0)
 
 
-def test_full_parcel_no_buildings_clamps_to_min_imperv():
-    """Fully parcelled, roofless cell computes 0% impervious and clamps to min_imperv."""
+def test_full_parcel_no_buildings_keeps_landcover(rec=None):
+    """F-004 (ADR 0024 §3): a fully parcelled cell with NO mapped roof used to compute 0%
+    and clamp to min_imperv, silently overriding a ~60% land-cover value with 1%. The
+    evidence gate now refuses the override — parcel_based=False, raster value stands."""
     par, bld = _gdf([box(0, 0, 100, 100)]), _gdf([])
     pct, parcel_based = _impervious_fraction(CELL, par, _sidx(par), bld, _sidx(bld))
-    assert parcel_based is True
-    assert pct == CatchbasinSubcatchmentConfig().min_imperv
+    assert parcel_based is False
 
 
 def test_roofs_union_right_of_way():

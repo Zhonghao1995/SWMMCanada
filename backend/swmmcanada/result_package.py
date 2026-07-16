@@ -40,9 +40,47 @@ REQUIRED: List[str] = [
 
 
 def missing_required(package_dir) -> List[str]:
-    """The REQUIRED paths absent from ``package_dir`` — empty list ⇔ shippable."""
-    pkg = Path(package_dir)
-    return [rel for rel in REQUIRED if not (pkg / rel).exists()]
+    """The REQUIRED paths absent from ``package_dir`` — empty list ⇔ shippable.
+    F-019: a required path that exists but is a directory or a symlink counts as
+    missing — the package must be made of plain files that live inside its root."""
+    pkg = Path(package_dir).resolve()
+    bad: List[str] = []
+    for rel in REQUIRED:
+        f = pkg / rel
+        if (not f.exists() or f.is_symlink() or not f.is_file()
+                or not f.resolve().is_relative_to(pkg)):
+            bad.append(rel)
+    return bad
+
+
+def member_checksums(package_dir) -> dict:
+    """SHA-256 + size for every regular file under the package root (F-019): the
+    manifest's integrity block, so a shipped ZIP can be verified member by member."""
+    import hashlib
+
+    pkg = Path(package_dir).resolve()
+    sums: dict = {}
+    for f in sorted(pkg.rglob("*")):
+        if f.is_symlink() or not f.is_file() or f.name == MANIFEST_JSON:
+            continue
+        rel = str(f.relative_to(pkg))
+        h = hashlib.sha256()
+        with open(f, "rb") as fh:
+            for chunk in iter(lambda: fh.read(1 << 20), b""):
+                h.update(chunk)
+        sums[rel] = {"sha256": h.hexdigest(), "bytes": f.stat().st_size}
+    return sums
+
+
+def record_checksums(package_dir) -> None:
+    """Stamp ``member_checksums`` into manifest.json (call LAST, after every other
+    stamp, so the sums cover the final artifact set)."""
+    import json
+
+    manifest = Path(package_dir) / MANIFEST_JSON
+    data = json.loads(manifest.read_text()) if manifest.exists() else {}
+    data["integrity"] = {"algorithm": "sha256", "members": member_checksums(package_dir)}
+    manifest.write_text(json.dumps(data, indent=2))
 
 
 def record_terrain(package_dir, *, source: str, resolution_m: float, coverage: str) -> None:

@@ -79,7 +79,8 @@ def derive_parameters(
         # which all three parameter sets derive; Green-Ampt prefers the real texture
         # raster when the soil source shipped one (SoilGrids), else the HSG tier.
         letter = _dominant_hsg(poly_4326, soil)
-        cn = _curve_number(letter, soil, fallback=sub.cn)
+        cn = _curve_number(letter, soil, fallback=sub.cn, poly_4326=poly_4326,
+                           landcover=landcover)
         f0, fc, decay = infiltration.horton_for_hsg(letter)
         texture = _dominant_texture(poly_4326, soil)
         psi, ksat, imd = (infiltration.green_ampt_for_texture(texture) if texture
@@ -156,10 +157,58 @@ def _dominant_texture(poly_4326, soil: SoilResult) -> Optional[str]:
     return infiltration.CODE_TEXTURE[code] if code is not None else None
 
 
-def _curve_number(letter: Optional[str], soil: SoilResult, *, fallback: float) -> float:
-    """CN from the dominant HSG letter (majority already taken by the caller)."""
+# TR-55 curve numbers by cover CATEGORY x hydrologic soil group (F-021/ADR 0024): SCS CN
+# depends on land use AND soils; HSG alone treated every cover like one blanket value.
+# Categories aggregate NALCMS classes (legend in acquire.landcover); values are the
+# standard TR-55 Table 2-2 rows documented in ASSUMPTIONS.md.
+_CN_TABLE = {
+    "forest":   {"A": 30.0, "B": 55.0, "C": 70.0, "D": 77.0},   # woods, fair-good
+    "shrub":    {"A": 35.0, "B": 56.0, "C": 70.0, "D": 77.0},   # brush, fair
+    "grass":    {"A": 39.0, "B": 61.0, "C": 74.0, "D": 80.0},   # open space, fair
+    "crop":     {"A": 67.0, "B": 78.0, "C": 85.0, "D": 89.0},   # row crop, SR good
+    "wetland":  {"A": 85.0, "B": 85.0, "C": 85.0, "D": 85.0},   # saturated ground
+    "barren":   {"A": 77.0, "B": 86.0, "C": 91.0, "D": 94.0},   # fallow/bare
+    "built":    {"A": 89.0, "B": 92.0, "C": 94.0, "D": 95.0},   # commercial districts
+    "water":    {"A": 98.0, "B": 98.0, "C": 98.0, "D": 98.0},   # direct runoff
+}
+_NALCMS_CATEGORY = {
+    1: "forest", 2: "forest", 3: "forest", 4: "forest", 5: "forest", 6: "forest",
+    7: "shrub", 8: "shrub", 11: "shrub",
+    9: "grass", 10: "grass", 12: "grass", 13: "grass",
+    14: "wetland", 15: "crop", 16: "barren", 17: "built", 18: "water", 19: "barren",
+}
+
+
+def _curve_number(letter: Optional[str], soil: SoilResult, *, fallback: float,
+                  poly_4326=None, landcover: Optional[LandcoverResult] = None) -> float:
+    """Area-weighted TR-55 CN over the cell's land-cover classes for the dominant HSG
+    (F-021). Without a usable land-cover read this degrades to the old single HSG->CN
+    lookup, and without that to the caller's fallback."""
+    if letter and poly_4326 is not None and landcover is not None:
+        fracs = _class_fractions(poly_4326, landcover)
+        if fracs:
+            hsg = letter if letter in ("A", "B", "C", "D") else "B"
+            cn = sum(frac * _CN_TABLE[_NALCMS_CATEGORY.get(code, "grass")][hsg]
+                     for code, frac in fracs.items())
+            return round(float(cn), 1)
     cn = soil.hsg_to_cn.get(letter) if letter else None
     return float(cn) if cn is not None else fallback
+
+
+def _class_fractions(poly_4326, landcover: LandcoverResult) -> dict:
+    """{NALCMS class code: area fraction} over the cell's masked land-cover pixels."""
+    with rasterio.open(landcover.raster_path) as src:
+        data, _ = _mask_to_polygon(src, poly_4326)
+        if data is None:
+            return {}
+        nodata = src.nodata
+    flat = data.ravel()
+    if nodata is not None:
+        flat = flat[flat != nodata]
+    if flat.size == 0:
+        return {}
+    return {int(code): float(np.count_nonzero(flat == code)) / flat.size
+            for code in np.unique(flat)}
 
 
 def _mean_slope_pct(poly_4326, dem_path: "Path | str", *, fallback: float) -> float:

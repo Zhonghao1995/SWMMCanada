@@ -126,6 +126,20 @@ def create_app(*, pipeline=None, workdir=None, run_inline: bool = False) -> Fast
             raise HTTPException(422, f"Bad date: {exc}")
         if end < start:
             raise HTTPException(422, "end_date is before start_date.")
+        # F-014 (ADR 0024): minimal input contract — bound the window, refuse degenerate
+        # geometry, keep the service Canadian (both data sources and the honesty story
+        # assume it).
+        if (end - start).days > 731:
+            raise HTTPException(422, "Date span exceeds the 2-year cap (731 days).")
+        import math as _math
+        if not _math.isfinite(aoi.area_km2) or aoi.area_km2 <= 0:
+            raise HTTPException(422, "AOI area is not a finite positive number — "
+                                     "check the polygon's coordinates.")
+        _cx = (aoi.bbox[0] + aoi.bbox[2]) / 2
+        _cy = (aoi.bbox[1] + aoi.bbox[3]) / 2
+        if not in_canada_coarse(_cx, _cy):
+            raise HTTPException(422, "AOI is outside Canada — every data source this "
+                                     "service builds from is Canadian.")
         if infiltration is not None:               # ADR 0013: build-time method choice
             try:
                 infiltration = InfiltrationModel(infiltration.upper()).value
