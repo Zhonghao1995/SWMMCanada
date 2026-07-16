@@ -84,8 +84,12 @@ def synthesise_network(
 
     # 5) Inverts: propagate outward from each sink so every upstream node sits higher
     #    than its parent within its own tree.
+    # Round-2 F-006: the sink itself obeys minimum cover too — outfall_depth_m used to
+    # start the whole tree 0.5 m too shallow, and the max-depth write-out then invented a
+    # rim above the real ground to hide it.
     inverts: Dict[object, float] = {
-        sk: g.nodes[sk]["elev"] - config.outfall_depth_m for sk in sinks}
+        sk: g.nodes[sk]["elev"] - max(config.outfall_depth_m, config.min_node_depth_m)
+        for sk in sinks}
     children = defaultdict(list)
     for node, par in parent.items():
         children[par].append(node)
@@ -116,7 +120,10 @@ def synthesise_network(
     for n in g.nodes:
         x, y, ground = g.nodes[n]["x"], g.nodes[n]["y"], g.nodes[n]["elev"]
         inv = inverts[n]
-        depth = max(config.min_node_depth_m, ground - inv)
+        # TRUE rim (round-2): max_depth = ground - invert. Inflating it to min_node_depth
+        # manufactured a rim above the actual ground; cover shortfalls are already counted
+        # in n_cover_violations, not hidden in the geometry.
+        depth = max(0.1, round(ground - inv, 3))
         junctions.append(JunctionIn(name[n], invert_m=inv, x=x, y=y, max_depth_m=depth))
         junction_xy[name[n]] = (x, y)
 

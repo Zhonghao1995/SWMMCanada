@@ -430,7 +430,9 @@ def build_from_aoi(
     subcatchments, parcel_diag = snap_subcatchments_to_parcels(subcatchments, parcels, aoi)
     sub_diag["cadastre"] = {**parcel_diag, "acquisition": parcel_status}
     subcatchments, water_diag = subtract_water(subcatchments, water, junction_xy, aoi)
-    sub_diag = {**(sub_diag or {}), "water": water_diag}
+    sub_diag = {**(sub_diag or {}), "water": water_diag,
+                "synthesis": dict(synth.diagnostics)}   # round-2: cover violations reach
+    #                                                     validation.json, not just logs
     sub_diag.setdefault("service", {}).update(
         semantics="full-coverage (ADR 0022): AOI minus open water; pervious land "
                   "contributes via parameters, not exclusion")

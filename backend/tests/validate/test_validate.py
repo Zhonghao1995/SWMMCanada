@@ -3,7 +3,7 @@
 Tests assert external behaviour — which checks pass/fail and the report's verdict — on
 hand-built models, not the internal merge steps.
 """
-from swmmcanada.build.models import ConduitIn, JunctionIn, NetworkIn, SubcatchmentIn
+from swmmcanada.build.models import ConduitIn, JunctionIn, NetworkIn, OutfallIn, SubcatchmentIn
 from swmmcanada.geo import aoi_from_geojson
 from swmmcanada.validate import MethodDescriptor, validate_model
 
@@ -137,9 +137,10 @@ def test_local_pit_junction_is_flagged_by_name():
     # The Kelowna N16 shape: J2 back-filled below both neighbours -> its only exit rises.
     net = NetworkIn(
         junctions=[_j("J1", 10.0, -123.371, 48.420), _j("J2", 8.0, -123.369, 48.420), _j("J3", 9.0)],
-        outfalls=[],
+        outfalls=[OutfallIn("OF1", 8.5, -123.367, 48.420)],   # system-complete (round-2 gate)
         conduits=[ConduitIn("C1", "J1", "J2", length_m=100.0),
-                  ConduitIn("C2", "J2", "J3", length_m=100.0)])
+                  ConduitIn("C2", "J2", "J3", length_m=100.0),
+                  ConduitIn("C3", "J3", "OF1", length_m=50.0)])
     r = validate_model(net, _clean_subs(), AOI, method=METHOD)
     chk = _ids(r)["invert_consistency"]
     assert not chk.passed

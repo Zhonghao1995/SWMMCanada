@@ -127,9 +127,10 @@ def test_derive_overwrites_imperv_cn_slope(tmp_path):
     # pct_imperv = 100 * impervious_fraction(class 17) = 70
     assert got.pct_imperv == approx_pct(70.0)
     # dominant HSG = 2 -> "B"
-    # F-021 (ADR 0024): CN is landcover x HSG now — an all-built-up cell on B soils reads
-    # the TR-55 commercial row (92), not the blanket per-HSG value (85).
-    assert got.cn == 92.0
+    # F-021 (ADR 0024, round-2 semantics): CN is landcover x HSG for the PERVIOUS
+    # remainder — an all-built-up cell on B soils reads the urban-pervious row (69);
+    # pct_imperv carries the impervious share separately, so no double count.
+    assert got.cn == 69.0
     # planar ramp -> positive mean slope, near the analytic value
     assert got.pct_slope > 0
     assert abs(got.pct_slope - DEM_SLOPE_PCT) < 1.0

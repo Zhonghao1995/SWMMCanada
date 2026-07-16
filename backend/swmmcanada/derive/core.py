@@ -168,13 +168,18 @@ _CN_TABLE = {
     "crop":     {"A": 67.0, "B": 78.0, "C": 85.0, "D": 89.0},   # row crop, SR good
     "wetland":  {"A": 85.0, "B": 85.0, "C": 85.0, "D": 85.0},   # saturated ground
     "barren":   {"A": 77.0, "B": 86.0, "C": 91.0, "D": 94.0},   # fallow/bare
-    "built":    {"A": 89.0, "B": 92.0, "C": 94.0, "D": 95.0},   # commercial districts
+    # built-up uses PERVIOUS-remainder CN (urban lawns/verges, TR-55 open space fair):
+    # SWMM applies CURVE_NUMBER infiltration to the pervious sub-area only, and
+    # pct_imperv already carries the impervious share — a composite commercial CN
+    # (89-95) would double-count imperviousness (round-2 F-021).
+    "built":    {"A": 49.0, "B": 69.0, "C": 79.0, "D": 84.0},
     "water":    {"A": 98.0, "B": 98.0, "C": 98.0, "D": 98.0},   # direct runoff
 }
 _NALCMS_CATEGORY = {
     1: "forest", 2: "forest", 3: "forest", 4: "forest", 5: "forest", 6: "forest",
     7: "shrub", 8: "shrub", 11: "shrub",
-    9: "grass", 10: "grass", 12: "grass", 13: "grass",
+    9: "grass", 10: "grass", 12: "grass",
+    13: "barren",   # NALCMS 13 = barren-lichen-moss (round-2: was wrongly grass)
     14: "wetland", 15: "crop", 16: "barren", 17: "built", 18: "water", 19: "barren",
 }
 

@@ -53,15 +53,31 @@ def missing_required(package_dir) -> List[str]:
     return bad
 
 
+def safe_package_members(package_dir) -> List[Path]:
+    """THE member list (round-2 F-019): sorted regular files that resolve inside the
+    package root — no symlinks, no directories, no path escapes. Checksums and the
+    shipped ZIP must both use this one enumeration, or the checksum manifest describes
+    a different artifact than the ZIP contains."""
+    pkg = Path(package_dir).resolve()
+    members: List[Path] = []
+    for f in sorted(pkg.rglob("*")):
+        if f.is_symlink() or not f.is_file():
+            continue
+        if not f.resolve().is_relative_to(pkg):
+            continue
+        members.append(f)
+    return members
+
+
 def member_checksums(package_dir) -> dict:
-    """SHA-256 + size for every regular file under the package root (F-019): the
-    manifest's integrity block, so a shipped ZIP can be verified member by member."""
+    """SHA-256 + size for every safe member (F-019): the manifest's integrity block, so a
+    shipped ZIP can be verified member by member."""
     import hashlib
 
     pkg = Path(package_dir).resolve()
     sums: dict = {}
-    for f in sorted(pkg.rglob("*")):
-        if f.is_symlink() or not f.is_file() or f.name == MANIFEST_JSON:
+    for f in safe_package_members(pkg):
+        if f.name == MANIFEST_JSON:
             continue
         rel = str(f.relative_to(pkg))
         h = hashlib.sha256()
