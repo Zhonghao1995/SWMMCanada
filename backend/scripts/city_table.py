@@ -53,7 +53,7 @@ CITIES = [
     ("london", "Explicit node IDs", _centre(-81.25, 42.98)),
     ("kitchener", "Explicit manhole IDs", _centre(-80.49, 43.45)),
     ("calgary", "Geometry-inferred", _centre(-114.06, 51.05)),
-    ("surrey", "Geometry-inferred", _centre(-122.82, 49.12)),
+    ("surrey", "Explicit node IDs", _centre(-122.82, 49.12)),   # Public/Drainage UP/DOWN_NODE (#132)
     ("kelowna", "Geometry-inferred", _centre(-119.47, 49.88)),
     ("regina", "Geometry-inferred", _centre(-104.61, 50.445)),
 ]

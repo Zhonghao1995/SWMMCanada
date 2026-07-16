@@ -141,7 +141,7 @@ If you use SWMMCanada in your work, please cite the preprint (APA):
 
 To cite a specific version of the software itself, also cite the archived release:
 
-> Zhang, Z. (2026). *SWMMCanada: ready-to-run EPA SWMM models anywhere in Canada from open data* (Version 0.3.4) [Computer software]. Zenodo. https://doi.org/10.5281/zenodo.21058544
+> Zhang, Z. (2026). *SWMMCanada: ready-to-run EPA SWMM models anywhere in Canada from open data* (Version 0.4.0) [Computer software]. Zenodo. https://doi.org/10.5281/zenodo.21058544
 
 BibTeX and other formats are available via **Cite this repository** in the GitHub sidebar (generated from [`CITATION.cff`](CITATION.cff)) — it resolves to the preprint above. The Zenodo DOI is the *concept DOI* — it always resolves to the latest software version.
 
