@@ -182,3 +182,44 @@ def test_frontage_split_beats_triangle_fans():
     assert union.area >= mask.area * 0.95
     overlap = sum(c.polygon_4326.area for c in cells.values()) - union.area
     assert overlap <= union.area * 0.01
+
+
+# --- ADR 0022 (#118): full-coverage synthesis semantics -------------------------------
+
+def test_full_aoi_mask_tiles_the_suburban_blanks():
+    """The Langford scenario in miniature: streets hug one corner of a larger drawn AOI.
+    With the corridor mask the far land vanished (rain deleted); with the whole AOI as the
+    mask (ADR 0022, what the pipeline now passes) the frontage split must tile ~everything,
+    while cells keep their street-anchored municipal shapes."""
+    import networkx as nx
+    from swmmcanada.geo import aoi_from_geojson
+    from swmmcanada.network.delineate_dem import delineate_junction_subcatchments
+    from swmmcanada.network.service_area import MIN_CELL_HA, street_service_corridor
+
+    # 1 km x 1 km AOI; two short streets only in the SW corner
+    aoi = aoi_from_geojson({"type": "Polygon", "coordinates": [[
+        [-123.510, 48.440], [-123.496, 48.440], [-123.496, 48.449],
+        [-123.510, 48.449], [-123.510, 48.440]]]})
+    g = nx.Graph()
+    g.add_node("a", x=-123.5095, y=48.4405)
+    g.add_node("b", x=-123.5065, y=48.4405)
+    g.add_node("c", x=-123.5065, y=48.4425)
+    g.add_edge("a", "b"); g.add_edge("b", "c")
+    # junction names == street node names, as synthesise_network guarantees
+    junction_xy = {"a": (-123.5095, 48.4405), "b": (-123.5065, 48.4405),
+                   "c": (-123.5065, 48.4425)}
+
+    # old semantics: corridor mask -> most of the AOI unserved
+    corridor = street_service_corridor(g, aoi)
+    subs_old, _ = delineate_junction_subcatchments(
+        junction_xy, aoi, streets=g, service_mask=corridor, min_cell_ha=MIN_CELL_HA)
+    # new semantics: whole-AOI mask -> tiled
+    subs_new, diag = delineate_junction_subcatchments(
+        junction_xy, aoi, streets=g, service_mask=aoi.geometry, min_cell_ha=MIN_CELL_HA)
+
+    aoi_ha = aoi.area_km2 * 100.0
+    old_ha = sum(s.area_ha for s in subs_old)
+    new_ha = sum(s.area_ha for s in subs_new)
+    assert old_ha < aoi_ha * 0.5, "corridor mask should leave the blanks (the #118 bug)"
+    assert new_ha > aoi_ha * 0.95, "full-coverage mask must tile the drawn AOI"
+    assert all(s.outlet_node in junction_xy for s in subs_new)
