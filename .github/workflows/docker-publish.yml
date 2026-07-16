@@ -15,8 +15,25 @@ permissions:
   packages: write
 
 jobs:
+  test:
+    name: backend tests gate the image
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/constraints.txt
+      - run: pip install -e ".[dev]" -c constraints.txt
+      - run: pytest -q
+
   build-push:
     name: build and push image
+    needs: test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

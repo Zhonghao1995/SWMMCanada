@@ -290,3 +290,92 @@ def check_forcing_consistency(forcing: dict):
     msg = (f"hourly vs daily rain totals within {mismatch}%" if ok else
            forcing.get("mismatch_warning", f"hourly vs daily rain totals differ by {mismatch}%"))
     return _result("forcing_consistency", schema.WARNING, ok, msg, mismatch_pct=mismatch)
+
+
+def check_synthesis_cover(delineation: dict):
+    """Round-2 F-006: synthetic vertical-profile compromises must surface in the report.
+    n_cover_violations counts nodes whose invert could not keep min cover while staying
+    monotone downhill — a runnable approximation the engineer must SEE."""
+    n = int(((delineation or {}).get("synthesis") or {}).get("n_cover_violations") or 0)
+    return _result("synthesis_cover", schema.WARNING, n == 0,
+                   "all synthetic inverts keep minimum cover" if n == 0
+                   else f"{n} synthetic node(s) could not keep minimum cover "
+                        "(monotone profile prioritised; see synthesis diagnostics)",
+                   n_violations=n)
+
+
+# --- hydraulic invariants (round-2 F-007: model trust, not parser round-trips) ---------
+
+def check_unique_ids(network: NetworkIn):
+    """Duplicate element names silently merge/shadow in SWMM — always an ERROR."""
+    from collections import Counter
+
+    dupes = []
+    for kind, items in (("junction", network.junctions), ("outfall", network.outfalls),
+                        ("conduit", network.conduits)):
+        c = Counter(x.name for x in items)
+        dupes += [f"{kind}:{n}" for n, k in c.items() if k > 1]
+    node_names = Counter([j.name for j in network.junctions]
+                         + [o.name for o in network.outfalls])
+    dupes += [f"node:{n}" for n, k in node_names.items() if k > 1]
+    return _result("unique_ids", schema.ERROR, not dupes,
+                   "all element names are unique" if not dupes
+                   else f"{len(dupes)} duplicated name(s)",
+                   n_duplicates=len(dupes), sample=dupes[:10])
+
+
+def check_conduit_endpoints(network: NetworkIn):
+    """A conduit referencing a missing node used to be silently skipped by other checks;
+    it is a broken model — ERROR."""
+    nodes = {j.name for j in network.junctions} | {o.name for o in network.outfalls}
+    dangling = [c.name for c in network.conduits
+                if c.from_node not in nodes or c.to_node not in nodes]
+    return _result("conduit_endpoints", schema.ERROR, not dangling,
+                   "every conduit endpoint resolves" if not dangling
+                   else f"{len(dangling)} conduit(s) reference missing nodes",
+                   n_dangling=len(dangling), sample=dangling[:10])
+
+
+def check_finite_hydraulics(network: NetworkIn):
+    """Non-finite or non-positive lengths/diameters/roughness and negative offsets make
+    the engine diverge or silently misroute — ERROR."""
+    import math as _m
+
+    bad = []
+    for c in network.conduits:
+        checks = [("length", c.length_m, True), ("diameter", c.diameter_m, True),
+                  ("roughness", c.roughness_n, True),
+                  ("inlet_offset", getattr(c, "inlet_offset_m", 0.0), False),
+                  ("outlet_offset", getattr(c, "outlet_offset_m", 0.0), False)]
+        for label, v, positive in checks:
+            if v is None or not _m.isfinite(v) or (positive and v <= 0) or (not positive and v < 0):
+                bad.append(f"{c.name}:{label}={v}")
+    for j in list(network.junctions) + list(network.outfalls):
+        if not _m.isfinite(j.invert_m):
+            bad.append(f"{j.name}:invert={j.invert_m}")
+    return _result("finite_hydraulics", schema.ERROR, not bad,
+                   "hydraulic values finite and in range" if not bad
+                   else f"{len(bad)} out-of-range hydraulic value(s)",
+                   n_bad=len(bad), sample=bad[:10])
+
+
+def check_system_outfalls(network: NetworkIn):
+    """ADR 0011: every tagged system included in the model must reach at least one
+    outfall of its own system, and conduits must not bridge systems — ERROR."""
+    systems = {c.system for c in network.conduits}
+    node_sys = {j.name: j.system for j in network.junctions}
+    node_sys.update({o.name: o.system for o in network.outfalls})
+    problems = []
+    for sysname in sorted(systems):
+        if not any(o.system == sysname for o in network.outfalls):
+            problems.append(f"{sysname}: no outfall")
+    for c in network.conduits:
+        fs, ts = node_sys.get(c.from_node), node_sys.get(c.to_node)
+        if fs is not None and ts is not None and (fs != c.system or ts != c.system):
+            problems.append(f"{c.name}: bridges {fs}->{ts} as {c.system}")
+            if len(problems) > 20:
+                break
+    return _result("system_outfalls", schema.ERROR, not problems,
+                   "every system reaches its own outfall; no cross-system links"
+                   if not problems else f"{len(problems)} system-integrity problem(s)",
+                   n_problems=len(problems), sample=problems[:10])

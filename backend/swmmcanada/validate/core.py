@@ -131,6 +131,10 @@ def validate_model(
     # Geometric — operate on cells that carry a polygon; flag the ones that don't.
     results.append(C.check_geometry_absent(subcatchments))
     geo = C.GeoContext(subcatchments, aoi, water, served)  # one reprojection to metric, shared
+    results.append(C.check_unique_ids(network))
+    results.append(C.check_conduit_endpoints(network))
+    results.append(C.check_finite_hydraulics(network))
+    results.append(C.check_system_outfalls(network))
     results.append(C.check_geometry_valid(geo))
     results.append(C.check_overlap(geo))
     results.append(C.check_area_conservation(
@@ -142,6 +146,9 @@ def validate_model(
     results.append(C.check_node_coverage(geo, node_coords))
     results.append(C.check_outlet_distance(geo, node_coords))
     results.append(C.check_shape_plausibility(geo))
+
+    if delineation and (delineation.get("synthesis") or {}).get("n_cover_violations") is not None:
+        results.append(C.check_synthesis_cover(delineation))
 
     if forcing:
         results.append(C.check_forcing_consistency(forcing))

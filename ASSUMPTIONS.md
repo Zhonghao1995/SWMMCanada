@@ -89,3 +89,10 @@ fair/good, brush fair, open space fair, row crop SR good, fallow bare, commercia
 districts, saturated wetland 85, water 98). Unknown classes read as open space. Without
 a usable land-cover window the old single HSG→CN lookup applies, then the caller's
 fallback — the tiers are recorded implicitly by which inputs existed.
+
+### Round-2 amendment: urban CN is the pervious remainder
+
+Built-up classes map to the TR-55 urban *pervious* row (open-space fair, 49/69/79/84),
+NOT composite commercial CN: SWMM applies CURVE_NUMBER infiltration to the pervious
+sub-area only and `pct_imperv` already carries the impervious share — composite CN would
+double-count imperviousness. NALCMS class 13 corrected to barren (lichen-moss).

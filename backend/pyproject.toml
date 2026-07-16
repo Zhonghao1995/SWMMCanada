@@ -2,7 +2,7 @@
 name = "swmmcanada"
 version = "0.3.4"
 description = "SWMMCanada backend — AOI → Canadian open data → SWMM model generator"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
   "geopandas>=0.14",
   "shapely>=2.0",

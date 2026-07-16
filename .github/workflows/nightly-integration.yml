@@ -24,5 +24,5 @@ jobs:
           python-version: "3.11"
           cache: pip
           cache-dependency-path: backend/pyproject.toml
-      - run: pip install -e ".[dev]"
+      - run: pip install -e ".[dev]" -c constraints.txt
       - run: pytest -m integration -q

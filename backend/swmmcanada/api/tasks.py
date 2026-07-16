@@ -82,10 +82,20 @@ def run_task(task_id: str, aoi, start: date, end: date, store: TaskStore, workdi
 
 def _zip_package(result, ws: Path) -> Path:
     # One zip, three formats: model.inp (SWMM) + mikeplus/ + icm/ ride along (ADR 0008/0012).
-    pkg = Path(getattr(result, "package_dir", ws))
+    # Round-2 F-019: the ZIP uses the SAME safe member list as the checksum manifest
+    # (sorted, regular files only, symlinks and path escapes excluded) with fixed
+    # timestamps/permissions, so identical inputs produce identical bytes and the
+    # integrity block describes exactly what ships.
+    from swmmcanada.result_package import safe_package_members
+
+    pkg = Path(getattr(result, "package_dir", ws)).resolve()
     zip_path = Path(ws) / "model_package.zip"
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
-        for f in pkg.rglob("*"):
-            if f.is_file() and f.name != zip_path.name:
-                zf.write(f, f.relative_to(pkg))
+        for f in safe_package_members(pkg):
+            if f.name == zip_path.name:
+                continue
+            info = zipfile.ZipInfo(str(f.relative_to(pkg)), date_time=(2020, 1, 1, 0, 0, 0))
+            info.external_attr = 0o644 << 16
+            info.compress_type = zipfile.ZIP_DEFLATED
+            zf.writestr(info, f.read_bytes())
     return zip_path
