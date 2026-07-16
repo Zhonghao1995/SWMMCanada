@@ -9,7 +9,7 @@ evaporation stay daily — their consumers (snowmelt min/max, Hargreaves) are da
 """
 import math
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, timedelta
 from typing import List, Optional, Protocol, Tuple
 
 import pandas as pd
@@ -27,6 +27,12 @@ _HOURLY_COLS = ["timestamp_local", "precip_mm", "precip_flag", "climate_id"]
 # 15% is surfaced as a validation Warning (the two tiers may come from different stations,
 # so this is a sanity signal, not an exact conservation test).
 MIN_HOURLY_COVERAGE = 0.90
+# Daily completeness gate (F-001/ADR 0024 §2): a station is usable for rainfall only when
+# its daily record covers >=90% of the window AND its longest missing run is <=3 days.
+# One valid day in a year must never pass ("missing is unknown, not zero"); the residual
+# gaps that DO pass are zero-filled and counted honestly in the forcing record.
+DAILY_COVERAGE_MIN = 0.90
+DAILY_MAX_GAP_D = 3
 MISMATCH_WARN_PCT = 15.0
 
 
@@ -89,26 +95,46 @@ def fetch_climate(
 
     series: List[ClimateSeries] = []
     chosen: List[ClimateStation] = []
-    # 1) Stations inside the AOI that actually have data for the period.
+    daily_comp: dict = {}
+    # 1) Stations inside the AOI whose daily record passes the completeness gate
+    #    (F-001: coverage + max-gap, not "has at least one value").
     for s in inside:
         frame = _fetch_daily(client, s.climate_id, start, end)
-        if _has_precip(frame):
+        comp = daily_completeness(frame, start, end)
+        if _daily_usable(comp):
             series.append(ClimateSeries(station=s, frame=frame))
             chosen.append(s)
-    # 2) If none, fall back to the nearest buffered station that has data
-    #    (the closest stations are often discontinued / precip-only with gaps).
+            if not daily_comp:
+                daily_comp = {**comp, "station": s.climate_id}
+    # 2) If none, fall back to the BEST nearby station by (coverage, closeness) among the
+    #    nearest candidates — not the first one with any data at all.
     if not chosen and stations:
         c = aoi.geometry.centroid
         ordered = sorted(stations, key=lambda s: (s.lon - c.x) ** 2 + (s.lat - c.y) ** 2)
-        for s in ordered[:max_buffer_tries]:
+        best = None   # (coverage, -distance rank, station, frame, comp)
+        for rank, s in enumerate(ordered[:max_buffer_tries]):
             frame = _fetch_daily(client, s.climate_id, start, end)
-            if _has_precip(frame):
-                series.append(ClimateSeries(station=s, frame=frame))
-                chosen = [s]
-                warnings.append(f"No in-AOI station with data; used nearest with data ({s.climate_id}).")
-                break
+            comp = daily_completeness(frame, start, end)
+            if not _daily_usable(comp):
+                continue
+            key = (comp["coverage"], -rank)
+            if best is None or key > best[0]:
+                best = (key, s, frame, comp)
+            if comp["coverage"] >= 0.999:
+                break                     # a complete record this close: stop looking
+        if best is not None:
+            _, s, frame, comp = best
+            series.append(ClimateSeries(station=s, frame=frame))
+            chosen = [s]
+            daily_comp = {**comp, "station": s.climate_id}
+            warnings.append(
+                f"No in-AOI station passed the completeness gate; used nearest usable "
+                f"({s.climate_id}, coverage {comp['coverage']*100:.0f}%).")
     if not chosen:
-        warnings.append("No climate station with data for the AOI/period.")
+        warnings.append(
+            "No climate station passed the daily completeness gate "
+            f"(>= {int(DAILY_COVERAGE_MIN*100)}% coverage, max gap <= {DAILY_MAX_GAP_D} d) "
+            "for the AOI/period.")
 
     # Hourly rainfall tier (ADR 0014): prefer the nearest station whose hourly
     # PRECIP_AMOUNT actually covers the period; fall back to the daily series otherwise.
@@ -118,6 +144,11 @@ def fetch_climate(
     hourly_rain, forcing = _hourly_tier(
         client, candidates[:max_buffer_tries], start, end,
         daily_series=(series[0] if series else None))
+    if daily_comp:
+        forcing["daily_station"] = daily_comp.get("station")
+        forcing["daily_coverage_pct"] = round(100.0 * daily_comp["coverage"], 1)
+        forcing["daily_max_gap_d"] = int(daily_comp["max_gap_d"])
+        forcing["n_days_zero_filled"] = int(daily_comp["n_missing"])
     if forcing.get("mismatch_warning"):
         warnings.append(forcing["mismatch_warning"])
 
@@ -173,17 +204,7 @@ def _hourly_tier(client, candidates, start: date, end: date, *, daily_series):
 
 
 def _fetch_hourly(client: ClimateHttpClient, climate_id: str, start: date, end: date) -> pd.DataFrame:
-    fc = client.get_json(
-        f"{BASE}/collections/climate-hourly/items",
-        {
-            "CLIMATE_IDENTIFIER": climate_id,
-            "datetime": f"{start.isoformat()}/{end.isoformat()}",
-            "sortby": "LOCAL_DATE",
-            "limit": 10000,
-            "f": "json",
-        },
-    )
-    return parse_hourly(fc)
+    return parse_hourly(_fetch_all_pages(client, "climate-hourly", climate_id, start, end))
 
 
 def parse_hourly(feature_collection: dict) -> pd.DataFrame:
@@ -210,17 +231,33 @@ def parse_hourly(feature_collection: dict) -> pd.DataFrame:
 
 
 def _fetch_daily(client: ClimateHttpClient, climate_id: str, start: date, end: date) -> pd.DataFrame:
-    fc = client.get_json(
-        f"{BASE}/collections/climate-daily/items",
-        {
-            "CLIMATE_IDENTIFIER": climate_id,
-            "datetime": f"{start.isoformat()}/{end.isoformat()}",
-            "sortby": "LOCAL_DATE",
-            "limit": 10000,
-            "f": "json",
-        },
-    )
-    return parse_daily(fc)
+    return parse_daily(_fetch_all_pages(client, "climate-daily", climate_id, start, end))
+
+
+def _fetch_all_pages(client: ClimateHttpClient, collection: str, climate_id: str,
+                     start: date, end: date, page_size: int = 10000) -> dict:
+    """OGC-API paging (F-001: a fixed limit silently truncates hourly windows beyond
+    ~416 days). Concatenates features across startindex pages until a short page."""
+    features: list = []
+    startindex = 0
+    while True:
+        fc = client.get_json(
+            f"{BASE}/collections/{collection}/items",
+            {
+                "CLIMATE_IDENTIFIER": climate_id,
+                "datetime": f"{start.isoformat()}/{end.isoformat()}",
+                "sortby": "LOCAL_DATE",
+                "limit": page_size,
+                "startindex": startindex,
+                "f": "json",
+            },
+        ) or {}
+        page = fc.get("features", []) or []
+        features.extend(page)
+        if len(page) < page_size:
+            break
+        startindex += page_size
+    return {"features": features}
 
 
 def parse_daily(feature_collection: dict) -> pd.DataFrame:
@@ -354,6 +391,33 @@ def _f(v) -> float:
         return float(v)
     except (TypeError, ValueError):
         return float("nan")
+
+
+def daily_completeness(frame, start: date, end: date) -> dict:
+    """Coverage of the expected daily timeline: fraction of days with a non-missing precip
+    value, longest consecutive missing run, and counts — the F-001 gate's evidence."""
+    n_expected = (end - start).days + 1
+    if frame is None or frame.empty or n_expected <= 0:
+        return {"coverage": 0.0, "max_gap_d": n_expected, "n_missing": n_expected,
+                "n_expected": n_expected}
+    have = {pd.Timestamp(t).date() for t, v in zip(frame["timestamp_local"], frame["precip_mm"])
+            if not (isinstance(v, float) and math.isnan(v))}
+    missing_run = max_gap = n_missing = 0
+    day = start
+    while day <= end:
+        if day in have:
+            missing_run = 0
+        else:
+            n_missing += 1
+            missing_run += 1
+            max_gap = max(max_gap, missing_run)
+        day += timedelta(days=1)
+    return {"coverage": (n_expected - n_missing) / n_expected, "max_gap_d": max_gap,
+            "n_missing": n_missing, "n_expected": n_expected}
+
+
+def _daily_usable(comp: dict) -> bool:
+    return comp["coverage"] >= DAILY_COVERAGE_MIN and comp["max_gap_d"] <= DAILY_MAX_GAP_D
 
 
 def _has_precip(frame) -> bool:
