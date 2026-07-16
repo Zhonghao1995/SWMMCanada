@@ -100,9 +100,10 @@ class PagingClient:
         if "climate-stations" in url:
             return {"features": STATIONS_FC["features"][:1]}
         if "climate-daily" in url:
-            self.calls.append(int(params.get("startindex", 0)))
+            assert "startindex" not in params, "GeoMet silently returns 0 rows for startindex"
+            self.calls.append(int(params.get("offset", 0)))
             all_days = [(date(2022, 6, 1) + timedelta(days=i), 1.0) for i in range(6)]
-            i = int(params.get("startindex", 0))
+            i = int(params.get("offset", 0))
             page = all_days[i: i + int(params["limit"])]
             return _daily_fc("GOOD", page)
         return {"features": []}
@@ -166,3 +167,17 @@ def test_duplicated_hours_do_not_inflate_coverage():
     comp = hourly_completeness(frame, start, end)
     assert comp["n_duplicates"] == 23
     assert comp["coverage"] < 0.05                      # one real hour of 24
+
+
+def test_short_window_tolerates_absolute_gap_days():
+    """v0.4.0 rerun finding: one missing day in a 7-day window (85.7% coverage) must pass
+    — zero-filling one day beats swapping the real week for a synthetic storm. Long
+    windows still need 90%."""
+    from swmmcanada.acquire.climate import _daily_usable
+
+    week_one_missing = {"coverage": 6 / 7, "max_gap_d": 1, "n_missing": 1, "n_expected": 7}
+    assert _daily_usable(week_one_missing)
+    year_85pct = {"coverage": 0.85, "max_gap_d": 3, "n_missing": 55, "n_expected": 365}
+    assert not _daily_usable(year_85pct)
+    week_big_gap = {"coverage": 3 / 7, "max_gap_d": 4, "n_missing": 4, "n_expected": 7}
+    assert not _daily_usable(week_big_gap)

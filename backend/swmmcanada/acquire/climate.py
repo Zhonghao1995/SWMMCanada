@@ -253,7 +253,10 @@ def _fetch_all_pages(client: ClimateHttpClient, collection: str, climate_id: str
                 "datetime": f"{start.isoformat()}/{end.isoformat()}",
                 "sortby": "LOCAL_DATE",
                 "limit": page_size,
-                "startindex": startindex,
+                # GeoMet's pygeoapi pages with ``offset`` — ``startindex`` makes it
+                # silently return ZERO rows (live-verified 2026-07-16; it cost one full
+                # eight-city run falling to design storms before the rerun caught it).
+                "offset": startindex,
                 "f": "json",
             },
         ) or {}
@@ -422,7 +425,14 @@ def daily_completeness(frame, start: date, end: date) -> dict:
 
 
 def _daily_usable(comp: dict) -> bool:
-    return comp["coverage"] >= DAILY_COVERAGE_MIN and comp["max_gap_d"] <= DAILY_MAX_GAP_D
+    """Coverage rules long windows; the ABSOLUTE missing-day count rules short ones
+    (v0.4.0 rerun finding: 90% of a 7-day window demands perfection — one missing day is
+    85.7% — and swapping a real week for a synthetic design storm over one gap-day is
+    worse than zero-filling it). Either test passes; the max-gap bound always holds."""
+    if comp["max_gap_d"] > DAILY_MAX_GAP_D:
+        return False
+    return (comp["coverage"] >= DAILY_COVERAGE_MIN
+            or (comp["coverage"] >= 0.5 and comp["n_missing"] <= DAILY_MAX_GAP_D))
 
 
 def reindex_daily(frame, start: date, end: date):
