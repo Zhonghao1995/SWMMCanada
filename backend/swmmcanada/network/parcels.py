@@ -125,6 +125,7 @@ def snap_subcatchments_to_parcels(
         # Net-land bookkeeping (F-005/ADR 0024 §4): hydrology uses the pre-strip area
         # (holes = enclosed foreign lots, not our runoff), width scales with area.
         net_m2 = g.area
+        holes_m = list(g.interiors)
         # SubcatchmentIn carries one exterior ring, so holes are stripped IN METRIC and
         # the ring re-cleaned there: a valid polygon's exterior can self-touch where a
         # hole met the boundary, and reprojection rounding then breaks 4326 validity.
@@ -145,8 +146,11 @@ def snap_subcatchments_to_parcels(
             continue
         orig_m2 = cells_m[s.name].area if s.name in cells_m else 0.0
         scale = (net_m2 / orig_m2) if orig_m2 > 0 else 1.0
+        holes = [[(float(x), float(y)) for x, y in shp_transform(to_deg, Polygon(r)).exterior.coords]
+                 for r in holes_m] or None
         out.append(replace(
             s, polygon=[(float(x), float(y)) for x, y in check.exterior.coords],
+            holes=holes,
             area_ha=round(net_m2 / 10_000.0, 4),
             width_m=round(s.width_m * scale, 2)))
         n_reshaped += 1

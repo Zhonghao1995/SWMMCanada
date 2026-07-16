@@ -171,7 +171,9 @@ def _write_network_gpkg(
     sub_geoms = []
     for s in subcatchments:
         if s.polygon:
-            sub_geoms.append(Polygon([(float(x), float(y)) for x, y in s.polygon]))
+            sub_geoms.append(Polygon(
+                [(float(x), float(y)) for x, y in s.polygon],
+                holes=[[(float(x), float(y)) for x, y in h] for h in (s.holes or [])]))
         else:  # None → null geometry, so it round-trips back to polygon=None
             sub_geoms.append(None)
     subs = gpd.GeoDataFrame(
@@ -351,6 +353,9 @@ def _read_subcatchments(gpkg: Path) -> List[SubcatchmentIn]:
     subs = []
     for geom, r in zip(sdf.geometry, sdf.to_dict("records")):
         polygon = _polygon_from_geometry(geom)
+        holes = None
+        if geom is not None and geom.geom_type == "Polygon" and list(geom.interiors):
+            holes = [[(float(x), float(y)) for x, y in ring.coords] for ring in geom.interiors]
         subs.append(
             SubcatchmentIn(
                 name=str(r["name"]),
@@ -366,6 +371,7 @@ def _read_subcatchments(gpkg: Path) -> List[SubcatchmentIn]:
                 s_perv_mm=float(r["s_perv_mm"]),
                 pct_zero=float(r["pct_zero"]),
                 polygon=polygon,
+                holes=holes,
                 system=str(r.get("system") or "storm_minor"),
                 # ADR 0013 superset columns; older datastores lack them -> model defaults
                 **{f: float(r[f]) for f in (

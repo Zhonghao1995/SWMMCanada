@@ -168,7 +168,10 @@ def subtract_water(
         net_m2 = land_m.area
         scale = (net_m2 / orig_m2) if orig_m2 > 0 else 1.0
         exterior = [(float(x), float(y)) for x, y in check.exterior.coords]
-        out.append(replace(s, polygon=exterior, area_ha=net_m2 / 10_000.0,
+        inv = _inverse_projector(aoi)
+        holes = [[(float(x), float(y)) for x, y in shp_transform(inv, Polygon(r)).exterior.coords]
+                 for r in land_m.interiors] or None
+        out.append(replace(s, polygon=exterior, holes=holes, area_ha=net_m2 / 10_000.0,
                            width_m=round(s.width_m * scale, 2)))
     return out, diag
 

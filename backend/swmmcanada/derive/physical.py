@@ -64,7 +64,9 @@ def refine_imperviousness(
             out.append(sub)
             continue
         cell_m = shp_transform(
-            to_m, Polygon([(float(x), float(y)) for x, y in sub.polygon])).buffer(0)
+            to_m, Polygon([(float(x), float(y)) for x, y in sub.polygon],
+                          holes=[[(float(x), float(y)) for x, y in h]
+                                 for h in (sub.holes or [])])).buffer(0)
         if cell_m.is_empty or cell_m.area <= 0:
             out.append(sub)
             continue
