@@ -33,6 +33,7 @@ def test_straddling_lot_joins_its_majority_cell():
     a = next(s for s in subs if s.name == "A")
     b = next(s for s in subs if s.name == "B")
     assert a.area_ha > b.area_ha + 0.2          # A absorbed the big overhang wholesale
+    assert a.width_m > 50.0 > b.width_m         # widths follow areas (F-005)
     total = a.area_ha + b.area_ha
     ref, _ = snap_subcatchments_to_parcels(_subs(), [_parcel(-123.5099, -123.5095)], AOI)
     ref_total = sum(s.area_ha for s in ref)     # fully-inside lot: pure re-measure

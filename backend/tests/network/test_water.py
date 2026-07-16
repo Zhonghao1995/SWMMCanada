@@ -170,3 +170,33 @@ def test_thin_by_spacing_orders_by_elevation():
              ("far", 11.0, (-123.31, 48.45))]
     chosen = thin_by_spacing(cands, aoi)
     assert chosen[0] == "lo" and "far" in chosen and "hi" not in chosen
+
+
+# --- F-005 (ADR 0024 §4): enclosed water is NOT land, width follows area ---------------
+
+def test_enclosed_pond_reduces_area_but_not_the_display_ring():
+    from swmmcanada.build.models import SubcatchmentIn
+    from swmmcanada.geo import aoi_from_geojson
+    from swmmcanada.network.water import subtract_water
+    from shapely.geometry import Polygon as ShPoly
+
+    cell = [(-123.510, 48.440), (-123.505, 48.440), (-123.505, 48.444),
+            (-123.510, 48.444), (-123.510, 48.440)]
+    aoi = aoi_from_geojson({"type": "Polygon", "coordinates": [[
+        [-123.512, 48.438], [-123.503, 48.438], [-123.503, 48.446],
+        [-123.512, 48.446], [-123.512, 48.438]]]})
+    pond = ShPoly([(-123.5085, 48.4415), (-123.5065, 48.4415),
+                   (-123.5065, 48.4425), (-123.5085, 48.4425)])   # fully inside the cell
+    sub = SubcatchmentIn(name="S1", outlet_node="J1", area_ha=16.0, pct_imperv=40.0,
+                         width_m=200.0, pct_slope=1.0, polygon=cell)
+    out, diag = subtract_water([sub], pond, {"J1": (-123.509, 48.4405)}, aoi)
+    s = out[0]
+    ring = ShPoly(s.polygon)
+    assert diag["n_clipped"] == 1
+    # hydrology: pond area is GONE from area_ha...
+    assert s.area_ha < 16.0 * 0.98
+    # ...display ring still spans the cell (single exterior ring cannot carry the hole)
+    assert ring.bounds == ShPoly(cell).bounds
+    # width followed the area so flow length (~A/W) is preserved
+    assert s.width_m < 200.0
+    assert abs(s.width_m / 200.0 - s.area_ha / 16.0) < 0.05

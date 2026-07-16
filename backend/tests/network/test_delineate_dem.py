@@ -257,3 +257,28 @@ def test_coarse_posting_keeps_calibrated_threshold(tmp_path):
     _, diag = delineate_junction_subcatchments(_valley_junctions(), AOI, dem_path=dem)
     assert diag["gate"]["cell_size_m"] == 10.0
     assert diag["gate"]["threshold_pct"] == 4.0               # coarse tier
+
+
+# --- F-003 (ADR 0024): conditioning is burn -> fill ONCE; the burn survives -----------
+
+def test_through_trench_survives_conditioning_dead_end_refills():
+    """A burned channel that drains out of the raster must survive depression filling
+    (it is the whole point of street burning); a dead-end interior stub is a genuine pit
+    and legitimately refills. Before F-003 the second fill inside from_dem erased BOTH."""
+    import pyflwdir
+
+    dem = ((np.arange(N)[None, :] * 0.05) + np.zeros((N, N)) + 100.0).astype("float32")
+    burned = dem.copy()
+    burned[5, :] -= 2.0                     # through-trench: row 5, edge to edge
+    burned[8, 3:6] -= 2.0                   # dead-end stub: 3 interior cells
+
+    conditioned, _ = pyflwdir.dem.fill_depressions(burned, nodata=-9999.0)
+    # the through-trench still sits ~2 m below its neighbours after filling
+    assert float(np.median(burned[5, :] - conditioned[5, :])) == 0.0
+    assert float(np.median(conditioned[4, :] - conditioned[5, :])) > 1.0
+    # the dead-end stub was raised back toward the surface (it cannot drain)
+    assert float(conditioned[8, 4] - burned[8, 4]) > 1.0
+    # and conditioning is idempotent: a second fill changes nothing, so from_dem's
+    # internal fill can no longer erase the burn
+    refilled, _ = pyflwdir.dem.fill_depressions(conditioned, nodata=-9999.0)
+    assert np.allclose(refilled, conditioned)

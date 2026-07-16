@@ -161,9 +161,15 @@ def subtract_water(
             continue
 
         diag["n_clipped"] += 1
-        area_ha = ring_m.area / 10_000.0
+        # Net-land bookkeeping (F-005/ADR 0024 §4): the stored ring is display-only; the
+        # HYDROLOGY uses the net land area (holes excluded — an enclosed pond must not
+        # produce runoff), and width scales with area so flow length (~area/width) stays
+        # what the terrain said it was.
+        net_m2 = land_m.area
+        scale = (net_m2 / orig_m2) if orig_m2 > 0 else 1.0
         exterior = [(float(x), float(y)) for x, y in check.exterior.coords]
-        out.append(replace(s, polygon=exterior, area_ha=area_ha))
+        out.append(replace(s, polygon=exterior, area_ha=net_m2 / 10_000.0,
+                           width_m=round(s.width_m * scale, 2)))
     return out, diag
 
 
