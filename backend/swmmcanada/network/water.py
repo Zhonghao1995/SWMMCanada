@@ -144,9 +144,25 @@ def subtract_water(
             diag["n_dropped_in_water"] += 1
             continue
 
+        # The stored polygon is ONE exterior ring, so holes are stripped IN METRIC and the
+        # ring re-cleaned there (a valid polygon's exterior can self-touch where a hole met
+        # the boundary — found live on parcel-jagged Langford cells, ADR 0023), then gated
+        # once more in the stored CRS after reprojection rounding.
+        ring_m = Polygon(land_m.exterior).buffer(0)
+        if ring_m.geom_type == "MultiPolygon":
+            ring_m = max(ring_m.geoms, key=lambda q: q.area)
+        land = shp_transform(_inverse_projector(aoi), ring_m)
+        check = Polygon(list(land.exterior.coords)).buffer(0)
+        check_m = shp_transform(to_m, check) if (not check.is_empty and
+                                                 check.geom_type == "Polygon") else None
+        if (check_m is None or check.is_empty or check.geom_type != "Polygon"
+                or not check.is_valid or check_m.is_empty or not check_m.is_valid):
+            diag["n_dropped_in_water"] += 1
+            continue
+
         diag["n_clipped"] += 1
-        area_ha = land_m.area / 10_000.0
-        exterior = [(float(x), float(y)) for x, y in land.exterior.coords]
+        area_ha = ring_m.area / 10_000.0
+        exterior = [(float(x), float(y)) for x, y in check.exterior.coords]
         out.append(replace(s, polygon=exterior, area_ha=area_ha))
     return out, diag
 

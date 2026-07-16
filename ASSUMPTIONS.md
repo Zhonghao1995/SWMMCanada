@@ -67,3 +67,16 @@ Outside these cities, the network itself is 🟠 synthesized from OpenStreetMap 
 > **Models are uncalibrated.** No parameters are fitted to observations — this is true of any
 > auto-built model, however real its inputs. Calibrate against gauged flow (e.g. ECCC HYDAT)
 > before using results for design or decisions.
+
+## Physical imperviousness (ADR 0023 cut 1, #138)
+
+Where OSM maps buildings inside a synthesis cell, `pct_imperv` is the physical estimate
+instead of the 30 m land-cover mean:
+
+- **Road half-width 4.0 m** — the paved band each side of a street centreline (~8 m local
+  carriageway, curb to curb). One documented number for all street classes.
+- **Driveway/sidewalk allowance +10 %** — paved surfaces that ride along mapped roofs but
+  are not mapped themselves (driveways, walks, patios).
+- **Evidence threshold: roof fraction ≥ 2 %** — cells without mapped buildings keep the
+  land-cover value; OSM's suburban sparsity must degrade to the raster, never to zero.
+- **Cap 90 %** — even a fully built cell keeps some pervious cracks/verges.
