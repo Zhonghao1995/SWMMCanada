@@ -202,6 +202,24 @@ def _hydrology_lossy() -> List[LossyMapping]:
                    "cold-region or long-simulation use.",
         ),
         LossyMapping(
+            source="conduit inlet/outlet offsets (#130)", target="—", kind="dropped",
+            detail="This export writes pipe ends at node inverts; published drop-structure "
+                   "offsets are not yet mapped. Where the datastore carries non-zero "
+                   "offsets, the exported vertical profile differs from the SWMM build.",
+        ),
+        LossyMapping(
+            source="non-circular cross-sections (#130)", target="circular equivalent",
+            kind="approximated",
+            detail="RECT_CLOSED/EGG/ARCH sections export as equivalent-diameter circular "
+                   "pipes; real shape and dimensions are not yet mapped.",
+        ),
+        LossyMapping(
+            source="tidal outfall stage (#130/ADR 0024)", target="—", kind="dropped",
+            detail="TIMESERIES outfall boundaries (CHS predicted water levels) are not "
+                   "mapped; outfalls export as free boundaries. Coastal backwater "
+                   "behaviour will differ from the SWMM build.",
+        ),
+        LossyMapping(
             source="pct_zero", target="—", kind="dropped",
             detail="MIKE+ Model B has no 'percent of impervious area with zero depression "
                    "storage' concept; dropped.",

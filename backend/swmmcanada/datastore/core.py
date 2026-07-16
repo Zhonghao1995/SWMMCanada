@@ -223,6 +223,9 @@ def _write_forcing_nc(
         ds[schema.TIDE_VAR].attrs["long_name"] = "predicted water level (CHS wlp)"
         ds[schema.TIDE_VAR].attrs["ts_name"] = tide.ts_name
         ds[schema.TIDE_VAR].attrs["station_name"] = tide.station_name
+        ds[schema.TIDE_VAR].attrs["datum"] = tide.datum
+        ds[schema.TIDE_VAR].attrs["datum_offset_m"] = float(tide.datum_offset_m)
+        ds[schema.TIDE_VAR].attrs["clock_utc_offset_h"] = float(tide.clock_utc_offset_h)
 
     ds.attrs["Conventions"] = schema.CF_CONVENTIONS
     ds.to_netcdf(path)
@@ -417,10 +420,14 @@ def _read_tide(nc: Path) -> Optional[TideSeries]:
         attrs = ds[schema.TIDE_VAR].attrs
         ts_name = str(attrs.get("ts_name", "tide"))
         station = str(attrs.get("station_name", ""))
+        datum = str(attrs.get("datum", ""))
+        datum_off = float(attrs.get("datum_offset_m", 0.0))
+        clock_off = float(attrs.get("clock_utc_offset_h", 0.0))
     finally:
         ds.close()
     return TideSeries(timestamps=timestamps, level_m=levels, ts_name=ts_name,
-                      station_name=station)
+                      station_name=station, datum=datum, datum_offset_m=datum_off,
+                      clock_utc_offset_h=clock_off)
 
 
 def _read_temperature(nc: Path) -> Optional[TemperatureSeries]:

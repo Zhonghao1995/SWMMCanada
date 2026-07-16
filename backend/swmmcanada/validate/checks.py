@@ -55,11 +55,13 @@ def check_geometry_absent(subs: List[SubcatchmentIn]):
 
 
 def check_invert_consistency(network: NetworkIn):
-    """Adverse/back-filled inverts (issue #77). Conduit inverts are node inverts (no
-    offsets), so a conduit whose downstream node sits higher than its upstream node by
-    more than INVERT_RISE_TOL_M runs uphill; a junction whose EVERY outgoing conduit
-    rises is a local pit — inflow ponds there and shows up as a node-continuity blow-up
-    only after the engine run (the Kelowna N16 symptom)."""
+    """Adverse/back-filled inverts (issue #77). Pipe-end elevation = node invert +
+    conduit offset (#130/F-007: drop structures carry real offsets, so comparing bare
+    node inverts would both miss real adverse pipes and false-flag healthy drops); a
+    conduit whose downstream END sits higher than its upstream END by more than
+    INVERT_RISE_TOL_M runs uphill, and a junction whose EVERY outgoing conduit rises is
+    a local pit — inflow ponds there and shows up as a node-continuity blow-up only
+    after the engine run (the Kelowna N16 symptom)."""
     inv = {n.name: n.invert_m for n in list(network.junctions) + list(network.outfalls)}
     rises: Dict[str, float] = {}
     out_by_node: Dict[str, List[str]] = {}
@@ -67,7 +69,8 @@ def check_invert_consistency(network: NetworkIn):
         if c.from_node not in inv or c.to_node not in inv:
             continue   # dangling endpoint is a different defect; don't crash the check
         out_by_node.setdefault(c.from_node, []).append(c.name)
-        rise = inv[c.to_node] - inv[c.from_node]
+        rise = ((inv[c.to_node] + getattr(c, "outlet_offset_m", 0.0))
+                - (inv[c.from_node] + getattr(c, "inlet_offset_m", 0.0)))
         if rise > schema.INVERT_RISE_TOL_M:
             rises[c.name] = rise
     pits = [j.name for j in network.junctions

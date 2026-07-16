@@ -30,7 +30,12 @@ VIC_N_JUNCTIONS = 74            # downtown-Victoria fixture -> one Voronoi cell 
 OTT_N_CATCHBASINS = 400         # downtown-Ottawa fixture  -> one cell per catch basin
 OTT_N_JUNCTIONS = 442           # Ottawa fallback          -> one cell per junction
 VIC_WARNINGS = {"shape_plausibility"}                       # 3 extreme cells today
-OTT_WARNINGS = {"outlet_distance", "shape_plausibility"}    # the documented outlet-mapping risk
+# outlet_distance/shape = the documented outlet-mapping risk; invert_consistency joined
+# 2026-07-16 (F-007): the check now compares TRUE pipe-end elevations (node invert +
+# conduit offset, #130), which exposes adverse as-built pipe ends in Ottawa's published
+# inverts that min-of-ends node inverts used to smooth away. A more honest warning, not
+# a regression.
+OTT_WARNINGS = {"outlet_distance", "shape_plausibility", "invert_consistency"}
 
 
 def _load(city: str, name: str) -> list:
