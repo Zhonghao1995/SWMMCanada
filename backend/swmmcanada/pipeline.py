@@ -47,7 +47,7 @@ from swmmcanada.sources.soil_constant import ConstantHsgSoilSource
 from swmmcanada.sources.soil_hysogs import HysogsSoilSource
 from swmmcanada.sources.soil_soilgrids import SoilGridsSource
 from swmmcanada.sources.streets_osm import (
-    fetch_street_graph, sample_elevations,
+    fetch_building_footprints, fetch_street_graph, sample_elevations,
 )
 from swmmcanada.sources.cities import base
 from swmmcanada.sources.cities.registry import CitySpec, city_for_point, city_spec
@@ -393,6 +393,16 @@ def build_from_aoi(
     subcatchments, sub_diag = delineate_junction_subcatchments(
         junction_xy, aoi, dem_path=dem.path, streets=streets,
         service_mask=aoi.geometry, min_cell_ha=MIN_CELL_HA)
+    # Cadastral cell boundaries (ADR 0023 cut 2, #138): where an open parcel fabric
+    # exists (ParcelMap BC), cells reshape onto real lot lines — each lot joins the
+    # junction whose geometric cell it most overlaps. No cadastre -> geometric cells
+    # stand, honestly labelled in diagnostics.
+    from swmmcanada.network.parcels import snap_subcatchments_to_parcels
+    from swmmcanada.sources.parcels_bc import fetch_bc_parcels
+
+    parcels = fetch_bc_parcels(tuple(aoi.bbox))
+    subcatchments, parcel_diag = snap_subcatchments_to_parcels(subcatchments, parcels, aoi)
+    sub_diag["cadastre"] = parcel_diag
     subcatchments, water_diag = subtract_water(subcatchments, water, junction_xy, aoi)
     sub_diag = {**(sub_diag or {}), "water": water_diag}
     sub_diag.setdefault("service", {}).update(
@@ -404,6 +414,15 @@ def build_from_aoi(
         soil = _acquire_soil_auto(tuple(aoi.bbox), ws, soil_source)
         _r("DERIVE", 70)
         subcatchments = derive_parameters(subcatchments, dem.path, landcover, soil)
+        # Physical imperviousness (ADR 0023 cut 1, #138): mapped roofs + road band replace
+        # the 30 m land-cover mean wherever buildings are actually mapped; unmapped cells
+        # keep the raster value. Buildings are additive — failure means fallback, not a
+        # blocked build (the fetcher already degrades to []).
+        from swmmcanada.derive.physical import refine_imperviousness
+
+        buildings = fetch_building_footprints(tuple(aoi.bbox))
+        subcatchments, phys_diag = refine_imperviousness(subcatchments, buildings, streets, aoi)
+        sub_diag["physical_imperviousness"] = phys_diag
 
     # Pipe sizing (#56): rational method over the derived subcatchments, design intensity
     # from the nearest ECCC IDF station (falls back to a documented constant). Runs after
