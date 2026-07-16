@@ -258,8 +258,21 @@ def _write_datastore_json(path: Path, config: BuildConfig, provenance: dict) -> 
 # read
 # --------------------------------------------------------------------------- #
 def read_datastore(path) -> ModelReadyDatastore:
-    """Reconstruct the input dataclasses from a datastore directory."""
+    """Reconstruct the input dataclasses from a datastore directory.
+
+    Round-2 F-018: the reader refuses a datastore whose MAJOR version it does not know —
+    blind-reading a future 2.x could silently misinterpret carriers. Same-major minors
+    (1.0 packages under the 1.1 reader) load with documented defaults."""
     base = Path(path)
+    import json as _json
+
+    meta_path = base / schema.DATASTORE_JSON
+    if meta_path.exists():
+        ver = str(_json.loads(meta_path.read_text()).get("datastore_version", "1.0"))
+        if ver.split(".")[0] != schema.DATASTORE_VERSION.split(".")[0]:
+            raise ValueError(
+                f"datastore version {ver} is a different major than this reader "
+                f"({schema.DATASTORE_VERSION}); refusing to blind-read")
     network = _read_network(base / schema.NETWORK_GPKG)
     subcatchments = _read_subcatchments(base / schema.NETWORK_GPKG)
     rain = _read_forcing(base / schema.FORCING_NC)

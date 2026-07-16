@@ -70,6 +70,17 @@ class BuildResult:
     observed_flow_csv: Optional[Path] = None
 
 
+def _generator_stamp() -> dict:
+    import os
+    try:
+        from importlib.metadata import version as _pkg_version
+        ver = _pkg_version("swmmcanada")
+    except Exception:  # noqa: BLE001
+        ver = "unknown"
+    return {"name": "swmmcanada", "version": ver,
+            "revision": os.environ.get("SOURCE_REVISION", "unknown")}
+
+
 def _interval_str(td: timedelta) -> str:
     minutes = int(td.total_seconds() // 60)
     return f"{minutes // 60}:{minutes % 60:02d}"
@@ -359,6 +370,7 @@ def build_model(
         "systems": _system_counts(network),
         "sections": sections,
         "inp_sha256": hashlib.sha256(inp_path.read_bytes()).hexdigest(),
+        "generator": _generator_stamp(),   # round-2 F-023: which code produced this
     }
     manifest_path = out_dir / "manifest.json"
     manifest_path.write_text(json.dumps(manifest, indent=2))

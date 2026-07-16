@@ -35,7 +35,11 @@ LAYER_SUBCATCHMENTS = "subcatchments"
 # Non-geometry attribute columns per layer (geometry is carried separately by the GPKG).
 JUNCTION_FIELDS = ["name", "invert_m", "max_depth_m", "system"]
 OUTFALL_FIELDS = ["name", "invert_m", "kind", "system"]
-CONDUIT_FIELDS = ["name", "from_node", "to_node", "length_m", "diameter_m", "roughness_n", "system"]
+CONDUIT_FIELDS = [
+    "name", "from_node", "to_node", "length_m", "diameter_m", "roughness_n", "system",
+    # 1.1 (#130): drop-structure offsets + real cross-sections
+    "inlet_offset_m", "outlet_offset_m", "shape", "height_m", "width_m",
+]
 SUBCATCHMENT_FIELDS = [
     "name", "outlet_node", "area_ha", "pct_imperv", "width_m", "pct_slope", "cn",
     "n_imperv", "n_perv", "s_imperv_mm", "s_perv_mm", "pct_zero", "system",

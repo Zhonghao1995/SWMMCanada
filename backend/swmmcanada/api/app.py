@@ -56,7 +56,15 @@ def create_app(*, pipeline=None, workdir=None, run_inline: bool = False) -> Fast
 
     @app.get("/api/v1/healthz")
     def healthz():
-        return {"status": "ok"}
+        # Round-2 F-023: artifacts and services must identify their revision.
+        import os
+        try:
+            from importlib.metadata import version as _pkg_version
+            ver = _pkg_version("swmmcanada")
+        except Exception:  # noqa: BLE001 — health must never 500 over metadata
+            ver = "unknown"
+        return {"status": "ok", "version": ver,
+                "revision": os.environ.get("SOURCE_REVISION", "unknown")}
 
     async def _aoi_from_request(polygon: Optional[str], file: Optional[UploadFile]):
         """The ONE upload-parsing path (shared by submit + preview): geojson text, .geojson

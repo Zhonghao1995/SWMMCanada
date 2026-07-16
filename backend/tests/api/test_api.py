@@ -135,7 +135,10 @@ def test_validation_endpoint_serves_report(tmp_path):
 
 
 def test_healthz(tmp_path):
-    assert _client(tmp_path).get("/api/v1/healthz").json() == {"status": "ok"}
+    body = _client(tmp_path).get("/api/v1/healthz").json()
+    assert body["status"] == "ok"
+    assert body["version"] not in ("", None)      # round-2 F-023: service identifies itself
+    assert "revision" in body
 
 
 # --- design-storm mode (ADR 0018) ----------------------------------------------

@@ -330,6 +330,9 @@ def _finish_build(
 
     _r("BUILDING", 90)
     # Datastore is the PRIMARY build path (ADR 0007): write it, then build the .inp from it.
+    if forcing:   # round-2 F-018: the forcing evidence is part of the citable artifact,
+        #             not just the outer manifest
+        extra_provenance = {**extra_provenance, "forcing": forcing}
     write_datastore(
         ws / result_package.DATASTORE_DIR, network=network, subcatchments=subcatchments, rain=rain,
         config=config, evaporation=evaporation, temperature=temperature, tide=tide,
