@@ -561,6 +561,12 @@ def _impervious_fraction(cell_poly, parcels_gdf, parcels_sidx, buildings_gdf, bu
         return config.max_imperv, False
     roofs = query_union(buildings_gdf, buildings_sidx)
     roofs = roofs.intersection(cell_poly) if roofs is not None else None
+    # Evidence gate (F-004/ADR 0024 §3, mirroring the synthesis-side ADR 0023 rule): a
+    # parcel-covered cell with NO mapped roof must NOT override the land-cover estimate —
+    # "fully parcelled + building layer gap" used to collapse a 60% residential cell to
+    # the 1% clamp. No roof evidence -> parcel_based=False and the raster value stands.
+    if roofs is None or roofs.is_empty:
+        return config.max_imperv, False
     roads = cell_poly.difference(par_local)
     parts = [g for g in (roofs, roads) if g is not None and not g.is_empty]
     area = unary_union(parts).area if parts else 0.0

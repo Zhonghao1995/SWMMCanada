@@ -90,3 +90,32 @@ def test_record_forcing_stamps_the_manifest(tmp_path):
     assert data["forcing"]["rainfall_resolution"] == "hourly"
     assert data["forcing"]["coverage_pct"] == 98.2
     assert "mismatch_warning" not in data["forcing"]     # warning text lives in validation
+
+
+# --- F-019 (ADR 0024): required = regular files inside the root; integrity block -------
+
+def test_symlink_and_directory_do_not_satisfy_required(tmp_path):
+    from swmmcanada import result_package as rp
+
+    pkg = tmp_path / "pkg"
+    pkg.mkdir()
+    (pkg / rp.MODEL_INP).mkdir()                       # a DIRECTORY named model.inp
+    missing = rp.missing_required(pkg)
+    assert rp.MODEL_INP in missing
+
+
+def test_member_checksums_cover_regular_files(tmp_path):
+    import hashlib, json
+    from swmmcanada import result_package as rp
+
+    pkg = tmp_path / "pkg"
+    (pkg / "sub").mkdir(parents=True)
+    (pkg / "a.txt").write_text("hello")
+    (pkg / "sub" / "b.bin").write_bytes(b"\x00\x01")
+    rp.record_checksums(pkg)
+    data = json.loads((pkg / rp.MANIFEST_JSON).read_text())
+    members = data["integrity"]["members"]
+    assert members["a.txt"]["sha256"] == hashlib.sha256(b"hello").hexdigest()
+    assert members["a.txt"]["bytes"] == 5
+    assert "sub/b.bin" in members
+    assert rp.MANIFEST_JSON not in members             # the manifest can't checksum itself

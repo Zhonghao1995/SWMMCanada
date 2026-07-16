@@ -338,6 +338,10 @@ def _finish_build(
     preview_path.parent.mkdir(exist_ok=True)
     preview_path.write_text(json.dumps(network_geojson(network, subcatchments)))
 
+    # Integrity block LAST (F-019): sha-256 + size for every member, so a shipped
+    # package can be verified file by file.
+    result_package.record_checksums(ws)
+
     _r("DONE", 100)
     return result
 

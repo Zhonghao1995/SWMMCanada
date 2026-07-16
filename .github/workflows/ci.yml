@@ -18,8 +18,10 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
-          cache-dependency-path: backend/pyproject.toml
-      - run: pip install -e ".[dev]"
+          cache-dependency-path: backend/constraints.txt
+      # Same version locks as the Docker image (F-023): the environment the tests bless
+      # is the environment the container ships.
+      - run: pip install -e ".[dev]" -c constraints.txt
       - run: pytest -q --cov=swmmcanada --cov-report=xml --cov-report=term-missing
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
