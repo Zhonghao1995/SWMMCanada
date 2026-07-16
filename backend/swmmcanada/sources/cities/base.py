@@ -145,6 +145,11 @@ class RawPipe:
     width_m: Optional[float] = None
 
 
+# Drop-structure offsets beyond this are treated as published-data errors (#148): real
+# entry offsets in local networks run a few metres; Ottawa's literal 30.00s are
+# placeholders, and a 15 m entry on a 2.5 m pipe wrecked dynamic-wave continuity.
+MAX_OFFSET_M = 10.0
+
 # City shape vocab -> SWMM XSECTIONS shape (#130). Unknown/missing -> CIRCULAR, and any
 # non-circular shape without BOTH dims falls back to the equivalent-circular pipe.
 SHAPE_MAP = {
@@ -310,6 +315,7 @@ def assemble_network(
 
     conduits: List[ConduitIn] = []
     n_offset_ends = 0
+    n_offsets_rejected = 0
     n_noncircular = 0
     for name, ka, kb, dia, rough, length, inv_a, inv_b, raw_shape, h_m, w_m in edges:
         if kb in direct:
@@ -326,8 +332,17 @@ def assemble_network(
         # #130: pipe invert = node invert + offset. Node inverts are min-of-ends, so a
         # published end elevation above the node bottom is a drop structure the offset
         # preserves; a missing end elevation means offset 0 (today's behaviour).
+        # #148 plausibility band: an offset beyond MAX_OFFSET_M is a bogus published end
+        # elevation (Ottawa ships literal 30.00s; a 15 m entry on a 2.5 m pipe blew SWMM
+        # continuity to -105%), demoted to 0 and counted — not silently trusted.
         inlet_off = max(0.0, inv_fr - node_inv[fr]) if inv_fr is not None else 0.0
         outlet_off = max(0.0, inv_to - node_inv[to]) if inv_to is not None else 0.0
+        if inlet_off > MAX_OFFSET_M:
+            inlet_off = 0.0
+            n_offsets_rejected += 1
+        if outlet_off > MAX_OFFSET_M:
+            outlet_off = 0.0
+            n_offsets_rejected += 1
         n_offset_ends += int(inlet_off > 0) + int(outlet_off > 0)
         shape, height_m, width_m = swmm_shape(raw_shape, h_m, w_m)
         n_noncircular += int(shape != "CIRCULAR")
@@ -357,7 +372,8 @@ def assemble_network(
         "n_nodes": len(node_xy), "n_inverts_gapfilled": n_missing,
         "n_direct_outfalls": len(direct), "n_dedicated_outfalls": len(dedicated),
         "n_components": n_components, "n_dropped": len(dropped), "dropped": dropped[:20],
-        "n_offset_ends": n_offset_ends, "n_noncircular": n_noncircular,
+        "n_offset_ends": n_offset_ends, "n_offsets_rejected": n_offsets_rejected,
+        "n_noncircular": n_noncircular,
     }
     return NetworkResult(network=network, diagnostics=diagnostics)
 

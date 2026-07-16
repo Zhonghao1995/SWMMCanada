@@ -125,3 +125,19 @@ def test_noncircular_shape_maps_and_falls_back():
     c = next(c for c in res.network.conduits if c.name == "BOX1")
     assert c.shape == "RECT_CLOSED" and c.height_m == 1.2 and c.width_m == 2.4
     assert res.diagnostics["n_noncircular"] == 1
+
+
+def test_implausible_offsets_are_rejected_and_counted():
+    """#148: a published end elevation 30 m above the node bottom is a data error, not a
+    drop shaft — the offset demotes to 0 and the rejection is counted."""
+    from swmmcanada.sources.cities.base import MAX_OFFSET_M, RawPipe, assemble_network
+    low = RawPipe("LOW", (0.0, 0.0), (0.001, 0.0), inv_a=10.0, inv_b=9.0)
+    bogus = RawPipe("BOGUS", (0.001, 0.001), (0.001, 0.0), inv_a=41.0, inv_b=39.0)  # 30 m up
+    res = assemble_network([low, bogus])
+    c = next(c for c in res.network.conduits if c.name == "BOGUS")
+    assert c.outlet_offset_m == 0.0                     # rejected, not trusted
+    assert res.diagnostics["n_offsets_rejected"] == 1
+    drop = RawPipe("DROP", (0.002, 0.001), (0.001, 0.0), inv_a=13.0, inv_b=12.0)   # 3 m up
+    res2 = assemble_network([low, drop])
+    c2 = next(c for c in res2.network.conduits if c.name == "DROP")
+    assert 0 < c2.outlet_offset_m <= MAX_OFFSET_M       # plausible drops survive

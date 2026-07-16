@@ -120,6 +120,9 @@ def assemble_inp(
     # Measured: Kitchener −976% → −0.17%, Ottawa −14.6% → +0.26%.
     opt["ROUTING_STEP"] = 5
     opt["MINIMUM_STEP"] = 0.5
+    # #148: lengthen sub-timestep-travel conduits for dynamic-wave stability — the eight-
+    # city Ottawa run had 96 conduits under 5 m dominating the timestep (COM11652: 71%).
+    opt["LENGTHENING_STEP"] = 0.5
     opt["INERTIAL_DAMPING"] = "PARTIAL"
     opt["NORMAL_FLOW_LIMITED"] = "BOTH"
     opt["MAX_TRIALS"] = 20
