@@ -9,7 +9,10 @@ datastore is multi-carrier on purpose:
   * ``datastore.json``— config + provenance + the carrier file list (the citable header).
 """
 
-DATASTORE_VERSION = "1.0"
+# 1.1 (2026-07-16): conduits gained inlet/outlet offsets + shape/height/width (#130),
+# forcing.nc gained tide_level with datum/clock attrs (#130/ADR 0024). Readers accept
+# 1.0 packages (missing columns/vars read back as the pre-#130 defaults).
+DATASTORE_VERSION = "1.1"
 
 # Carrier files (relative to the datastore directory).
 NETWORK_GPKG = "network.gpkg"

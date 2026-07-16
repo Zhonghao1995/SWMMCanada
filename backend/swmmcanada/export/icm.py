@@ -235,6 +235,24 @@ def _hydrology_lossy(ds) -> List[LossyMapping]:
     MIKE+ headline: ``cn`` → ``curve_number`` is native and lossless in ICM."""
     lossy = [
         LossyMapping(
+            source="conduit inlet/outlet offsets (#130)", target="—", kind="dropped",
+            detail="This export writes pipe ends at node inverts; published drop-structure "
+                   "offsets are not yet mapped. Where the datastore carries non-zero "
+                   "offsets, the exported vertical profile differs from the SWMM build.",
+        ),
+        LossyMapping(
+            source="non-circular cross-sections (#130)", target="circular equivalent",
+            kind="approximated",
+            detail="RECT_CLOSED/EGG/ARCH sections export as equivalent-diameter circular "
+                   "pipes; real shape and dimensions are not yet mapped.",
+        ),
+        LossyMapping(
+            source="tidal outfall stage (#130/ADR 0024)", target="—", kind="dropped",
+            detail="TIMESERIES outfall boundaries (CHS predicted water levels) are not "
+                   "mapped; outfalls export as free boundaries. Coastal backwater "
+                   "behaviour will differ from the SWMM build.",
+        ),
+        LossyMapping(
             source="n_imperv/n_perv", target="runoff surface (dialog)", kind="restructured",
             detail="per-surface Manning n lives on ICM runoff-surface definitions, not on the "
                    "subcatchment import; set when creating the two runoff surfaces (README "

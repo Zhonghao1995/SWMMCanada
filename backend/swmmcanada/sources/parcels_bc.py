@@ -19,24 +19,41 @@ WFS = "https://openmaps.gov.bc.ca/geo/pub/ows"
 LAYER = "pub:WHSE_CADASTRE.PMBC_PARCEL_FABRIC_POLY_SVW"
 _PAGE = 1000
 _MAX_PARCELS = 20000   # sanity cap: an AOI needing more is far beyond synthesis scale
+# Generous BC envelope (F-025): AOIs outside it skip the WFS round-trip entirely instead
+# of discovering "not in BC" through a remote empty result (or a remote timeout).
+_BC_BBOX = (-139.5, 48.0, -113.5, 60.5)
 
 
-def fetch_bc_parcels(bbox_wgs84, *, client=None) -> List[dict]:
-    """Non-road parcel Features (GeoJSON, EPSG:4326) intersecting the 4326 bbox.
-    Graceful: any failure returns [] — cadastre refines cell boundaries, it never blocks
-    a build."""
+def fetch_bc_parcels(bbox_wgs84, *, client=None):
+    """``(features, status)``: non-road parcel Features (GeoJSON, EPSG:4326) intersecting
+    the 4326 bbox, plus an honest acquisition status (F-025/ADR 0024 — "no cadastre" has
+    four different reasons and they must not all look like an empty list):
+
+    - ``not_applicable`` — AOI outside BC, no network call made;
+    - ``ok`` — fetch completed (``n`` may legitimately be 0);
+    - ``truncated`` — the _MAX_PARCELS cap cut the result; caller should treat the
+      cadastre as unusable rather than half-snap;
+    - ``failed`` — network/parse error (graceful: cadastre never blocks a build).
+    """
+    left, bottom, right, top = bbox_wgs84
+    if (right < _BC_BBOX[0] or left > _BC_BBOX[2]
+            or top < _BC_BBOX[1] or bottom > _BC_BBOX[3]):
+        return [], {"status": "not_applicable", "n": 0, "truncated": False}
     try:
         from pyproj import Transformer
 
         tr = Transformer.from_crs(4326, 3005, always_xy=True)
-        left, bottom, right, top = bbox_wgs84
         x0, y0 = tr.transform(left, bottom)
         x1, y1 = tr.transform(right, top)
 
         get = client or _get_json
         features: List[dict] = []
         start = 0
-        while start < _MAX_PARCELS:
+        truncated = False
+        while True:
+            if start >= _MAX_PARCELS:
+                truncated = True
+                break
             # every page carries the sort key: pages must share ONE ordering or
             # features duplicate/vanish across page boundaries (and GeoServer 400s
             # on startIndex without sortBy)
@@ -54,9 +71,11 @@ def fetch_bc_parcels(bbox_wgs84, *, client=None) -> List[dict]:
             if len(page) < _PAGE:
                 break
             start += _PAGE
-        return features
+        if truncated:
+            return [], {"status": "truncated", "n": 0, "truncated": True}
+        return features, {"status": "ok", "n": len(features), "truncated": False}
     except Exception:  # noqa: BLE001 — no cadastre is a normal condition, not an error
-        return []
+        return [], {"status": "failed", "n": 0, "truncated": False}
 
 
 def _get_json(url: str, params: dict):

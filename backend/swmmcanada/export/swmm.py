@@ -28,6 +28,7 @@ class SwmmExporter:
             config=config,
             evaporation=ds.evaporation,
             temperature=ds.temperature,
+            tide=ds.tide,
         )
         return ExportResult(
             target="swmm",

@@ -114,8 +114,14 @@ class TemperatureSeries:
 @dataclass(frozen=True)
 class TideSeries:
     """Predicted water levels (CHS wlp) — the stage boundary for tide-affected outfalls
-    (#130): SWMM ``[OUTFALLS] ... TIMESERIES <ts_name>``."""
+    (#130): SWMM ``[OUTFALLS] ... TIMESERIES <ts_name>``. Levels are in the model's
+    geodetic frame (converted from Chart Datum via the station's published offset) and
+    timestamps in local STANDARD time (ADR 0024 §1); the conversion fields make the
+    frame auditable."""
     timestamps: List[datetime]
     level_m: List[float]
     ts_name: str = "tide"
     station_name: str = ""
+    datum: str = ""                    # geodetic datum the levels are in (e.g. CGVD28)
+    datum_offset_m: float = 0.0        # applied CD -> datum shift
+    clock_utc_offset_h: float = 0.0    # applied UTC -> local-standard-time shift

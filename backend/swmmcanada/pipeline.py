@@ -296,7 +296,10 @@ def _finish_build(
                 forcing = {**(forcing or {}), "tide_boundary": {
                     "station": _st.name, "n_tidal_outfalls": len(_names),
                     "level_range_m": [round(min(_t.level_m), 2), round(max(_t.level_m), 2)],
-                    "source": "CHS IWLS predicted water levels (wlp)"}}
+                    "datum": _t.datum, "datum_offset_m": _t.datum_offset_m,
+                    "clock_utc_offset_h": _t.clock_utc_offset_h,
+                    "source": "CHS IWLS predicted water levels (wlp), datum-converted "
+                              "and clock-aligned (ADR 0024)"}}
     except Exception as _exc:  # noqa: BLE001 — degrade to FREE, never block the build
         forcing = {**(forcing or {}),
                    "tide_boundary_note": f"CHS tide boundary unavailable ({type(_exc).__name__}); "
@@ -400,9 +403,9 @@ def build_from_aoi(
     from swmmcanada.network.parcels import snap_subcatchments_to_parcels
     from swmmcanada.sources.parcels_bc import fetch_bc_parcels
 
-    parcels = fetch_bc_parcels(tuple(aoi.bbox))
+    parcels, parcel_status = fetch_bc_parcels(tuple(aoi.bbox))
     subcatchments, parcel_diag = snap_subcatchments_to_parcels(subcatchments, parcels, aoi)
-    sub_diag["cadastre"] = parcel_diag
+    sub_diag["cadastre"] = {**parcel_diag, "acquisition": parcel_status}
     subcatchments, water_diag = subtract_water(subcatchments, water, junction_xy, aoi)
     sub_diag = {**(sub_diag or {}), "water": water_diag}
     sub_diag.setdefault("service", {}).update(

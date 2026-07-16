@@ -68,12 +68,15 @@ def refine_imperviousness(
         if cell_m.is_empty or cell_m.area <= 0:
             out.append(sub)
             continue
-        roof_frac = cell_m.intersection(roofs_m).area / cell_m.area
+        roofs_in = cell_m.intersection(roofs_m)
+        roof_frac = roofs_in.area / cell_m.area
         if roof_frac < MIN_ROOF_EVIDENCE_FRAC:
             out.append(sub)                       # no evidence -> land-cover value stands
             continue
-        road_frac = (cell_m.intersection(road_m).area / cell_m.area) if road_m is not None else 0.0
-        physical = min(CAP_PCT, 100.0 * (roof_frac + road_frac) + DRIVEWAY_ALLOWANCE_PCT)
+        # union, not sum: a roof inside the road band must not count twice (F-016)
+        paved = roofs_in if road_m is None else unary_union(
+            [roofs_in, cell_m.intersection(road_m)])
+        physical = min(CAP_PCT, 100.0 * (paved.area / cell_m.area) + DRIVEWAY_ALLOWANCE_PCT)
         out.append(replace(sub, pct_imperv=round(physical, 1)))
         n_refined += 1
 

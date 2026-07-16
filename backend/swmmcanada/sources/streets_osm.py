@@ -1,7 +1,15 @@
 """Live street source: OSM via osmnx → an undirected networkx graph (x, y per node),
 then DEM elevation sampling so `network.synthesise_network` can run. The synthesis core
 stays osmnx-free and offline-testable; this adapter is the only osmnx user."""
+import threading
+
 import networkx as nx
+
+# osmnx settings (cache folder, use_cache) are process-GLOBAL, and the poisoned-cache
+# recovery below deletes a directory other tasks may be reading (F-013): one lock
+# serialises every OSM street/building fetch in this process. Coarse but correct — the
+# real fix (per-task cache dirs / process isolation) rides the hosted-mode track (#8).
+_OSM_LOCK = threading.RLock()
 
 from swmmcanada.network.errors import NetworkError
 
@@ -28,19 +36,20 @@ def fetch_street_graph(bbox_wgs84) -> nx.Graph:
     # ([Errno 13] Permission denied: 'cache'; found by the first out-of-8-cities build from
     # the web UI). Cache explicitly in the system temp dir: always writable, and shared
     # across builds, which is kinder to Overpass than disabling the cache.
-    cache = Path(tempfile.gettempdir()) / "swmmcanada-osmnx-cache"
-    cache.mkdir(parents=True, exist_ok=True)
-    ox.settings.cache_folder = str(cache)
+    with _OSM_LOCK:
+        cache = Path(tempfile.gettempdir()) / "swmmcanada-osmnx-cache"
+        cache.mkdir(parents=True, exist_ok=True)
+        ox.settings.cache_folder = str(cache)
 
-    g = _graph_from_bbox(ox, bbox_wgs84, use_cache=True)
-    if g.number_of_nodes() < MIN_PLAUSIBLE_NODES:
-        fresh = _graph_from_bbox(ox, bbox_wgs84, use_cache=False)
-        if fresh.number_of_nodes() > g.number_of_nodes():
-            # The cached answer was poisoned (partial Overpass response): trust the live
-            # one and drop the cache so future builds re-cache good data.
-            shutil.rmtree(cache, ignore_errors=True)
-            cache.mkdir(parents=True, exist_ok=True)
-            g = fresh
+        g = _graph_from_bbox(ox, bbox_wgs84, use_cache=True)
+        if g.number_of_nodes() < MIN_PLAUSIBLE_NODES:
+            fresh = _graph_from_bbox(ox, bbox_wgs84, use_cache=False)
+            if fresh.number_of_nodes() > g.number_of_nodes():
+                # The cached answer was poisoned (partial Overpass response): trust the
+                # live one and drop the cache so future builds re-cache good data.
+                shutil.rmtree(cache, ignore_errors=True)
+                cache.mkdir(parents=True, exist_ok=True)
+                g = fresh
 
     if g.number_of_nodes() < 2:
         raise NetworkError("OSM returned too few street nodes for this AOI.")
@@ -97,7 +106,8 @@ def fetch_building_footprints(bbox_wgs84):
 
     try:
         left, bottom, right, top = bbox_wgs84
-        gdf = ox.features_from_bbox(bbox=(left, bottom, right, top), tags={"building": True})
+        with _OSM_LOCK:
+            gdf = ox.features_from_bbox(bbox=(left, bottom, right, top), tags={"building": True})
         return [g for g in gdf.geometry if g is not None and g.geom_type in ("Polygon", "MultiPolygon")]
     except Exception:
         return []
