@@ -200,3 +200,50 @@ def test_enclosed_pond_reduces_area_but_not_the_display_ring():
     # width followed the area so flow length (~A/W) is preserved
     assert s.width_m < 200.0
     assert abs(s.width_m / 200.0 - s.area_ha / 16.0) < 0.05
+
+
+def test_pond_hole_rides_analysis_geometry_and_datastore():
+    """Round-2 F-005 closure: the enclosed pond becomes an interior ring — zonal
+    statistics and the GPKG carry the hole; only the SWMM display ring stays solid."""
+    from datetime import date, datetime
+    from shapely.geometry import Polygon as ShPoly
+    from swmmcanada.build.config import BuildConfig
+    from swmmcanada.build.models import RainfallSeries, SubcatchmentIn
+    from swmmcanada.geo import aoi_from_geojson
+    from swmmcanada.network.water import subtract_water
+
+    cell = [(-123.510, 48.440), (-123.505, 48.440), (-123.505, 48.444),
+            (-123.510, 48.444), (-123.510, 48.440)]
+    aoi = aoi_from_geojson({"type": "Polygon", "coordinates": [[
+        [-123.512, 48.438], [-123.503, 48.438], [-123.503, 48.446],
+        [-123.512, 48.446], [-123.512, 48.438]]]})
+    pond = ShPoly([(-123.5085, 48.4415), (-123.5065, 48.4415),
+                   (-123.5065, 48.4425), (-123.5085, 48.4425)])
+    sub = SubcatchmentIn(name="S1", outlet_node="J1", area_ha=16.0, pct_imperv=40.0,
+                         width_m=200.0, pct_slope=1.0, polygon=cell)
+    out, _ = subtract_water([sub], pond, {"J1": (-123.509, 48.4405)}, aoi)
+    s = out[0]
+    assert s.holes and len(s.holes) == 1               # the pond is an interior ring
+    analysis = ShPoly(s.polygon, holes=s.holes)
+    assert not analysis.contains(pond.representative_point())   # lake NOT sampled as land
+
+    # and it round-trips the datastore's GPKG
+    import tempfile
+    from pathlib import Path
+    from swmmcanada.build.models import JunctionIn, NetworkIn, OutfallIn
+    from swmmcanada.datastore import read_datastore, write_datastore
+
+    net = NetworkIn(
+        junctions=[JunctionIn("J1", 10.0, -123.509, 48.4405)],
+        outfalls=[OutfallIn("OF1", 9.0, -123.506, 48.4405)],
+        conduits=[__import__("swmmcanada.build.models", fromlist=["ConduitIn"]).ConduitIn(
+            "C1", "J1", "OF1", length_m=50.0)])
+    rain = RainfallSeries(timestamps=[datetime(2022, 6, 1), datetime(2022, 6, 2)],
+                          precip_mm=[5.0, 0.0])
+    with tempfile.TemporaryDirectory() as td:
+        ws = Path(td) / "ds"
+        write_datastore(ws, network=net, subcatchments=[s], rain=rain,
+                        config=BuildConfig(out_dir=Path(td), start=date(2022, 6, 1),
+                                           end=date(2022, 6, 2)))
+        back = read_datastore(ws).subcatchments[0]
+    assert back.holes and len(back.holes) == 1

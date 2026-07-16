@@ -60,6 +60,10 @@ class SubcatchmentIn:
     s_perv_mm: float = 5.0
     pct_zero: float = 25.0
     polygon: Optional[List[Tuple[float, float]]] = None
+    # Round-2 F-005: interior rings (enclosed water / foreign lots) — the ANALYSIS
+    # geometry is Polygon(polygon, holes); the bare exterior is only the SWMM display
+    # ring. Zonal statistics must not sample a lake as land.
+    holes: Optional[List[List[Tuple[float, float]]]] = None
     system: str = "storm_minor"
     # Infiltration superset (ADR 0013): derive fills all three parameter sets; the writer
     # emits whichever the build's InfiltrationModel switch asks for. Defaults = HSG-B /

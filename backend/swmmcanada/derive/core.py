@@ -68,9 +68,9 @@ def derive_parameters(
             out.append(sub)
             continue
 
-        poly_4326 = shp_shape(
-            {"type": "Polygon", "coordinates": [[(float(lon), float(lat)) for lon, lat in sub.polygon]]}
-        )
+        rings = [[(float(lon), float(lat)) for lon, lat in sub.polygon]]
+        rings += [[(float(x), float(y)) for x, y in h] for h in (sub.holes or [])]
+        poly_4326 = shp_shape({"type": "Polygon", "coordinates": rings})
 
         pct_imperv = _impervious_pct(poly_4326, landcover, fallback=sub.pct_imperv)
         pct_slope = _mean_slope_pct(poly_4326, dem_path, fallback=sub.pct_slope)
