@@ -80,3 +80,12 @@ instead of the 30 m land-cover mean:
 - **Evidence threshold: roof fraction ≥ 2 %** — cells without mapped buildings keep the
   land-cover value; OSM's suburban sparsity must degrade to the raster, never to zero.
 - **Cap 90 %** — even a fully built cell keeps some pervious cracks/verges.
+
+## Curve numbers: land cover × HSG (F-021/ADR 0024)
+
+`CURVE_NUMBER` infiltration composes SCS CN as the area-weighted TR-55 value over the
+cell's NALCMS classes for its dominant hydrologic soil group (Table 2-2 rows: woods
+fair/good, brush fair, open space fair, row crop SR good, fallow bare, commercial
+districts, saturated wetland 85, water 98). Unknown classes read as open space. Without
+a usable land-cover window the old single HSG→CN lookup applies, then the caller's
+fallback — the tiers are recorded implicitly by which inputs existed.
