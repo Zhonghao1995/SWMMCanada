@@ -82,6 +82,8 @@ jobs:
           context: backend
           file: backend/Dockerfile
           push: true
+          build-args: |
+            SOURCE_REVISION=${{ github.sha }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha

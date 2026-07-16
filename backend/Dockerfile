@@ -27,6 +27,11 @@ USER appuser
 
 EXPOSE 8000
 
+# Round-2 F-023: the running service and every manifest it writes identify the exact
+# source revision the image was built from.
+ARG SOURCE_REVISION=unknown
+ENV SOURCE_REVISION=${SOURCE_REVISION}
+
 # urllib avoids adding curl to the slim image just for the healthcheck.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD python -c "import os,urllib.request,sys; \
