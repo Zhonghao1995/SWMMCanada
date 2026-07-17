@@ -1,0 +1,12 @@
+{
+  "type": "FeatureCollection",
+  "note": "Niðurföll (catch basins / storm inlets) for subcatchment seeding. Used by test_reykjavik_fetch.",
+  "features": [
+    {"type": "Feature", "geometry": {"type": "Point", "coordinates": [-21.9398, 64.1301]},
+     "properties": {"OBJECTID": 101, "AUDKENNI": "NF.1"}},
+    {"type": "Feature", "geometry": {"type": "Point", "coordinates": [-21.9388, 64.1301]},
+     "properties": {"OBJECTID": 102, "AUDKENNI": "NF.2"}},
+    {"type": "Feature", "geometry": {"type": "Point", "coordinates": [-21.9378, 64.1301]},
+     "properties": {"OBJECTID": 103, "AUDKENNI": "NF.3"}}
+  ]
+}

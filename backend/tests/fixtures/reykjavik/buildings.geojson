@@ -1,0 +1,12 @@
+{
+  "type": "FeatureCollection",
+  "note": "Hús (building footprints) for imperviousness. Includes one self-intersecting 'bowtie' (INVALID) to exercise _repair_polygons — real LÚKK data carries ~1% invalid footprints.",
+  "features": [
+    {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[-21.93990, 64.13005], [-21.93975, 64.13005], [-21.93975, 64.13015], [-21.93990, 64.13015], [-21.93990, 64.13005]]]},
+     "properties": {"OBJECTID": 301}},
+    {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[-21.93950, 64.13005], [-21.93935, 64.13005], [-21.93935, 64.13015], [-21.93950, 64.13015], [-21.93950, 64.13005]]]},
+     "properties": {"OBJECTID": 302}},
+    {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[-21.93920, 64.13005], [-21.93905, 64.13015], [-21.93905, 64.13005], [-21.93920, 64.13015], [-21.93920, 64.13005]]]},
+     "properties": {"OBJECTID": 303, "_note": "bowtie / self-intersecting -> invalid"}}
+  ]
+}

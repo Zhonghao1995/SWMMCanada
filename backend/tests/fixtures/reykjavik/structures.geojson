@@ -1,0 +1,12 @@
+{
+  "type": "FeatureCollection",
+  "note": "Synthetic Reykjavík fráveitubúnaður (structures) — real fitjuskrá field names, hand-authored for the snap test. Coords EPSG:4326 (lon,lat).",
+  "features": [
+    {"type": "Feature", "geometry": {"type": "Point", "coordinates": [-21.9400, 64.1300]},
+     "properties": {"AUDKENNI": "RVK-MH-001", "HLUTUR": "Brunnur", "HAED": 13.0, "BOTNKODI": 10.0}},
+    {"type": "Feature", "geometry": {"type": "Point", "coordinates": [-21.9395, 64.1300]},
+     "properties": {"AUDKENNI": "RVK-MH-002", "HLUTUR": "Brunnur", "HAED": 12.6, "BOTNKODI": 9.5}},
+    {"type": "Feature", "geometry": {"type": "Point", "coordinates": [-21.9390, 64.1299]},
+     "properties": {"AUDKENNI": "RVK-OUT-001", "HLUTUR": "Endi", "HAED": 11.5, "BOTNKODI": 9.0}}
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "type": "FeatureCollection",
+  "note": "Landeignir (land parcels) polygons — lot-line subcatchments. Used by test_reykjavik_fetch.",
+  "features": [
+    {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[-21.9400, 64.1300], [-21.9396, 64.1300], [-21.9396, 64.1303], [-21.9400, 64.1303], [-21.9400, 64.1300]]]},
+     "properties": {"OBJECTID": 201, "AUDKENNI": "L.1"}},
+    {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[-21.9396, 64.1300], [-21.9392, 64.1300], [-21.9392, 64.1303], [-21.9396, 64.1303], [-21.9396, 64.1300]]]},
+     "properties": {"OBJECTID": 202, "AUDKENNI": "L.2"}}
+  ]
+}

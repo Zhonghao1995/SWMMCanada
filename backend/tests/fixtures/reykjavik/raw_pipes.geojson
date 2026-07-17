@@ -1,0 +1,18 @@
+{
+  "type": "FeatureCollection",
+  "note": "Raw Fráveitulagnir mix (what the server returns before the adapter's INNIHALD split): storm=regnvatn, combined=blandað, sanitary=skólp. Used by test_reykjavik_fetch.",
+  "features": [
+    {"type": "Feature", "geometry": {"type": "LineString", "coordinates": [[-21.9400, 64.1300], [-21.9395, 64.1300]]},
+     "properties": {"OBJECTID": 1, "AUDKENNI": "R.1", "EFNISGERD": "steypa", "TVERMAL": 300, "INNIHALD": "regnvatn", "Shape__Length": 24.0}},
+    {"type": "Feature", "geometry": {"type": "LineString", "coordinates": [[-21.9395, 64.1300], [-21.9390, 64.1300]]},
+     "properties": {"OBJECTID": 2, "AUDKENNI": "R.2", "EFNISGERD": "plast", "TVERMAL": 250, "INNIHALD": "regnvatn", "Shape__Length": 24.0}},
+    {"type": "Feature", "geometry": {"type": "LineString", "coordinates": [[-21.9390, 64.1300], [-21.9385, 64.1300]]},
+     "properties": {"OBJECTID": 3, "AUDKENNI": "B.1", "EFNISGERD": "steypa", "TVERMAL": 400, "INNIHALD": "blandað", "Shape__Length": 24.0}},
+    {"type": "Feature", "geometry": {"type": "LineString", "coordinates": [[-21.9385, 64.1300], [-21.9380, 64.1300]]},
+     "properties": {"OBJECTID": 4, "AUDKENNI": "B.2", "EFNISGERD": "stál", "TVERMAL": 500, "INNIHALD": "blandað", "Shape__Length": 24.0}},
+    {"type": "Feature", "geometry": {"type": "LineString", "coordinates": [[-21.9380, 64.1300], [-21.9375, 64.1300]]},
+     "properties": {"OBJECTID": 5, "AUDKENNI": "S.1", "EFNISGERD": "leir", "TVERMAL": 200, "INNIHALD": "skólp", "Shape__Length": 24.0}},
+    {"type": "Feature", "geometry": {"type": "LineString", "coordinates": [[-21.9375, 64.1300], [-21.9370, 64.1300]]},
+     "properties": {"OBJECTID": 6, "AUDKENNI": "S.2", "EFNISGERD": "óþekkt", "TVERMAL": 0, "INNIHALD": "skólp", "Shape__Length": 24.0}}
+  ]
+}

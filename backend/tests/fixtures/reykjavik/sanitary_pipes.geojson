@@ -1,0 +1,10 @@
+{
+  "type": "FeatureCollection",
+  "note": "Synthetic Reykjavík separated sanitary mains (INNIHALD=skólp) — used by the sanitary-tracer test.",
+  "features": [
+    {"type": "Feature",
+     "geometry": {"type": "LineString", "coordinates": [[-21.9400, 64.1300], [-21.9395, 64.1300]]},
+     "properties": {"OBJECTID": 11, "AUDKENNI": "RVK-S-001", "EFNISGERD": "leir", "TVERMAL": 200,
+                    "INNIHALD": "skólp", "RENNSLI": "sjálf", "Shape__Length": 24.3}}
+  ]
+}

@@ -28,6 +28,9 @@ from swmmcanada.sources.cities.ottawa import (
 from swmmcanada.sources.cities.regina import (
     build_regina_network, fetch_regina_land, fetch_regina_sanitary, fetch_regina_storm,
 )
+from swmmcanada.sources.cities.reykjavik import (
+    build_reykjavik_network, fetch_reykjavik_land, fetch_reykjavik_sanitary, fetch_reykjavik_storm,
+)
 from swmmcanada.sources.cities.surrey import (
     build_surrey_network, fetch_surrey_land, fetch_surrey_sanitary, fetch_surrey_storm,
 )
@@ -149,6 +152,21 @@ CITIES: Tuple[CitySpec, ...] = (
         storm=lambda bbox, client: build_vancouver_network(fetch_vancouver_storm(bbox, client=client)),
         land=lambda bbox, client: fetch_vancouver_land(bbox, client=client),
         sanitary=lambda bbox, client: build_vancouver_network(fetch_vancouver_sanitary(bbox, client=client)),
+    ),
+    # Reykjavík (IS) — first non-Canadian city: geometry-inferred topology like Ottawa, but with
+    # REAL surveyed inverts carried on the structure points (BOTNKODI) and snapped onto pipe ends.
+    # National *fitjuskrá* schema shared across Icelandic municipalities. NB: the Canada geofence
+    # below (preview/UX only) still rejects this AOI — widening it is deliberately out of scope for
+    # this real-network-only adapter; city dispatch here is exact via the coverage bbox.
+    CitySpec(
+        key="reykjavik", label="Reykjavík, IS",
+        coverage=(-22.05, 64.05, -21.60, 64.20), sub_crs="EPSG:3057",
+        network_source="Veitur / Orkuveita Reykjavíkur fráveita via LÚKOR (real municipal network); "
+                       "scaffolded against the shared-schema Kópavogur LÚKK open service pending "
+                       "Reykjavík host confirmation",
+        storm=lambda bbox, client: build_reykjavik_network(fetch_reykjavik_storm(bbox, client=client)),
+        land=lambda bbox, client: fetch_reykjavik_land(bbox, client=client),
+        sanitary=lambda bbox, client: build_reykjavik_network(fetch_reykjavik_sanitary(bbox, client=client)),
     ),
 )
 

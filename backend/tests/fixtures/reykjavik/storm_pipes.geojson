@@ -1,0 +1,14 @@
+{
+  "type": "FeatureCollection",
+  "note": "Synthetic Reykjavík fráveitulagnir (mains) — real fitjuskrá field names. No inverts/node-ids on the pipe (inverts live on structures.geojson). Coords EPSG:4326 (lon,lat).",
+  "features": [
+    {"type": "Feature",
+     "geometry": {"type": "LineString", "coordinates": [[-21.9400, 64.1300], [-21.9395, 64.1300]]},
+     "properties": {"OBJECTID": 1, "AUDKENNI": "RVK-P-001", "EFNISGERD": "steypa", "TVERMAL": 300,
+                    "INNIHALD": "ofanvatn", "RENNSLI": "sjálf", "Shape__Length": 24.3}},
+    {"type": "Feature",
+     "geometry": {"type": "LineString", "coordinates": [[-21.9395, 64.1300], [-21.9390, 64.1299]]},
+     "properties": {"OBJECTID": 2, "AUDKENNI": "RVK-P-002", "EFNISGERD": "plast", "TVERMAL": 250,
+                    "INNIHALD": "blandað", "RENNSLI": "sjálf", "Shape__Length": 25.1}}
+  ]
+}
