@@ -76,7 +76,13 @@ def fetch_paged(client, url, bbox, *, where: str = "1=1", fmt: str = "geojson",
         payload = client.get_json(url, params) or {}
         page = payload.get("features") or []
         features.extend(map(transform, page) if transform else page)
-        if not payload.get("exceededTransferLimit") or not page:
+        # Esri JSON (and ArcGIS Server GeoJSON) report exceededTransferLimit top-level, but AGOL /
+        # newer hosted FeatureServers nest it under the GeoJSON collection's ``properties`` — read
+        # both, or a >1-page GeoJSON fetch silently truncates (live Calgary: a 4716-pipe AOI
+        # returned exactly 2000; surfaced by the Reykjavík adapter review, PR #153).
+        exceeded = (payload.get("exceededTransferLimit")
+                    or (payload.get("properties") or {}).get("exceededTransferLimit"))
+        if not exceeded or not page:
             break
         offset += len(page)
     return features

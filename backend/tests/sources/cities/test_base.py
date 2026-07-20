@@ -2,7 +2,7 @@
 `esri_to_geojson` (Esri-JSON geometry -> GeoJSON Feature) and the thin `ArcGISClient`.
 These are lifted out of the per-city adapters so every city reuses one copy.
 """
-from swmmcanada.sources.cities.base import ArcGISClient, esri_to_geojson
+from swmmcanada.sources.cities.base import ArcGISClient, esri_to_geojson, fetch_paged
 
 
 def test_esri_single_path_to_linestring():
@@ -63,3 +63,54 @@ def test_arcgis_client_get_json(monkeypatch):
     assert out == {"ok": True}
     assert seen == {"method": "GET", "url": "http://x/query",
                     "params": {"f": "json"}, "timeout": 12.0, "raised": True}
+
+
+class _PagingClient:
+    """Serves ``total`` synthetic features page by page, reporting ``exceededTransferLimit``
+    where the given server style puts it: ``top`` = top-level (Esri JSON everywhere; GeoJSON on
+    self-hosted ArcGIS Server — Victoria/Kelowna/Regina...), ``nested`` = under the GeoJSON
+    collection's ``properties`` (AGOL / newer hosted FeatureServers — Calgary/Kitchener/Vancouver)."""
+
+    def __init__(self, total, style):
+        self.total, self.style = total, style
+        self.offsets = []
+
+    def get_json(self, url, params):
+        offset = int(params["resultOffset"])
+        n = int(params["resultRecordCount"])
+        self.offsets.append(offset)
+        page = [{"type": "Feature", "properties": {"OBJECTID": i}, "geometry": None}
+                for i in range(offset, min(offset + n, self.total))]
+        payload = {"features": page}
+        if offset + n < self.total:
+            if self.style == "top":
+                payload["exceededTransferLimit"] = True
+            else:
+                payload["properties"] = {"exceededTransferLimit": True}
+        return payload
+
+
+def test_fetch_paged_drains_nested_geojson_flag():
+    """AGOL hosted FeatureServers nest ``exceededTransferLimit`` under the GeoJSON collection's
+    ``properties`` — the loop must read it there too, or any AOI beyond one page silently
+    truncates (live Calgary: 4716-pipe AOI returned exactly 2000; surfaced by PR #153)."""
+    client = _PagingClient(total=25, style="nested")
+    feats = fetch_paged(client, "http://x/query", (0, 0, 1, 1), page_size=10)
+    assert len(feats) == 25
+    assert client.offsets == [0, 10, 20]
+
+
+def test_fetch_paged_drains_toplevel_flag():
+    """The pre-existing contract: a top-level flag (Esri JSON, ArcGIS Server GeoJSON) pages fully."""
+    client = _PagingClient(total=25, style="top")
+    feats = fetch_paged(client, "http://x/query", (0, 0, 1, 1), page_size=10)
+    assert len(feats) == 25
+    assert client.offsets == [0, 10, 20]
+
+
+def test_fetch_paged_single_page_stops_immediately():
+    """No flag anywhere (result fits one page) -> exactly one request, no phantom second page."""
+    client = _PagingClient(total=7, style="nested")
+    feats = fetch_paged(client, "http://x/query", (0, 0, 1, 1), page_size=10)
+    assert len(feats) == 7
+    assert client.offsets == [0]

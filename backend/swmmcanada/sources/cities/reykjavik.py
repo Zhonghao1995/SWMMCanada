@@ -210,11 +210,12 @@ def _system_of(feature: dict) -> str:
 # --- fetch --------------------------------------------------------------------------------
 def _fetch(url, bbox, client, where="1=1") -> list:
     """Paginated bbox query via the shared loop, ALWAYS as Esri JSON + convert. Two reasons:
-    (1) it is the only format whose paging flag (``exceededTransferLimit``) sits at the top level
-    where ``base.fetch_paged`` looks — GeoJSON nests it under ``.properties``, so a GeoJSON fetch
-    silently stops after one page (verified: a 6428-pipe AOI returned exactly 1000); (2) both the
-    Kópavogur hosted FeatureServer and the Reykjavík LÚKOR MapServer serve Esri JSON, so one path
-    covers the host swap. See fixtures/reykjavik/README.md."""
+    (1) Esri JSON reports the paging flag (``exceededTransferLimit``) top-level on every host —
+    GeoJSON nests it under ``.properties`` on hosted FeatureServers, the trap that silently
+    truncated >1-page GeoJSON fetches (a 6428-pipe AOI returned exactly 1000) until
+    ``base.fetch_paged`` learned to read both places; (2) both the Kópavogur hosted FeatureServer
+    and the Reykjavík LÚKOR MapServer serve Esri JSON, so one path covers the host swap.
+    See fixtures/reykjavik/README.md."""
     return base.fetch_paged(client, f"{url}/query", bbox, where=where, fmt="json",
                             page_size=_PAGE, transform=base.esri_to_geojson)
 

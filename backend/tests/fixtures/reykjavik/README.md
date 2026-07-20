@@ -17,10 +17,11 @@ offline; a live capture drops in without touching the adapter.
   come from the City LÚKR portal (lukrgatt.reykjavik.is: OpinGognLodirLodamork / OpinGognHus).
 
 The adapter fetches **Esri JSON** and converts (`_fetch` → `base.esri_to_geojson`), for both hosts.
-NB: a **GeoJSON** fetch would silently truncate — ArcGIS nests `exceededTransferLimit` under
-`.properties` for GeoJSON, where `base.fetch_paged` (which reads it top-level) never sees it, so
-paging stops after one page (a 6428-pipe AOI returned exactly 1000). Esri JSON reports the flag
-top-level, so paging works. This is a latent trap for any GeoJSON-format adapter in the repo.
+NB: hosted FeatureServers nest `exceededTransferLimit` under the GeoJSON collection's
+`.properties`, which once made a GeoJSON fetch silently stop after one page (a 6428-pipe AOI
+returned exactly 1000). `base.fetch_paged` now reads the flag in both places (fixed after this
+adapter's review surfaced it — live Calgary had lost 2716 of a 4716-pipe AOI), so GeoJSON pages
+correctly too; Esri JSON stays this adapter's format because both Icelandic hosts serve it.
 
 ## Topology contract (Ottawa-style, but with real inverts)
 Pipes carry **no inverts and no node ids** → connectivity is inferred from polyline endpoints
