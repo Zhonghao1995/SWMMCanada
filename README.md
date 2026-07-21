@@ -47,10 +47,10 @@ Either mode then gives you the same things: subcatchments, rainfall, and a share
 
 **Easiest: the hosted beta (nothing to install).** Open **[swmm.h2ox.me](https://swmm.h2ox.me/)**, draw a *small* area, pick dates, and click **Build SWMM model**. Keep the area small (the demo server has ~2 GB RAM); for anything large, self-host as below.
 
-**Quickest local: pull the prebuilt backend image** ([all tags](https://github.com/Zhonghao1995/SWMMCanada/pkgs/container/swmmcanada)):
+**Quickest local: pull the prebuilt backend image** ([all tags](https://hub.docker.com/r/zhonghao0901/swmmcanada/tags)):
 
 ```bash
-docker run --rm -p 8000:8000 ghcr.io/zhonghao1995/swmmcanada:latest
+docker run --rm -p 8000:8000 zhonghao0901/swmmcanada:latest
 # API on http://localhost:8000  ·  health: /api/v1/healthz
 ```
 
