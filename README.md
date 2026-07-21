@@ -13,6 +13,7 @@
   <a href="https://github.com/Zhonghao1995/SWMMCanada/pkgs/container/swmmcanada"><img src="https://img.shields.io/badge/ghcr.io-image-2496ED?logo=docker&logoColor=white" alt="Container image on GHCR" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT license" /></a>
   <a href="https://zhonghaoz.ca"><img src="https://img.shields.io/badge/built%20by-Zhonghao-FF7139" alt="Built by Zhonghao" /></a>
+  <a href="https://hub.docker.com/r/zhonghao0901/swmmcanada"><img src="https://img.shields.io/docker/pulls/zhonghao0901/swmmcanada?logo=docker&logoColor=white&color=2496ED" alt="Docker Hub pulls" /></a>
 </p>
 
 <p align="center"><em>🚧 Under construction. This repository is the data-preprocessing and upstream model-building module for <a href="https://github.com/Zhonghao1995/agentic-swmm-workflow"><strong>Agentic SWMM</strong></a> and <strong>Agentic MIKE+</strong>.</em></p>
