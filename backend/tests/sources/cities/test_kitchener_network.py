@@ -271,3 +271,61 @@ def test_sanitary_skeleton_assembles_from_fixture():
     node_names = {j.name for j in net.junctions} | {o.name for o in net.outfalls}
     assert all(c.from_node in node_names and c.to_node in node_names for c in net.conduits)
     assert all(f["properties"]["CATEGORY"] == "GRAVITY" for f in _load("sanitary_pipes"))
+
+
+# --- #157: 0 is Kitchener's missing-invert sentinel, not an elevation -------------------
+
+def test_zero_invert_is_missing_not_sea_level():
+    """#157: Kitchener publishes a literal 0.0 invert for "unknown" (10 of 594 pipe ends on
+    the live audit AOI). The Region sits at ~300-360 m AMSL, so reading 0.0 as an elevation
+    made that node the deepest in its component — poisoning the neighbour gap-fill and
+    yielding a 336 m junction depth under a real 336 m cover."""
+    pipes = [
+        {"type": "Feature",
+         "geometry": {"type": "LineString",
+                      "coordinates": [[-80.4887, 43.4416], [-80.4889, 43.4414]]},
+         "properties": {"STMPIPEID": 1, "UP_STMMANHOLEID": 100, "DN_STMMANHOLEID": 101,
+                        "UP_INVERT": 320.0, "DN_INVERT": 0, "WIDTH": 375, "HEIGHT": 375,
+                        "PIPE_SHAPE": "ROUND", "MATERIAL": "CP", "LENGTH": 22.8}},
+        {"type": "Feature",
+         "geometry": {"type": "LineString",
+                      "coordinates": [[-80.4889, 43.4414], [-80.4891, 43.4412]]},
+         "properties": {"STMPIPEID": 2, "UP_STMMANHOLEID": 101, "DN_STMMANHOLEID": 102,
+                        "UP_INVERT": 319.5, "DN_INVERT": 319.0, "WIDTH": 375, "HEIGHT": 375,
+                        "PIPE_SHAPE": "ROUND", "MATERIAL": "CP", "LENGTH": 22.8}},
+    ]
+    manholes = [
+        {"type": "Feature", "geometry": {"type": "Point", "coordinates": [-80.4887, 43.4416]},
+         "properties": {"STMMANHOLEID": 100, "COVER_ELEVATION": 322.5}},
+        {"type": "Feature", "geometry": {"type": "Point", "coordinates": [-80.4889, 43.4414]},
+         "properties": {"STMMANHOLEID": 101, "COVER_ELEVATION": 322.0}},
+        {"type": "Feature", "geometry": {"type": "Point", "coordinates": [-80.4891, 43.4412]},
+         "properties": {"STMMANHOLEID": 102, "COVER_ELEVATION": 321.5}},
+    ]
+    res = build_kitchener_network(pipes, manholes, [])
+    inverts = [j.invert_m for j in res.network.junctions]
+    assert all(v > 300.0 for v in inverts), f"a 0.0 sentinel leaked in as an elevation: {inverts}"
+    # and no junction ends up absurdly deep as a result
+    assert all(j.max_depth_m <= 15.0 for j in res.network.junctions)
+
+
+def test_zero_cover_elevation_is_missing_too():
+    """A 0.0 COVER_ELEVATION is the same sentinel: it must not become a node's ground, which
+    would make `rim - invert` negative and silently fall back to the default depth."""
+    pipes = [
+        {"type": "Feature",
+         "geometry": {"type": "LineString",
+                      "coordinates": [[-80.4887, 43.4416], [-80.4889, 43.4414]]},
+         "properties": {"STMPIPEID": 1, "UP_STMMANHOLEID": 100, "DN_STMMANHOLEID": 101,
+                        "UP_INVERT": 320.0, "DN_INVERT": 319.5, "WIDTH": 375, "HEIGHT": 375,
+                        "PIPE_SHAPE": "ROUND", "MATERIAL": "CP", "LENGTH": 22.8}},
+    ]
+    manholes = [
+        {"type": "Feature", "geometry": {"type": "Point", "coordinates": [-80.4887, 43.4416]},
+         "properties": {"STMMANHOLEID": 100, "COVER_ELEVATION": 0}},
+        {"type": "Feature", "geometry": {"type": "Point", "coordinates": [-80.4889, 43.4414]},
+         "properties": {"STMMANHOLEID": 101, "COVER_ELEVATION": 323.0}},
+    ]
+    res = build_kitchener_network(pipes, manholes, [])
+    by = {j.name: j for j in res.network.junctions}
+    assert by["100"].max_depth_m == KitchenerNetworkConfig().default_max_depth_m

@@ -17,6 +17,16 @@ layer, so subcatchment delineation can use real lot lines + roofs (ADR 0005). Ca
 The city's own ArcGIS Server (10.91) serves real geometry for ``f=geojson`` and supports
 pagination (maxRecordCount 1000). All endpoints verified live 2026-07-02 (see
 ``tests/fixtures/regina/README.md``).
+
+Elevation semantics (audit #157, 2026-07-24):
+  * ``STARTELEVATION``/``ENDELEVATION`` = pipe-end INVERTS, stated by the city itself: the
+    companion ``START/ENDELEVATIONDESCRIPTION`` columns read ``'INV'`` on 1000/1000 sampled
+    rows. Confirmed numerically — rim minus pipe end runs median 2.75 m with 252/254 in a
+    plausible 0.8-8 m band and **0/254** ends at or above ground.
+  * ``RIMELEVATION`` = ground/rim (node max depth).
+  * ``SUMPELEVATION`` (published on BOTH node layers) is a genuine chamber floor, a median
+    1.77 m below the rim on the same structure. It is deliberately NOT read: node invert stays
+    the lowest connected pipe invert, so sump depth is not modelled (see ASSUMPTIONS.md).
 """
 from swmmcanada.sources.cities import base
 

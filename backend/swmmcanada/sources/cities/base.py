@@ -156,6 +156,18 @@ class RawPipe:
 # placeholders, and a 15 m entry on a 2.5 m pipe wrecked dynamic-wave continuity.
 MAX_OFFSET_M = 10.0
 
+# Rim-derived node depths beyond this are treated the same way (#157). A municipal gravity
+# manhole deeper than 15 m is essentially unheard of outside deep-tunnel interceptors, so a
+# larger `rim - invert` means the two elevations came from different places: a missing-data
+# sentinel invert under a real rim (Kitchener ships 0.0 inverts at 336 m AMSL -> a 336 m
+# depth), or a gap-filled invert borrowed from far downhill while the rim is the node's own
+# (Reykjavik publishes BOTNKODI on ~27% of structures; 880 of 8375 junctions came out
+# 15-83 m deep). It matters because SWMM reads MaxDepth as the depth at which a node floods:
+# an 83 m junction never floods, so it silently swallows surcharge that should have been
+# reported as flooding. Demote to the default depth and count it, exactly as #148 does for
+# offsets -- never silently trust it.
+MAX_NODE_DEPTH_M = 15.0
+
 # City shape vocab -> SWMM XSECTIONS shape (#130). Unknown/missing -> CIRCULAR, and any
 # non-circular shape without BOTH dims falls back to the equivalent-circular pipe.
 SHAPE_MAP = {
@@ -310,11 +322,24 @@ def assemble_network(
             seq[k] = f"N{len(seq) + 1}"
         return seq[k]
 
+    # node max depth = rim - invert, but only inside the MAX_NODE_DEPTH_M plausibility band:
+    # <=0 means the rim is not above the invert, and a huge value means rim and invert did not
+    # come from the same structure (#157). Both demote to the default and are counted.
+    def _max_depth(k: Coord) -> float:
+        if k not in ground:
+            return config.default_max_depth_m
+        d = ground[k] - node_inv[k]
+        return d if 0 < d <= MAX_NODE_DEPTH_M else config.default_max_depth_m
+
+    n_depths_rejected = sum(
+        1 for k in node_xy
+        if k not in direct and k in ground and ground[k] - node_inv[k] > MAX_NODE_DEPTH_M
+    )
+
     junctions = [
         JunctionIn(
             name=nid(k), invert_m=node_inv[k], x=node_xy[k][0], y=node_xy[k][1],
-            max_depth_m=(ground[k] - node_inv[k]) if (k in ground and ground[k] - node_inv[k] > 0)
-            else config.default_max_depth_m,
+            max_depth_m=_max_depth(k),
         )
         for k in node_xy if k not in direct
     ]
@@ -379,7 +404,7 @@ def assemble_network(
         "n_direct_outfalls": len(direct), "n_dedicated_outfalls": len(dedicated),
         "n_components": n_components, "n_dropped": len(dropped), "dropped": dropped[:20],
         "n_offset_ends": n_offset_ends, "n_offsets_rejected": n_offsets_rejected,
-        "n_noncircular": n_noncircular,
+        "n_noncircular": n_noncircular, "n_depths_rejected": n_depths_rejected,
     }
     return NetworkResult(network=network, diagnostics=diagnostics)
 

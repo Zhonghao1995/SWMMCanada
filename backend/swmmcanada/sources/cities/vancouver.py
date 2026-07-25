@@ -21,6 +21,13 @@ integrating it needs multi-anchor reconciliation (ADR 0020 §3).
 **Combined mains join the storm system** (author decision, 2026-07-10): downtown Vancouver
 is largely combined (9.7k Combined vs 17.2k Storm mains city-wide) and combined pipes do
 carry the stormwater; the sanitary tracer stays Sanitary-only so nothing is double-counted.
+
+Elevation semantics (audit #157, 2026-07-24): ``rimelev`` = ground/rim (city alias literally
+"Rim Elevation") and ``UPSTREAM_INVERT``/``DWNSTREAM_INVERT`` = pipe-end INVERTS (aliases
+"Upstream Invert" / "Downstream Invert", each with its own city-published ESTIMATED flag). Rim
+minus min connected invert came out 0/156 implausible on the fixture AOI. The Storm Mains layer
+also carries ``NFB_ELEVATION`` / ``DEPTH_AT_PL`` / ``DEPTH_AT_PL_BELOW_CL``, none of which are
+read — they are property-line service-connection depths, not main inverts.
 """
 from __future__ import annotations
 

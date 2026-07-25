@@ -15,6 +15,11 @@ overrides the assembler's pipe-end-derived outfall inverts where present. The bu
 pipe maps to the city's ``Diameter`` (mm) as an equivalent circular diameter; the original ``PipeShape``
 is kept in diagnostics. London land layers (catch basins / parcels / buildings) feed the ADR 0005
 subcatchment method (UTM 17N). See ``tests/fixtures/london/README.md``.
+
+Elevation semantics (audit #157, 2026-07-24): ``Upstream/DownstreamInvert`` = pipe-end INVERTS,
+outfall ``PipeInvert`` = the outfall's own pipe invert, and ``LidElevation`` = the cover/rim —
+the city's alias is literally "Lid Elevation", and its published ``Depth`` corroborates the
+arithmetic (residual ``(LidElevation - min invert) - Depth`` median -0.05 m, p75 +0.01 m).
 """
 from __future__ import annotations
 

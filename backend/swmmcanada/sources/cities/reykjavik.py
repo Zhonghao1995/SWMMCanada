@@ -21,6 +21,25 @@ manhole ids) and Endi/útrás structures into ``outfall_points``. The shared ass
 Combined mains (INNIHALD=blandað) join the storm system (ADR 0021, as in Ottawa/Vancouver); the
 separated sanitary lines are the second tagged system (ADR 0011). All source geometry is ISN93
 (EPSG:3057) and requested back in EPSG:4326 by the shared fetch loop. See fixtures/reykjavik/README.md.
+
+Elevation semantics (audit #157, 2026-07-24) — this was the sharpest case, since the adapter
+lifts a STRUCTURE-level bottom onto pipe ends that publish nothing:
+  * ``BOTNKODI`` = the FLOW LINE, not a sump/chamber floor. The publisher says so itself: the
+    field's alias is literally ``Rennslishæð`` ("flow elevation"), and its companion accuracy
+    column ``nakvBotnr`` is ``Nákvæmni rennslishæðar`` ("accuracy of the flow elevation"). The
+    *fitjuskrá* schema publishes no separate sump field. Confirmed numerically: HAED - BOTNKODI
+    runs median 1.97 m (p25 1.58, p75 2.50) with 1807/1912 structures in a plausible 1-5 m band,
+    i.e. a flow line, not a flow line plus a sump. So pipe ends are NOT systematically too low.
+  * ``HAED`` = rim/ground. At ``HLUTUR='endi'`` (outfalls) HAED == BOTNKODI (median 0.012 m),
+    the same convention Victoria's outfall layer uses.
+  * KNOWN LOSS (unfixable from this source): one structure value smeared onto every end that
+    snaps to it erases in-chamber falls. 949 of 1111 structures (85%) on the audit AOI receive
+    more than one pipe end. Peer cities that DO publish per-end inverts put the size of what is
+    lost at a median 0.02-0.11 m and a p75 of 0.13-0.53 m (Victoria/Surrey/Kitchener/London/
+    Calgary), with tails to ~5 m. Reykjavík slopes are therefore smooth by construction.
+  * BOTNKODI covers only ~27% of structures, so 7642 of 9627 nodes gap-fill their invert from
+    neighbours. That interacts badly with terrain relief — see the max-depth band in
+    ``cities.base`` (#157) and the follow-up issue on the global-minimum fallback.
 """
 import re
 from collections import defaultdict

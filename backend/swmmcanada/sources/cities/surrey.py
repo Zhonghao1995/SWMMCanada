@@ -15,6 +15,17 @@ Buildings, so subcatchment imperviousness uses the real parcel/building override
 
 ``f=geojson`` returns real geometry on both services; the ``_as_geojson`` fallback converts
 any layer that answers in Esri JSON. See ``tests/fixtures/surrey/README.md``.
+
+Elevation semantics (audit #157, 2026-07-24): ``UP/DOWN_ELEVATION`` (mains) are pipe-end
+INVERTS, not crowns or centrelines. Surrey's dictionary is silent (the alias is just
+"UP ELEVATION"), so this was settled numerically against the node layer's own
+``OUTFLOW_ELEVATION`` — a chamber flow-line field nothing else consumes: a main's UP end
+equals its UP_NODE's OUTFLOW_ELEVATION EXACTLY (median 0.000, p25=p75=0.000 over 269 ends),
+DOWN ends land a median 0.05 m above the receiving chamber's outflow (the benching fall), and
+all ends sit a median 2.41 m below ``RIM_ELEVATION``. Of 534 ends with a diameter, 355 are
+within 5 cm of invert vs 27 of centreline and 10 of crown — a crown misread would have shifted
+everything by one full diameter. ``RIM_ELEVATION`` = ground/rim (0.0 screened as a placeholder
+by ``_rim``, since a rim at sea level is a missing value even though a pipe invert there is not).
 """
 from swmmcanada.sources.cities import base
 

@@ -141,3 +141,34 @@ def test_implausible_offsets_are_rejected_and_counted():
     res2 = assemble_network([low, drop])
     c2 = next(c for c in res2.network.conduits if c.name == "DROP")
     assert 0 < c2.outlet_offset_m <= MAX_OFFSET_M       # plausible drops survive
+
+
+# --- #157: rim-derived node depth must stay inside a plausibility band -----------------
+
+def test_implausible_node_depth_is_rejected_and_counted():
+    """#157: a rim and an invert that did not come from the same structure produce an absurd
+    `rim - invert`. SWMM reads MaxDepth as the depth at which a node floods, so an 80 m
+    junction never floods and silently swallows surcharge. Demote to the default and count."""
+    from swmmcanada.sources.cities.base import (
+        MAX_NODE_DEPTH_M, AssembleConfig, RawPipe, assemble_network,
+    )
+    cfg = AssembleConfig()
+    pipe = RawPipe("P1", (0.0, 0.0), (0.001, 0.0), inv_a=10.0, inv_b=9.0)
+
+    # a rim 80 m above the invert (Reykjavik: own HAED vs an invert gap-filled from the coast)
+    res = assemble_network([pipe], ground_points=[((0.0, 0.0), 90.0)])
+    j = next(j for j in res.network.junctions if j.name == "N1")
+    assert j.max_depth_m == cfg.default_max_depth_m
+    assert res.diagnostics["n_depths_rejected"] == 1
+
+    # a plausible rim survives untouched, and is NOT counted as a rejection
+    res2 = assemble_network([pipe], ground_points=[((0.0, 0.0), 13.0)])
+    j2 = next(j for j in res2.network.junctions if j.name == "N1")
+    assert j2.max_depth_m == pytest.approx(3.0)
+    assert res2.diagnostics["n_depths_rejected"] == 0
+
+    # exactly at the band edge is still trusted
+    res3 = assemble_network([pipe], ground_points=[((0.0, 0.0), 10.0 + MAX_NODE_DEPTH_M)])
+    j3 = next(j for j in res3.network.junctions if j.name == "N1")
+    assert j3.max_depth_m == pytest.approx(MAX_NODE_DEPTH_M)
+    assert res3.diagnostics["n_depths_rejected"] == 0
