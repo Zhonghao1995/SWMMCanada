@@ -20,6 +20,12 @@ NOTE: this org publishes NO parcel polygons (``Property_Ownership_Public`` is PO
 addresses only), so ``fetch_kitchener_land`` returns ``parcels: []`` and the parcel/building
 subcatchment delineation falls back to Voronoi (as it does for Ottawa). Buildings
 (``Building_Outlines``, polygons) are available. See ``tests/fixtures/kitchener/README.md``.
+
+Elevation semantics (audit #157, 2026-07-24): ``UP_INVERT``/``DN_INVERT`` = pipe-end INVERTS
+and ``COVER_ELEVATION`` = the cover/rim — Kitchener publishes ``SUMP`` and ``DEPTH`` as separate
+columns, so the cover field is unambiguous, and cover minus min connected invert runs median
+2.68 m with 290/297 in a plausible 0.8-8 m band. The audit's real catch here was the missing-data
+sentinel: a literal ``0`` in any of these fields means "unknown", not sea level (see ``_elev``).
 """
 from __future__ import annotations
 
@@ -176,6 +182,17 @@ def _num(v):
     return base.num(v)
 
 
+def _elev(v):
+    """UP_INVERT / DN_INVERT / COVER_ELEVATION -> float m AMSL, or None when missing.
+
+    0 is Kitchener's missing-data sentinel, not an elevation: the Region of Waterloo sits at
+    ~300-360 m AMSL, so a literal 0.0 is "unknown" (audit #157 found 10 of 594 pipe ends on
+    the fixture AOI). Read as a real elevation it made the node the deepest in its component,
+    which both poisoned the neighbour invert gap-fill and produced a 336 m junction depth
+    under a real cover. Mirrors Ottawa/Calgary's ``zero_missing`` and Regina's band."""
+    return base.num(v, zero_missing=True)
+
+
 def _int_id(value) -> Optional[int]:
     """A manhole id usable for a join: a positive integer. ``-1`` (sentinel) / 0 / None -> None."""
     if value is None or value == "":
@@ -224,7 +241,7 @@ def build_kitchener_network(
         c = (xy[0], xy[1])
         coords[mid] = c
         label_points.append((c, str(mid)))
-        elev = _num((f.get("properties") or {}).get("COVER_ELEVATION"))
+        elev = _elev((f.get("properties") or {}).get("COVER_ELEVATION"))
         if elev is not None:
             ground.append((c, elev))
 
@@ -259,7 +276,7 @@ def build_kitchener_network(
         raw_pipes.append(base.RawPipe(
             name=str(p.get("STMPIPEID") or p.get("OBJECTID")),
             end_a=up_xy, end_b=dn_xy,
-            inv_a=_num(p.get("UP_INVERT")), inv_b=_num(p.get("DN_INVERT")),
+            inv_a=_elev(p.get("UP_INVERT")), inv_b=_elev(p.get("DN_INVERT")),
             diameter_m=diameter_m,
             roughness_n=material_roughness(p.get("MATERIAL"), config),
             length_m=_num(p.get("LENGTH")),

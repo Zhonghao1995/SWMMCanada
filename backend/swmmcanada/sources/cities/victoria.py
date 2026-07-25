@@ -6,6 +6,17 @@ for ~10% dangling refs) and hands canonical pipes to the shared ``cities.base`` 
 also fetches catch basins + parcels + buildings for the ADR 0005 subcatchment method (UTM 10N).
 The build target is circular-only, so pipes map to an equivalent circular diameter; the original
 ``CrossSectionShape`` is kept in diagnostics. See ``tests/fixtures/victoria/README.md``.
+
+Elevation semantics (audit #157, 2026-07-24):
+  * ``Upstream/DownstreamInvert`` (mains) = pipe-end INVERTS.
+  * ``Elevation`` (manholes/fittings) = RIM / lid. The city's own field alias is literally
+    "Rim Elevation", and its published ``Depth`` reproduces our arithmetic: the residual
+    ``(Elevation - min connected pipe invert) - Depth`` has median 0.000 m with 468/488
+    manholes inside 0.30 m on the fixture AOI. Depth itself runs median 1.80 m (521/557 in a
+    plausible 0.8-8 m band), so this is a cover elevation, not a structure bottom.
+  * ``Elevation`` on the OUTFALLS layer is NOT a rim — it equals the connected pipe invert
+    exactly (13/13 outfalls, residual 0.000). Harmless today because outfall nodes are not
+    junctions, and the assembler's depth band ignores a non-positive rim - invert anyway.
 """
 from __future__ import annotations
 

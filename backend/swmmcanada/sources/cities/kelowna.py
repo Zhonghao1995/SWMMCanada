@@ -11,6 +11,15 @@ ends — no ground_points are passed. Outfalls come from layer 4.
 Kelowna DOES publish parcels (Legal Parcel) and Building Outlines, so subcatchment
 delineation can use real lot lines + roofs (ADR 0005). Catch basins (layer 19, with
 SUMP_ELEVATION / CB_TYPE) seed the subcatchments.
+
+Elevation semantics (audit #157, 2026-07-24):
+  * ``INVERT_IN_Z``/``INVERT_OUT_Z`` = pipe-end INVERTS (city aliases "Invert In Z" /
+    "Invert Out Z"; the layer also names their directions explicitly).
+  * ``SUMP_ELEVATION`` (catch basins, alias "Sump Elevation") is a genuine chamber floor and is
+    deliberately NOT read as a node invert — node invert stays the lowest connected pipe invert
+    and sump depth is not modelled (same call as Regina; see ASSUMPTIONS.md).
+  * ``Ground_Z`` (Building Outlines) is a rim PROXY only, never an invert (ADR 0021 §7); storm
+    manholes publish no elevation at all.
 """
 from swmmcanada.sources.cities import base
 

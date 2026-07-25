@@ -96,3 +96,34 @@ Built-up classes map to the TR-55 urban *pervious* row (open-space fair, 49/69/7
 NOT composite commercial CN: SWMM applies CURVE_NUMBER infiltration to the pervious
 sub-area only and `pct_imperv` already carries the impervious share — composite CN would
 double-count imperviousness. NALCMS class 13 corrected to barren (lichen-moss).
+
+## Node vertical geometry: what an "invert" is here (audit #157)
+
+At one real manhole **three different elevations coexist** — the in-chamber channel/flow
+line, the lowest connected pipe invert, and the sump/chamber floor below the flow line —
+and municipal "bottom elevation" fields may mean any of them. This is the convention the
+pipeline uses, now stated explicitly rather than left implicit in the code:
+
+- **Node invert = the lowest connected pipe-end invert** (`min` over the pipe ends meeting
+  at that node), gap-filled from neighbours where a city publishes no invert.
+- **Sump depth is not modelled.** Regina (`SUMPELEVATION`, a median 1.77 m below the rim),
+  Kelowna (`SUMP_ELEVATION`) and Kitchener (`SUMP`) all publish a genuine chamber-floor
+  field. None is read. A sump is dead storage that traps grit; it does not carry flow, and
+  substituting it for the flow line would lower every node bottom and flatten pipe slopes.
+  Node bottoms therefore sit at the flow line, which is what a hydraulic model wants.
+- **Max depth = rim − lowest pipe invert**, and only inside a plausibility band: a
+  non-positive value, or one beyond `MAX_NODE_DEPTH_M` (15 m), falls back to the 2 m default
+  and is counted as `n_depths_rejected`. SWMM reads MaxDepth as the depth at which a node
+  floods, so an inflated depth creates a node that can *never* flood and silently swallows
+  surcharge that should have been reported as flooding. Before this band existed, 884
+  junctions across the ten fixture AOIs carried impossible depths (to 336 m).
+- **Per-city field semantics are audited, not assumed.** Every elevation field each adapter
+  reads has a confirmed meaning recorded in that adapter's module docstring, with the
+  publisher's own definition quoted where one exists and a numeric cross-check where the
+  dictionary is silent. Two cities settle it with their own arithmetic: Victoria and London
+  publish a `Depth` column that reproduces `rim − invert`.
+- **Known loss — Reykjavík.** Its pipes publish no inverts at all, so one structure-level
+  `BOTNKODI` (confirmed a flow line, alias `Rennslishæð`) is lifted onto every pipe end that
+  snaps to it. That erases in-chamber falls at 85% of its structures; peer cities that
+  publish per-end inverts put the erased fall at a median 0.02–0.11 m (p75 0.13–0.53 m).
+  Reykjavík profiles are smooth by construction.

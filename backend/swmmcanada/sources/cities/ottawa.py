@@ -19,6 +19,11 @@ with the identical invert/width schema, so ``fetch_ottawa_sanitary`` + the uncha
 give the second tagged system (ADR 0011). Storm Manholes (layer 23) carry NO rim/ground
 elevation field (only STRUCT_ID/status, verified 2026-07-03 and re-verified 2026-07-14) —
 no municipal rim source exists, so node max depths keep the assembler default.
+
+Elevation semantics (audit #157, 2026-07-24): ``INVERT_UPSTREAM``/``INVERT_DOWNSTREAM`` = pipe-end
+INVERTS, with ``0`` as the missing-data sentinel (already handled by ``_num``). Ottawa has no rim
+field to misread — re-confirmed on the layer metadata, layer 23 exposes no elevation column — so
+every Ottawa junction takes the default 2 m depth and none can be affected by a rim/invert mix-up.
 """
 from swmmcanada.sources.cities import base
 

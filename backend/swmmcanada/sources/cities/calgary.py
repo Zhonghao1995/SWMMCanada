@@ -18,6 +18,11 @@ The hosted FeatureServer serves real GeoJSON for ``f=geojson`` (geometry populat
 with ``f=geojson`` directly; ``base.esri_to_geojson`` is still applied defensively for any layer
 that falls back to Esri JSON (``attributes``/``paths`` shaped) so the adapter is robust either way.
 All endpoints verified live 2026-06-22 (see ``tests/fixtures/calgary/README.md``).
+
+Elevation semantics (audit #157, 2026-07-24): ``UP_INVERT``/``DN_INVERT`` = pipe-end INVERTS,
+``RIM_ELEV`` = ground/rim. Calgary's aliases are bare, so this rests on the numbers: rim minus
+min connected invert is 20/20 inside a plausible 0.8-8 m band (median 1.94 m) on the fixture
+AOI, with none at or above ground. ``0`` stays the missing-data sentinel (real inverts ~1040 m).
 """
 from swmmcanada.sources.cities import base
 
