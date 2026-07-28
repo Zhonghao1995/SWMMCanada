@@ -29,6 +29,7 @@ def test_real_network_cities_selected():
         (-79.390, 43.650, "toronto", "Toronto"),        # Toronto, ON (King West)
         (-76.565, 44.259, "kingston", "Kingston"),      # Kingston, ON (Cataraqui West)
         (-78.324, 44.301, "peterborough", "Peterborough"), # Peterborough, ON
+        (-122.999, 49.226, "burnaby", "Burnaby"),       # Burnaby, BC (Metrotown-north)
     ]
     for lon, lat, key, label in cases:
         assert city_for_point(lon, lat).key == key, (lon, lat)
