@@ -115,6 +115,9 @@ from swmmcanada.sources.cities.toronto import (
 from swmmcanada.sources.cities.whitby import (
     build_whitby_network, fetch_whitby_land, fetch_whitby_storm,
 )
+from swmmcanada.sources.cities.windsor import (
+    build_windsor_network, fetch_windsor_land, fetch_windsor_sanitary, fetch_windsor_storm,
+)
 from swmmcanada.sources.cities.whiterock import (
     build_whiterock_network, fetch_whiterock_land, fetch_whiterock_sanitary,
     fetch_whiterock_storm,
@@ -442,6 +445,17 @@ CITIES: Tuple[CitySpec, ...] = (
         storm=lambda bbox, client: build_penticton_network(fetch_penticton_storm(bbox, client=client)),
         land=lambda bbox, client: fetch_penticton_land(bbox, client=client),
         sanitary=lambda bbox, client: build_penticton_network(fetch_penticton_sanitary(bbox, client=client)),
+    ),
+    # Windsor (wave 2): first download-and-cache city (static ZIP dumps, no query API);
+    # STORM+COMBINED join the storm graph.
+    CitySpec(
+        key="windsor", label="Windsor, ON",
+        coverage=(-83.12, 42.23, -82.89, 42.36), sub_crs="EPSG:32617",
+        network_source="City of Windsor sewer open data (real municipal network; "
+                       "static ZIP dump, download-and-cache)",
+        storm=lambda bbox, client: build_windsor_network(fetch_windsor_storm(bbox, client=client)),
+        land=lambda bbox, client: fetch_windsor_land(bbox, client=client),
+        sanitary=lambda bbox, client: build_windsor_network(fetch_windsor_sanitary(bbox, client=client)),
     ),
     # Kingston (wave 2): richest link schema (3 node-id families); bimodal invert
     # sentinel band; no rims (default depths); no sanitary network published.
