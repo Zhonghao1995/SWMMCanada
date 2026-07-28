@@ -44,6 +44,9 @@ from swmmcanada.sources.cities.kingston import (
 from swmmcanada.sources.cities.kitchener import (
     build_kitchener_network, fetch_kitchener_land, fetch_kitchener_sanitary, fetch_kitchener_storm,
 )
+from swmmcanada.sources.cities.langley import (
+    build_langley_network, fetch_langley_land, fetch_langley_sanitary, fetch_langley_storm,
+)
 from swmmcanada.sources.cities.london import (
     build_london_network, fetch_london_land, fetch_london_sanitary, fetch_london_storm,
 )
@@ -291,6 +294,16 @@ CITIES: Tuple[CitySpec, ...] = (
         storm=lambda bbox, client: build_nanaimo_network(fetch_nanaimo_storm(bbox, client=client)),
         land=lambda bbox, client: fetch_nanaimo_land(bbox, client=client),
         sanitary=lambda bbox, client: build_nanaimo_network(fetch_nanaimo_sanitary(bbox, client=client)),
+    ),
+    # Township of Langley (wave 2, tier 2): endpoint snapping; string diameters; the
+    # nulls cluster at the table start. Box sits east of Surrey's, west of Abbotsford's.
+    CitySpec(
+        key="langley", label="Township of Langley, BC",
+        coverage=(-122.679, 49.00, -122.45, 49.17), sub_crs="EPSG:32610",
+        network_source="Township of Langley drainage open data (real municipal network)",
+        storm=lambda bbox, client: build_langley_network(fetch_langley_storm(bbox, client=client)),
+        land=lambda bbox, client: fetch_langley_land(bbox, client=client),
+        sanitary=lambda bbox, client: build_langley_network(fetch_langley_sanitary(bbox, client=client)),
     ),
     # Kamloops (wave 2, tier 2): endpoint snapping; the missing sentinel is literal 9999.
     CitySpec(
