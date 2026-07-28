@@ -49,6 +49,10 @@ from swmmcanada.sources.cities.newwestminster import (
 from swmmcanada.sources.cities.ottawa import (
     build_ottawa_network, fetch_ottawa_land, fetch_ottawa_sanitary, fetch_ottawa_storm,
 )
+from swmmcanada.sources.cities.penticton import (
+    build_penticton_network, fetch_penticton_land, fetch_penticton_sanitary,
+    fetch_penticton_storm,
+)
 from swmmcanada.sources.cities.peterborough import (
     build_peterborough_network, fetch_peterborough_land, fetch_peterborough_sanitary,
     fetch_peterborough_storm,
@@ -276,6 +280,15 @@ CITIES: Tuple[CitySpec, ...] = (
         storm=lambda bbox, client: build_peterborough_network(fetch_peterborough_storm(bbox, client=client)),
         land=lambda bbox, client: fetch_peterborough_land(bbox, client=client),
         sanitary=lambda bbox, client: build_peterborough_network(fetch_peterborough_sanitary(bbox, client=client)),
+    ),
+    # Penticton (wave 2): text-with-units diameters, trailing-code materials, Outlet layer.
+    CitySpec(
+        key="penticton", label="Penticton, BC",
+        coverage=(-119.68, 49.44, -119.53, 49.53), sub_crs="EPSG:32611",
+        network_source="City of Penticton storm open data (real municipal network)",
+        storm=lambda bbox, client: build_penticton_network(fetch_penticton_storm(bbox, client=client)),
+        land=lambda bbox, client: fetch_penticton_land(bbox, client=client),
+        sanitary=lambda bbox, client: build_penticton_network(fetch_penticton_sanitary(bbox, client=client)),
     ),
     # Kingston (wave 2): richest link schema (3 node-id families); bimodal invert
     # sentinel band; no rims (default depths); no sanitary network published.
