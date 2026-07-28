@@ -38,7 +38,7 @@ SWMMCanada chooses how to build the network from **where you draw**. You don't s
 
 | Mode | What it does | Where it kicks in |
 |---|---|---|
-| **Real network** | uses the city's published storm pipes (real inverts, diameters, manholes, and outfalls) | **29 cities** that publish a storm network: Victoria, Ottawa, Toronto, Calgary, Surrey, London, Kitchener–Waterloo, Kelowna, Regina, Vancouver, Coquitlam, Burnaby, New Westminster, White Rock, Nanaimo, Penticton, Esquimalt, Kamloops, Langley Township, Delta, Barrie, Abbotsford, Saskatoon, Kingston, Peterborough, Sarnia, Whitby, Moncton, and Reykjavík (IS) — the first international city, on Iceland's national *fitjuskrá* schema |
+| **Real network** | uses the city's published storm pipes (real inverts, diameters, manholes, and outfalls) | **30 cities** that publish a storm network: Victoria, Ottawa, Toronto, Calgary, Surrey, London, Kitchener–Waterloo, Kelowna, Regina, Vancouver, Coquitlam, Burnaby, New Westminster, White Rock, Nanaimo, Penticton, Esquimalt, Kamloops, Langley Township, Delta, Barrie, Abbotsford, Saskatoon, Kingston, Peterborough, Sarnia, Whitby, Greater Sudbury, Moncton, and Reykjavík (IS) — the first international city, on Iceland's national *fitjuskrá* schema |
 | **Synthesize** | builds a realistic network from the street map + open data: DEM-delineated subcatchments where the terrain earns it, pipes sized by the rational method with real ECCC IDF intensities | anywhere else in Canada |
 
 Either mode then gives you the same things: subcatchments, rainfall, and a shareable data package. Where a city also publishes parcels (like Victoria), the subcatchments follow real lot lines. Where a city publishes its **sanitary sewer** too (Regina), the model carries it as a second tagged system in the same `.inp` — the foundation for dual-drainage and separated-sewer studies.
@@ -91,14 +91,14 @@ backend/swmmcanada/      # Python pipeline: open data -> SWMM model
   geo/         AOI parsing, station selection, CRS
   acquire/     ECCC climate · NRCan DEM (MRDEM + HRDEM LiDAR) · NALCMS land cover · SoilGrids soil · HYDAT flow
   sources/     live data adapters (climate, DEM incl. 1 m LiDAR auto-select, ECCC IDF design storms, land cover, soil, OSM streets)
-    cities/    base.py (shared assembler) + 29 real-network adapters (victoria · ottawa · toronto · calgary · surrey · london · kitchener · kelowna · regina · vancouver · coquitlam · burnaby · newwestminster · whiterock · nanaimo · penticton · esquimalt · kamloops · langley · delta · barrie · abbotsford · saskatoon · kingston · peterborough · sarnia · whitby · moncton · reykjavik)
+    cities/    base.py (shared assembler) + 30 real-network adapters (victoria · ottawa · toronto · calgary · surrey · london · kitchener · kelowna · regina · vancouver · coquitlam · burnaby · newwestminster · whiterock · nanaimo · penticton · esquimalt · kamloops · langley · delta · barrie · abbotsford · saskatoon · kingston · peterborough · sarnia · whitby · sudbury · moncton · reykjavik)
   network/     street-graph synthesis · DEM subcatchments behind a terrain honesty gate (Voronoi fallback) · rational-method pipe sizing
   derive/      clip + zonal stats -> subcatchment parameters
   build/       assemble + validate the SWMM .inp
   datastore/   model-ready datastore (GeoPackage + netCDF + JSON)
   export/      model exporters reading the datastore: SWMM · MIKE+ CS import package · InfoWorks ICM ODIC package
   api/         FastAPI async tasks API
-  pipeline.py  build_from_aoi · build_from_<city> (29 real-network cities)
+  pipeline.py  build_from_aoi · build_from_<city> (30 real-network cities)
 
 frontend/src/            # React + Vite + MapLibre web app
   components/   MapPanel.tsx (map + draw AOI) · ControlPanel.tsx (build, layers, download)

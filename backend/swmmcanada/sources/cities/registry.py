@@ -87,6 +87,9 @@ from swmmcanada.sources.cities.saskatoon import (
 from swmmcanada.sources.cities.reykjavik import (
     build_reykjavik_network, fetch_reykjavik_land, fetch_reykjavik_sanitary, fetch_reykjavik_storm,
 )
+from swmmcanada.sources.cities.sudbury import (
+    build_sudbury_network, fetch_sudbury_land, fetch_sudbury_sanitary, fetch_sudbury_storm,
+)
 from swmmcanada.sources.cities.surrey import (
     build_surrey_network, fetch_surrey_land, fetch_surrey_sanitary, fetch_surrey_storm,
 )
@@ -318,6 +321,15 @@ CITIES: Tuple[CitySpec, ...] = (
         storm=lambda bbox, client: build_delta_network(fetch_delta_storm(bbox, client=client)),
         land=lambda bbox, client: fetch_delta_land(bbox, client=client),
         sanitary=lambda bbox, client: build_delta_network(fetch_delta_sanitary(bbox, client=client)),
+    ),
+    # Greater Sudbury (wave 2, tier 2): STYPE-filtered gravity graph; (200,420) band.
+    CitySpec(
+        key="sudbury", label="Greater Sudbury, ON",
+        coverage=(-81.20, 46.35, -80.80, 46.65), sub_crs="EPSG:32617",
+        network_source="City of Greater Sudbury drainage open data (real municipal network)",
+        storm=lambda bbox, client: build_sudbury_network(fetch_sudbury_storm(bbox, client=client)),
+        land=lambda bbox, client: fetch_sudbury_land(bbox, client=client),
+        sanitary=lambda bbox, client: build_sudbury_network(fetch_sudbury_sanitary(bbox, client=client)),
     ),
     # Kamloops (wave 2, tier 2): endpoint snapping; the missing sentinel is literal 9999.
     CitySpec(
