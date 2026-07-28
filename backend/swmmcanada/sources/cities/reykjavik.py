@@ -162,49 +162,13 @@ def _is_outfall(hlutur: str) -> bool:
     return any(t in _OUTFALL_TOKENS for t in re.split(r"[\s/,;_-]+", hlutur.strip().lower()))
 
 
-# SWMM folds every object name to ONE case (node "NF10" == "nf10"), so all id handling below keys
-# on the CASE-FOLDED id. The shared assembler names unlabelled nodes ``N1, N2, …`` (no leading
-# zero), and a real AUDKENNI of that exact shape would collide into one SWMM node — Kópavogur really
-# publishes a mixed ``N10/BR14/NF10`` manhole vocabulary — so that namespace is reserved.
-_RESERVED_ID = re.compile(r"^n[1-9]\d*$")   # matched against the lower-cased id
-
-
-_UNSAFE_NAME_CHARS = re.compile(r"[^A-Za-z0-9._-]+")
-
-
-def _safe_name(raw: str) -> str:
-    """A valid SWMM object name: drop everything outside ``[A-Za-z0-9._-]``. Real AUDKENNI carry
-    spaces and quotes ("Sk logn steinn 150", "Nf2 ", a stray "), which SWMM's whitespace/quote-
-    delimited name syntax cannot hold — they truncate and collide. Returns "" if nothing survives."""
-    return _UNSAFE_NAME_CHARS.sub("", (raw or "").strip())
-
-
-def _safe_labels(label_points, snap_decimals: int) -> Tuple[list, int, int]:
-    """Keep an AUDKENNI as a node id only when it is a valid, unambiguous SWMM name. Real-LÚKK
-    hazards, all handled here: (0) ids with spaces/quotes/other chars SWMM can't hold are
-    SANITISED first (``_safe_name``); then, keyed on the CASE-FOLDED sanitised id (SWMM folds
-    names): (1) ids not globally unique across a fetch window (R./S./N./BR series restart) resolve
-    to >1 node; (2) mixed-case variants (``nf10`` vs ``NF10``) SWMM treats as one; (3) ids matching
-    the assembler's generated ``N#`` namespace. All are dropped (node gets a generated id); a clean
-    unique id keeps its sanitised form. Returns ``(kept, n_dropped_nonunique, n_dropped_reserved)``."""
-    cleaned = [(xy, _safe_name(lab)) for xy, lab in label_points]
-    coords_by_key: Dict[str, set] = defaultdict(set)
-    for xy, lab in cleaned:
-        if lab:
-            coords_by_key[lab.lower()].add((round(xy[0], snap_decimals), round(xy[1], snap_decimals)))
-    kept, n_dup, n_reserved = [], 0, 0
-    for xy, lab in cleaned:
-        if not lab:
-            n_dup += 1            # nothing survived sanitising -> fall back to a generated id
-            continue
-        key = lab.lower()
-        if _RESERVED_ID.match(key):
-            n_reserved += 1
-        elif len(coords_by_key[key]) != 1:
-            n_dup += 1
-        else:
-            kept.append((xy, lab))
-    return kept, n_dup, n_reserved
+# Label safety (SWMM case-folding, reserved N# namespace, non-unique/unsafe ids) now lives in
+# ``cities.base`` — promoted there when Coquitlam became the second consumer. Real-LÚKK hazards
+# that motivated it: AUDKENNI with spaces/quotes ("Sk logn steinn 150"), R./S./N./BR series that
+# restart across a fetch window, mixed-case variants, and a published ``N10`` colliding with the
+# assembler's generated namespace.
+_safe_name = base.safe_name
+_safe_labels = base.safe_labels
 
 
 def _roughness(efnisgerd: Optional[str], default: float = 0.013) -> float:

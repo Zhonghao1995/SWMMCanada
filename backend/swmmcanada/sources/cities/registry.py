@@ -13,6 +13,10 @@ from swmmcanada.sources.cities import base
 from swmmcanada.sources.cities.calgary import (
     build_calgary_network, fetch_calgary_land, fetch_calgary_sanitary, fetch_calgary_storm,
 )
+from swmmcanada.sources.cities.coquitlam import (
+    build_coquitlam_network, fetch_coquitlam_land, fetch_coquitlam_sanitary,
+    fetch_coquitlam_storm,
+)
 from swmmcanada.sources.cities.kelowna import (
     build_kelowna_network, fetch_kelowna_land, fetch_kelowna_sanitary, fetch_kelowna_storm,
 )
@@ -152,6 +156,18 @@ CITIES: Tuple[CitySpec, ...] = (
         storm=lambda bbox, client: build_vancouver_network(fetch_vancouver_storm(bbox, client=client)),
         land=lambda bbox, client: fetch_vancouver_land(bbox, client=client),
         sanitary=lambda bbox, client: build_vancouver_network(fetch_vancouver_sanitary(bbox, client=client)),
+    ),
+    # Coquitlam (wave 2): geometry topology with real per-end inverts (95% populated) and
+    # labelled ends; coverage = the city-boundary envelope (Cadastral layer 11 extent), just
+    # above Surrey's box across the Fraser. Port Coquitlam will later NEST inside this box
+    # (smallest-coverage-box dispatch).
+    CitySpec(
+        key="coquitlam", label="Coquitlam, BC",
+        coverage=(-122.894, 49.221, -122.621, 49.352), sub_crs="EPSG:32610",
+        network_source="City of Coquitlam drainage open data (real municipal network)",
+        storm=lambda bbox, client: build_coquitlam_network(fetch_coquitlam_storm(bbox, client=client)),
+        land=lambda bbox, client: fetch_coquitlam_land(bbox, client=client),
+        sanitary=lambda bbox, client: build_coquitlam_network(fetch_coquitlam_sanitary(bbox, client=client)),
     ),
     # Reykjavík (IS) — first non-Canadian city: geometry-inferred topology like Ottawa, but with
     # REAL surveyed inverts carried on the structure points (BOTNKODI) and snapped onto pipe ends.
