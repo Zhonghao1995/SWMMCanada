@@ -10,6 +10,10 @@ from dataclasses import dataclass
 from typing import Callable, Optional, Tuple
 
 from swmmcanada.sources.cities import base
+from swmmcanada.sources.cities.abbotsford import (
+    build_abbotsford_network, fetch_abbotsford_land, fetch_abbotsford_sanitary,
+    fetch_abbotsford_storm,
+)
 from swmmcanada.sources.cities.barrie import (
     build_barrie_network, fetch_barrie_land, fetch_barrie_sanitary, fetch_barrie_storm,
 )
@@ -159,6 +163,15 @@ CITIES: Tuple[CitySpec, ...] = (
         storm=lambda bbox, client: build_vancouver_network(fetch_vancouver_storm(bbox, client=client)),
         land=lambda bbox, client: fetch_vancouver_land(bbox, client=client),
         sanitary=lambda bbox, client: build_vancouver_network(fetch_vancouver_sanitary(bbox, client=client)),
+    ),
+    # Abbotsford (wave 2): monolithic FeatureServer, coded domains, 0/-1 sentinels.
+    CitySpec(
+        key="abbotsford", label="Abbotsford, BC",
+        coverage=(-122.44, 49.00, -122.10, 49.14), sub_crs="EPSG:32610",
+        network_source="City of Abbotsford drainage open data (real municipal network)",
+        storm=lambda bbox, client: build_abbotsford_network(fetch_abbotsford_storm(bbox, client=client)),
+        land=lambda bbox, client: fetch_abbotsford_land(bbox, client=client),
+        sanitary=lambda bbox, client: build_abbotsford_network(fetch_abbotsford_sanitary(bbox, client=client)),
     ),
     # Barrie (wave 2): geometry topology + FROM/TO_ID labels; device layer carries rims,
     # outfall candidates and catch-basin seeds; real non-circular sections (#130).
