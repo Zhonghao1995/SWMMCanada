@@ -46,6 +46,7 @@ def test_real_network_cities_selected():
         (-122.775, 49.262, "portcoquitlam", "Port Coquitlam"),  # nests inside Coquitlam box
         (-113.317, 53.519, "strathcona", "Strathcona"),  # Strathcona County, AB (Sherwood Park)
         (-83.030, 42.312, "windsor", "Windsor"),        # Windsor, ON (downtown)
+        (-123.035, 49.339, "northvandistrict", "North Vancouver"),  # Lynn Valley
     ]
     for lon, lat, key, label in cases:
         assert city_for_point(lon, lat).key == key, (lon, lat)

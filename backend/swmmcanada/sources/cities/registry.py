@@ -67,6 +67,10 @@ from swmmcanada.sources.cities.newwestminster import (
     build_newwestminster_network, fetch_newwestminster_land, fetch_newwestminster_sanitary,
     fetch_newwestminster_storm,
 )
+from swmmcanada.sources.cities.northvandistrict import (
+    build_northvandistrict_network, fetch_northvandistrict_land,
+    fetch_northvandistrict_sanitary, fetch_northvandistrict_storm,
+)
 from swmmcanada.sources.cities.ottawa import (
     build_ottawa_network, fetch_ottawa_land, fetch_ottawa_sanitary, fetch_ottawa_storm,
 )
@@ -234,7 +238,9 @@ CITIES: Tuple[CitySpec, ...] = (
     CitySpec(
         key="vancouver", label="Vancouver, BC",
         # East edge tightened to Boundary Road (wave 2) so Burnaby's box can sit flush.
-        coverage=(-123.26, 49.19, -123.024, 49.32), sub_crs="EPSG:32610",
+        # North edge tightened to the Burrard shore/Prospect Point (wave 2) so the
+        # District of North Vancouver's box can sit above the Inlet.
+        coverage=(-123.26, 49.19, -123.024, 49.315), sub_crs="EPSG:32610",
         network_source="City of Vancouver sewer network via VanMap (real municipal network; "
                        "storm + combined mains)",
         storm=lambda bbox, client: build_vancouver_network(fetch_vancouver_storm(bbox, client=client)),
@@ -445,6 +451,18 @@ CITIES: Tuple[CitySpec, ...] = (
         storm=lambda bbox, client: build_penticton_network(fetch_penticton_storm(bbox, client=client)),
         land=lambda bbox, client: fetch_penticton_land(bbox, client=client),
         sanitary=lambda bbox, client: build_penticton_network(fetch_penticton_sanitary(bbox, client=client)),
+    ),
+    # District of North Vancouver (wave 2, final city): download-and-cache SHP dumps;
+    # box starts above the Burrard shore (Maplewood flats ceded to stay clear of
+    # Vancouver's box); the western Capilano arm is out of the box for now.
+    CitySpec(
+        key="northvandistrict", label="District of North Vancouver, BC",
+        coverage=(-123.046, 49.316, -122.93, 49.42), sub_crs="EPSG:32610",
+        network_source="District of North Vancouver storm open data (real municipal "
+                       "network; static SHP dump, download-and-cache)",
+        storm=lambda bbox, client: build_northvandistrict_network(fetch_northvandistrict_storm(bbox, client=client)),
+        land=lambda bbox, client: fetch_northvandistrict_land(bbox, client=client),
+        sanitary=lambda bbox, client: build_northvandistrict_network(fetch_northvandistrict_sanitary(bbox, client=client)),
     ),
     # Windsor (wave 2): first download-and-cache city (static ZIP dumps, no query API);
     # STORM+COMBINED join the storm graph.
