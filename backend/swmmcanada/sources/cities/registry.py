@@ -42,6 +42,10 @@ from swmmcanada.sources.cities.london import (
 from swmmcanada.sources.cities.nanaimo import (
     build_nanaimo_network, fetch_nanaimo_land, fetch_nanaimo_sanitary, fetch_nanaimo_storm,
 )
+from swmmcanada.sources.cities.newwestminster import (
+    build_newwestminster_network, fetch_newwestminster_land, fetch_newwestminster_sanitary,
+    fetch_newwestminster_storm,
+)
 from swmmcanada.sources.cities.ottawa import (
     build_ottawa_network, fetch_ottawa_land, fetch_ottawa_sanitary, fetch_ottawa_storm,
 )
@@ -229,6 +233,18 @@ CITIES: Tuple[CitySpec, ...] = (
         storm=lambda bbox, client: build_burnaby_network(fetch_burnaby_storm(bbox, client=client)),
         land=lambda bbox, client: fetch_burnaby_land(bbox, client=client),
         sanitary=lambda bbox, client: build_burnaby_network(fetch_burnaby_sanitary(bbox, client=client)),
+    ),
+    # New Westminster (wave 2): combined city; manhole-INVERT lift carries the vertical.
+    # Coverage box NESTS inside Burnaby's (smallest-box dispatch); the Sapperton sliver
+    # east of -122.896 is ceded to keep Coquitlam's box untouched.
+    CitySpec(
+        key="newwestminster", label="New Westminster, BC",
+        coverage=(-122.955, 49.179, -122.896, 49.235), sub_crs="EPSG:32610",
+        network_source="City of New Westminster sewer open data (real municipal network; "
+                       "storm + combined mains)",
+        storm=lambda bbox, client: build_newwestminster_network(fetch_newwestminster_storm(bbox, client=client)),
+        land=lambda bbox, client: fetch_newwestminster_land(bbox, client=client),
+        sanitary=lambda bbox, client: build_newwestminster_network(fetch_newwestminster_sanitary(bbox, client=client)),
     ),
     # Nanaimo (wave 2): rims-on-row (ST/END_COVELV) + inverts on the pipe ends;
     # Inlet/Outlet layer unused (does not distinguish inlets — Barrie headwall lesson).
