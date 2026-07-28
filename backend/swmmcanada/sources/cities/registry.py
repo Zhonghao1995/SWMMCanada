@@ -39,6 +39,10 @@ from swmmcanada.sources.cities.ottawa import (
 from swmmcanada.sources.cities.regina import (
     build_regina_network, fetch_regina_land, fetch_regina_sanitary, fetch_regina_storm,
 )
+from swmmcanada.sources.cities.saskatoon import (
+    build_saskatoon_network, fetch_saskatoon_land, fetch_saskatoon_sanitary,
+    fetch_saskatoon_storm,
+)
 from swmmcanada.sources.cities.reykjavik import (
     build_reykjavik_network, fetch_reykjavik_land, fetch_reykjavik_sanitary, fetch_reykjavik_storm,
 )
@@ -182,6 +186,18 @@ CITIES: Tuple[CitySpec, ...] = (
         storm=lambda bbox, client: build_barrie_network(fetch_barrie_storm(bbox, client=client)),
         land=lambda bbox, client: fetch_barrie_land(bbox, client=client),
         sanitary=lambda bbox, client: build_barrie_network(fetch_barrie_sanitary(bbox, client=client)),
+    ),
+    # Saskatoon (wave 2): FROMMH/TOMH labels (MH-prefixed), UPELEV/DOWNELEV inverts;
+    # network from the public Core service (licence unstamped — provenance in DATA.md),
+    # parcels from the official OD folder.
+    CitySpec(
+        key="saskatoon", label="Saskatoon, SK",
+        coverage=(-106.83, 52.05, -106.50, 52.24), sub_crs="EPSG:32613",
+        network_source="City of Saskatoon WSS public service (real municipal network; "
+                       "public token-free service, licence unstamped)",
+        storm=lambda bbox, client: build_saskatoon_network(fetch_saskatoon_storm(bbox, client=client)),
+        land=lambda bbox, client: fetch_saskatoon_land(bbox, client=client),
+        sanitary=lambda bbox, client: build_saskatoon_network(fetch_saskatoon_sanitary(bbox, client=client)),
     ),
     # Coquitlam (wave 2): geometry topology with real per-end inverts (95% populated) and
     # labelled ends; coverage = the city-boundary envelope (Cadastral layer 11 extent), just
