@@ -95,6 +95,10 @@ from swmmcanada.sources.cities.saskatoon import (
 from swmmcanada.sources.cities.reykjavik import (
     build_reykjavik_network, fetch_reykjavik_land, fetch_reykjavik_sanitary, fetch_reykjavik_storm,
 )
+from swmmcanada.sources.cities.strathcona import (
+    build_strathcona_network, fetch_strathcona_land, fetch_strathcona_sanitary,
+    fetch_strathcona_storm,
+)
 from swmmcanada.sources.cities.sudbury import (
     build_sudbury_network, fetch_sudbury_land, fetch_sudbury_sanitary, fetch_sudbury_storm,
 )
@@ -351,6 +355,16 @@ CITIES: Tuple[CitySpec, ...] = (
         storm=lambda bbox, client: build_delta_network(fetch_delta_storm(bbox, client=client)),
         land=lambda bbox, client: fetch_delta_land(bbox, client=client),
         sanitary=lambda bbox, client: build_delta_network(fetch_delta_sanitary(bbox, client=client)),
+    ),
+    # Strathcona County (wave 2, tier 2): patchiest inverts of the wave; the discharge
+    # layer mixes inlet-side structures (downhill-end filter).
+    CitySpec(
+        key="strathcona", label="Strathcona County, AB",
+        coverage=(-113.42, 53.44, -112.80, 53.72), sub_crs="EPSG:32612",
+        network_source="Strathcona County storm open data (real municipal network)",
+        storm=lambda bbox, client: build_strathcona_network(fetch_strathcona_storm(bbox, client=client)),
+        land=lambda bbox, client: fetch_strathcona_land(bbox, client=client),
+        sanitary=lambda bbox, client: build_strathcona_network(fetch_strathcona_sanitary(bbox, client=client)),
     ),
     # Greater Sudbury (wave 2, tier 2): STYPE-filtered gravity graph; (200,420) band.
     CitySpec(
