@@ -14,6 +14,7 @@ Also hosts the shared material->roughness table and the catch-basin + parcel/bui
 subcatchment delineation (ADR 0005), parameterised by metric CRS so any city can use it.
 """
 import math
+import re
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
@@ -119,6 +120,51 @@ def num(v, *, zero_missing: bool = False) -> Optional[float]:
     except (TypeError, ValueError):
         return None
     return None if (zero_missing and f == 0) else f
+
+
+# SWMM folds every object name to ONE case, and the shared assembler names unlabelled nodes
+# ``N1, N2, …`` — a real city id of that exact shape would collide into a generated node, so
+# that namespace is reserved. (Promoted from the Reykjavík adapter when Coquitlam became the
+# second city labelling nodes with published ids.)
+_RESERVED_ID = re.compile(r"^n[1-9]\d*$")   # matched against the lower-cased id
+
+_UNSAFE_NAME_CHARS = re.compile(r"[^A-Za-z0-9._-]+")
+
+
+def safe_name(raw: str) -> str:
+    """A valid SWMM object name: drop everything outside ``[A-Za-z0-9._-]``. City ids can
+    carry spaces/quotes, which SWMM's whitespace/quote-delimited name syntax cannot hold —
+    they truncate and collide. Returns "" if nothing survives."""
+    return _UNSAFE_NAME_CHARS.sub("", (raw or "").strip())
+
+
+def safe_labels(label_points, snap_decimals: int) -> Tuple[list, int, int]:
+    """Keep a published id as a node label only when it is a valid, unambiguous SWMM name.
+
+    Hazards handled (all found in real city feeds): (0) ids with characters SWMM can't hold
+    are sanitised first (``safe_name``); then, keyed on the CASE-FOLDED sanitised id (SWMM
+    folds names): (1) ids that resolve to more than one snapped node (id series restart, or a
+    termination id reused across features) are dropped; (2) mixed-case variants SWMM treats
+    as one; (3) ids matching the assembler's generated ``N#`` namespace are reserved. Dropped
+    labels fall back to generated ids. Returns ``(kept, n_dropped_nonunique, n_dropped_reserved)``."""
+    cleaned = [(xy, safe_name(lab)) for xy, lab in label_points]
+    coords_by_key: Dict[str, set] = defaultdict(set)
+    for xy, lab in cleaned:
+        if lab:
+            coords_by_key[lab.lower()].add((round(xy[0], snap_decimals), round(xy[1], snap_decimals)))
+    kept, n_dup, n_reserved = [], 0, 0
+    for xy, lab in cleaned:
+        if not lab:
+            n_dup += 1            # nothing survived sanitising -> fall back to a generated id
+            continue
+        key = lab.lower()
+        if _RESERVED_ID.match(key):
+            n_reserved += 1
+        elif len(coords_by_key[key]) != 1:
+            n_dup += 1
+        else:
+            kept.append((xy, lab))
+    return kept, n_dup, n_reserved
 
 
 def line_ends(geom) -> Tuple[Optional[Coord], Optional[Coord]]:

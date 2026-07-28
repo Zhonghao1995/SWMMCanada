@@ -22,6 +22,7 @@ def test_real_network_cities_selected():
         (-119.47, 49.88, "kelowna", "Kelowna"),        # Kelowna, BC
         (-104.61, 50.445, "regina", "Regina"),         # Regina, SK
         (-123.12, 49.28, "vancouver", "Vancouver"),    # Vancouver, BC
+        (-122.793, 49.276, "coquitlam", "Coquitlam"),  # Coquitlam, BC (Town Centre)
     ]
     for lon, lat, key, label in cases:
         assert city_for_point(lon, lat).key == key, (lon, lat)
