@@ -40,6 +40,7 @@ def test_real_network_cities_selected():
         (-64.805, 46.092, "moncton", "Moncton"),        # Moncton, NB (first Atlantic city)
         (-120.335, 50.672, "kamloops", "Kamloops"),     # Kamloops, BC
         (-122.650, 49.135, "langley", "Langley"),       # Township of Langley, BC (Willoughby)
+        (-122.910, 49.147, "delta", "Delta"),           # Delta, BC (North Delta)
     ]
     for lon, lat, key, label in cases:
         assert city_for_point(lon, lat).key == key, (lon, lat)

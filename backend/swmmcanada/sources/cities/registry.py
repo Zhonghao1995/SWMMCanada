@@ -27,6 +27,9 @@ from swmmcanada.sources.cities.coquitlam import (
     build_coquitlam_network, fetch_coquitlam_land, fetch_coquitlam_sanitary,
     fetch_coquitlam_storm,
 )
+from swmmcanada.sources.cities.delta import (
+    build_delta_network, fetch_delta_land, fetch_delta_sanitary, fetch_delta_storm,
+)
 from swmmcanada.sources.cities.esquimalt import (
     build_esquimalt_network, fetch_esquimalt_land, fetch_esquimalt_sanitary,
     fetch_esquimalt_storm,
@@ -304,6 +307,17 @@ CITIES: Tuple[CitySpec, ...] = (
         storm=lambda bbox, client: build_langley_network(fetch_langley_storm(bbox, client=client)),
         land=lambda bbox, client: fetch_langley_land(bbox, client=client),
         sanitary=lambda bbox, client: build_langley_network(fetch_langley_sanitary(bbox, client=client)),
+    ),
+    # Delta (wave 2, tier 2): grounds-on-row; -99 sentinel with LEGAL negative inverts;
+    # vertical datum CVD28GVRD2018 (no shim — DATA.md note). East edge cedes Scott Road
+    # to stay disjoint from Surrey's box; north edge stops shy of Vancouver's.
+    CitySpec(
+        key="delta", label="Delta, BC",
+        coverage=(-123.19, 48.98, -122.891, 49.175), sub_crs="EPSG:32610",
+        network_source="City of Delta drainage open data (real municipal network)",
+        storm=lambda bbox, client: build_delta_network(fetch_delta_storm(bbox, client=client)),
+        land=lambda bbox, client: fetch_delta_land(bbox, client=client),
+        sanitary=lambda bbox, client: build_delta_network(fetch_delta_sanitary(bbox, client=client)),
     ),
     # Kamloops (wave 2, tier 2): endpoint snapping; the missing sentinel is literal 9999.
     CitySpec(
