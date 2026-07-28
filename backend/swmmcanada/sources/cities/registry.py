@@ -53,6 +53,9 @@ from swmmcanada.sources.cities.vancouver import (
     build_vancouver_network, fetch_vancouver_land, fetch_vancouver_sanitary,
     fetch_vancouver_storm,
 )
+from swmmcanada.sources.cities.toronto import (
+    build_toronto_network, fetch_toronto_land, fetch_toronto_sanitary, fetch_toronto_storm,
+)
 from swmmcanada.sources.cities.victoria import (
     build_victoria_network, fetch_victoria_land, fetch_victoria_sanitary, fetch_victoria_storm,
 )
@@ -210,6 +213,16 @@ CITIES: Tuple[CitySpec, ...] = (
         storm=lambda bbox, client: build_coquitlam_network(fetch_coquitlam_storm(bbox, client=client)),
         land=lambda bbox, client: fetch_coquitlam_land(bbox, client=client),
         sanitary=lambda bbox, client: build_coquitlam_network(fetch_coquitlam_sanitary(bbox, client=client)),
+    ),
+    # Toronto (wave 2): Toronto Water Ext View services; Combined joins storm (ADR 0021),
+    # SAN is the tracer; MH-id labels; inlets seed subcatchments (no parcels/buildings).
+    CitySpec(
+        key="toronto", label="Toronto, ON",
+        coverage=(-79.64, 43.58, -79.11, 43.86), sub_crs="EPSG:32617",
+        network_source="Toronto Water sewer external-view services (real municipal network)",
+        storm=lambda bbox, client: build_toronto_network(fetch_toronto_storm(bbox, client=client)),
+        land=lambda bbox, client: fetch_toronto_land(bbox, client=client),
+        sanitary=lambda bbox, client: build_toronto_network(fetch_toronto_sanitary(bbox, client=client)),
     ),
     # Reykjavík (IS) — first non-Canadian city: geometry-inferred topology like Ottawa, but with
     # REAL surveyed inverts carried on the structure points (BOTNKODI) and snapped onto pipe ends.
