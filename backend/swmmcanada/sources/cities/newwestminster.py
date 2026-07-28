@@ -128,6 +128,7 @@ def build_newwestminster_network(data, *, config: base.AssembleConfig = _NEWWEST
     pipes, label_points = [], []
     n_no_geom = n_mh_lifted_ends = 0
     system_hist: dict = {}
+    seen_names: dict = {}
     for f in mains:
         p = f.get("properties") or {}
         system_hist[p.get("_SYSTEM", "Storm")] = system_hist.get(p.get("_SYSTEM", "Storm"), 0) + 1
@@ -144,8 +145,15 @@ def build_newwestminster_network(data, *, config: base.AssembleConfig = _NEWWEST
             inv_b = mh_invert[tomh]
             n_mh_lifted_ends += 1
         dia_mm = base.num(p.get("DIAMETER"), zero_missing=True)
+        # JDE_FEATURE_ID is NOT unique across the storm and combined services (the live
+        # fetch really returns the same id from both) — repeats get an OBJECTID suffix,
+        # the Ottawa pattern, so SWMM link names stay unique.
+        name = str(p.get("JDE_FEATURE_ID") or p.get("OBJECTID"))
+        seen_names[name] = seen_names.get(name, 0) + 1
+        if seen_names[name] > 1:
+            name = f"{name}_{p.get('OBJECTID')}"
         pipes.append(base.RawPipe(
-            name=str(p.get("JDE_FEATURE_ID") or p.get("OBJECTID")),
+            name=name,
             end_a=a, end_b=b, inv_a=inv_a, inv_b=inv_b,
             diameter_m=(dia_mm / 1000.0) if dia_mm else None,
             roughness_n=base.material_roughness(p.get("MATERIAL"), config.default_roughness),
