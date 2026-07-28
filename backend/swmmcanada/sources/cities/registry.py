@@ -39,6 +39,10 @@ from swmmcanada.sources.cities.london import (
 from swmmcanada.sources.cities.ottawa import (
     build_ottawa_network, fetch_ottawa_land, fetch_ottawa_sanitary, fetch_ottawa_storm,
 )
+from swmmcanada.sources.cities.peterborough import (
+    build_peterborough_network, fetch_peterborough_land, fetch_peterborough_sanitary,
+    fetch_peterborough_storm,
+)
 from swmmcanada.sources.cities.regina import (
     build_regina_network, fetch_regina_land, fetch_regina_sanitary, fetch_regina_storm,
 )
@@ -216,6 +220,15 @@ CITIES: Tuple[CitySpec, ...] = (
         storm=lambda bbox, client: build_coquitlam_network(fetch_coquitlam_storm(bbox, client=client)),
         land=lambda bbox, client: fetch_coquitlam_land(bbox, client=client),
         sanitary=lambda bbox, client: build_coquitlam_network(fetch_coquitlam_sanitary(bbox, client=client)),
+    ),
+    # Peterborough (wave 2): Saskatoon-family schema + a real discharge-point layer.
+    CitySpec(
+        key="peterborough", label="Peterborough, ON",
+        coverage=(-78.42, 44.24, -78.22, 44.38), sub_crs="EPSG:32617",
+        network_source="City of Peterborough storm open data (real municipal network)",
+        storm=lambda bbox, client: build_peterborough_network(fetch_peterborough_storm(bbox, client=client)),
+        land=lambda bbox, client: fetch_peterborough_land(bbox, client=client),
+        sanitary=lambda bbox, client: build_peterborough_network(fetch_peterborough_sanitary(bbox, client=client)),
     ),
     # Kingston (wave 2): richest link schema (3 node-id families); bimodal invert
     # sentinel band; no rims (default depths); no sanitary network published.
