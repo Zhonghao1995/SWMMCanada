@@ -38,6 +38,7 @@ def test_real_network_cities_selected():
         (-78.945, 43.878, "whitby", "Whitby"),          # Whitby, ON
         (-123.410, 48.433, "esquimalt", "Esquimalt"),   # nests inside Victoria box
         (-64.805, 46.092, "moncton", "Moncton"),        # Moncton, NB (first Atlantic city)
+        (-120.335, 50.672, "kamloops", "Kamloops"),     # Kamloops, BC
     ]
     for lon, lat, key, label in cases:
         assert city_for_point(lon, lat).key == key, (lon, lat)
