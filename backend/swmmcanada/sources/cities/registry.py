@@ -43,6 +43,9 @@ from swmmcanada.sources.cities.kitchener import (
 from swmmcanada.sources.cities.london import (
     build_london_network, fetch_london_land, fetch_london_sanitary, fetch_london_storm,
 )
+from swmmcanada.sources.cities.moncton import (
+    build_moncton_network, fetch_moncton_land, fetch_moncton_sanitary, fetch_moncton_storm,
+)
 from swmmcanada.sources.cities.nanaimo import (
     build_nanaimo_network, fetch_nanaimo_land, fetch_nanaimo_sanitary, fetch_nanaimo_storm,
 )
@@ -263,6 +266,17 @@ CITIES: Tuple[CitySpec, ...] = (
         storm=lambda bbox, client: build_newwestminster_network(fetch_newwestminster_storm(bbox, client=client)),
         land=lambda bbox, client: fetch_newwestminster_land(bbox, client=client),
         sanitary=lambda bbox, client: build_newwestminster_network(fetch_newwestminster_sanitary(bbox, client=client)),
+    ),
+    # Moncton (wave 2): first Atlantic city; STM+COMB join storm; MAINKEY labels;
+    # ZTOPCOV rims. Public service outside the hub catalogue — provenance in DATA.md.
+    CitySpec(
+        key="moncton", label="Moncton, NB",
+        coverage=(-64.95, 46.03, -64.69, 46.16), sub_crs="EPSG:32620",
+        network_source="City of Moncton sewer public service (real municipal network; "
+                       "public token-free service, licence unstamped)",
+        storm=lambda bbox, client: build_moncton_network(fetch_moncton_storm(bbox, client=client)),
+        land=lambda bbox, client: fetch_moncton_land(bbox, client=client),
+        sanitary=lambda bbox, client: build_moncton_network(fetch_moncton_sanitary(bbox, client=client)),
     ),
     # Nanaimo (wave 2): rims-on-row (ST/END_COVELV) + inverts on the pipe ends;
     # Inlet/Outlet layer unused (does not distinguish inlets — Barrie headwall lesson).
