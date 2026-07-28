@@ -23,6 +23,10 @@ from swmmcanada.sources.cities.burnaby import (
 from swmmcanada.sources.cities.calgary import (
     build_calgary_network, fetch_calgary_land, fetch_calgary_sanitary, fetch_calgary_storm,
 )
+from swmmcanada.sources.cities.chilliwack import (
+    build_chilliwack_network, fetch_chilliwack_land, fetch_chilliwack_sanitary,
+    fetch_chilliwack_storm,
+)
 from swmmcanada.sources.cities.coquitlam import (
     build_coquitlam_network, fetch_coquitlam_land, fetch_coquitlam_sanitary,
     fetch_coquitlam_storm,
@@ -310,6 +314,16 @@ CITIES: Tuple[CitySpec, ...] = (
         storm=lambda bbox, client: build_langley_network(fetch_langley_storm(bbox, client=client)),
         land=lambda bbox, client: fetch_langley_land(bbox, client=client),
         sanitary=lambda bbox, client: build_langley_network(fetch_langley_sanitary(bbox, client=client)),
+    ),
+    # Chilliwack (wave 2, tier 2): one SYM_TYPE-split symbol layer carries rims AND seeds;
+    # WAF-fronted host (small pages).
+    CitySpec(
+        key="chilliwack", label="Chilliwack, BC",
+        coverage=(-122.05, 49.05, -121.80, 49.22), sub_crs="EPSG:32610",
+        network_source="City of Chilliwack storm open data (real municipal network)",
+        storm=lambda bbox, client: build_chilliwack_network(fetch_chilliwack_storm(bbox, client=client)),
+        land=lambda bbox, client: fetch_chilliwack_land(bbox, client=client),
+        sanitary=lambda bbox, client: build_chilliwack_network(fetch_chilliwack_sanitary(bbox, client=client)),
     ),
     # Delta (wave 2, tier 2): grounds-on-row; -99 sentinel with LEGAL negative inverts;
     # vertical datum CVD28GVRD2018 (no shim — DATA.md note). East edge cedes Scott Road
