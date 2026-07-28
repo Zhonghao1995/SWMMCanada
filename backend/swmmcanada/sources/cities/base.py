@@ -243,6 +243,9 @@ class AssembleConfig:
     min_slope: float = 0.001
     default_cover_depth_m: float = 1.5
     default_max_depth_m: float = 2.0
+    # #158 tier-2 gap-fill: a node with a rim but no invert takes rim minus this depth
+    # (2.5 m = a typical municipal manhole depth; the Vancouver ADR 0020 constant).
+    fallback_node_depth_m: float = 2.5
     default_diameter_m: float = 0.30
     default_roughness: float = 0.013
     outfall_link_len_m: float = 10.0
@@ -310,17 +313,42 @@ def assemble_network(
     if not edges:
         return NetworkResult(NetworkIn([], [], []), {"reason": "no usable pipes", "dropped": dropped})
 
-    # node inverts: min of connected pipe-ends, then fill gaps from neighbours / global min
+    # Node inverts: min of connected pipe-ends, then TIERED gap-fill (#158). The old
+    # two-step fill (neighbours, then the AOI-wide minimum) ignored terrain entirely:
+    # on the Reykjavik audit AOI the ten deepest junctions all took the identical
+    # -0.458 m invert of a sea-level outfall while their own rims sat 73-82 m uphill,
+    # so every slope into and out of them was wrong. Tiers now:
+    #   1. neighbour minimum (unchanged — locally sane, flat-pipe error at worst);
+    #   2. the node's OWN rim minus a default node depth — a local estimate anchored to
+    #      real ground (the Vancouver ADR 0020 convention, generalised to every city);
+    #      followed by one more neighbour sweep so rim-anchored values reach rim-less
+    #      neighbours before the global minimum ever gets a say;
+    #   3. the global minimum, demoted to a counted last resort.
     node_inv: Dict[Coord, Optional[float]] = {k: (min(inv_cands[k]) if inv_cands.get(k) else None) for k in node_xy}
     n_missing = sum(1 for v in node_inv.values() if v is None)
     adj: Dict[Coord, set] = defaultdict(set)
     for _, ka, kb, *_ in edges:
         adj[ka].add(kb)
         adj[kb].add(ka)
+
+    def _neighbour_sweep() -> int:
+        filled = 0
+        for k in node_xy:
+            if node_inv[k] is None:
+                neigh = [node_inv[n] for n in adj[k] if node_inv[n] is not None]
+                if neigh:
+                    node_inv[k] = min(neigh)
+                    filled += 1
+        return filled
+
+    n_from_neighbour = _neighbour_sweep()
+    n_from_rim = 0
     for k in node_xy:
-        if node_inv[k] is None:
-            neigh = [node_inv[n] for n in adj[k] if node_inv[n] is not None]
-            node_inv[k] = min(neigh) if neigh else None
+        if node_inv[k] is None and k in ground:
+            node_inv[k] = ground[k] - config.fallback_node_depth_m
+            n_from_rim += 1
+    n_from_neighbour += _neighbour_sweep()
+    n_from_global_min = sum(1 for v in node_inv.values() if v is None)
     known = [v for v in node_inv.values() if v is not None]
     fallback = min(known) if known else 0.0
     node_inv = {k: (v if v is not None else fallback) for k, v in node_inv.items()}
@@ -451,6 +479,8 @@ def assemble_network(
         "n_components": n_components, "n_dropped": len(dropped), "dropped": dropped[:20],
         "n_offset_ends": n_offset_ends, "n_offsets_rejected": n_offsets_rejected,
         "n_noncircular": n_noncircular, "n_depths_rejected": n_depths_rejected,
+        "n_inv_from_neighbour": n_from_neighbour, "n_inv_from_rim": n_from_rim,
+        "n_inv_from_global_min": n_from_global_min,
     }
     return NetworkResult(network=network, diagnostics=diagnostics)
 

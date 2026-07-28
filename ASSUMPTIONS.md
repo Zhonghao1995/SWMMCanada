@@ -105,7 +105,13 @@ and municipal "bottom elevation" fields may mean any of them. This is the conven
 pipeline uses, now stated explicitly rather than left implicit in the code:
 
 - **Node invert = the lowest connected pipe-end invert** (`min` over the pipe ends meeting
-  at that node), gap-filled from neighbours where a city publishes no invert.
+  at that node). Where a city publishes no invert for a node, the gap fills in TIERS
+  (#158): first from neighbouring nodes; then from **the node's own rim minus a default
+  2.5 m node depth** (a local estimate anchored to real ground — the Vancouver ADR 0020
+  convention generalised); only a node with no invert, no informed neighbour AND no rim
+  falls back to the AOI-wide minimum, and every tier is counted in the diagnostics
+  (`n_inv_from_neighbour` / `n_inv_from_rim` / `n_inv_from_global_min`). The old
+  two-step fill let the global minimum put sea-level inverts on 80 m hillsides.
 - **Sump depth is not modelled.** Regina (`SUMPELEVATION`, a median 1.77 m below the rim),
   Kelowna (`SUMP_ELEVATION`) and Kitchener (`SUMP`) all publish a genuine chamber-floor
   field. None is read. A sump is dead storage that traps grit; it does not carry flow, and

@@ -172,3 +172,56 @@ def test_implausible_node_depth_is_rejected_and_counted():
     j3 = next(j for j in res3.network.junctions if j.name == "N1")
     assert j3.max_depth_m == pytest.approx(MAX_NODE_DEPTH_M)
     assert res3.diagnostics["n_depths_rejected"] == 0
+
+
+# --- #158: tiered invert gap-fill — rim beats the global minimum -----------------------
+
+def test_rim_tier_beats_global_minimum():
+    """A node with no invert and no informed neighbour takes its OWN rim minus the
+    default node depth — not the AOI-wide minimum (which put sea-level inverts on
+    80 m hillsides, the Reykjavik finding that opened #158)."""
+    from swmmcanada.sources.cities.base import AssembleConfig, RawPipe, assemble_network
+    cfg = AssembleConfig()
+    # component A: real inverts near sea level (the AOI's global minimum lives here)
+    low = RawPipe("LOW", (0.0, 0.0), (0.001, 0.0), inv_a=2.0, inv_b=1.0)
+    # component B: NO inverts anywhere, but the uphill node has a rim at 80 m
+    hill = RawPipe("HILL", (0.05, 0.05), (0.051, 0.05), inv_a=None, inv_b=None)
+    res = assemble_network([low, hill], ground_points=[((0.05, 0.05), 80.0)])
+    d = res.diagnostics
+    assert d["n_inv_from_rim"] == 1
+    inv = {j.name: j.invert_m for j in res.network.junctions}
+    inv.update({o.name: o.invert_m for o in res.network.outfalls})
+    rim_anchored = [v for v in inv.values() if abs(v - (80.0 - cfg.fallback_node_depth_m)) < 1e-9]
+    assert rim_anchored, f"no node took rim - default depth: {inv}"
+    # and the post-rim neighbour sweep carries it to the rim-less neighbour
+    # (only the truly information-free would fall to the global minimum)
+    assert d["n_inv_from_global_min"] <= 1
+
+
+def test_neighbour_tier_still_first():
+    """A node with an informed neighbour keeps the neighbour value even when it also
+    has a rim — tier order is neighbour, then rim, then global minimum."""
+    from swmmcanada.sources.cities.base import RawPipe, assemble_network
+    a = RawPipe("A", (0.0, 0.0), (0.001, 0.0), inv_a=10.0, inv_b=9.0)
+    b = RawPipe("B", (0.001, 0.0), (0.002, 0.0), inv_a=None, inv_b=None)   # shares a node with A
+    res = assemble_network([a, b], ground_points=[((0.002, 0.0), 50.0)])
+    d = res.diagnostics
+    assert d["n_inv_from_neighbour"] >= 1
+    inv = {j.name: j.invert_m for j in res.network.junctions}
+    inv.update({o.name: o.invert_m for o in res.network.outfalls})
+    # B's far end got 9.0 via the neighbour chain, NOT 50 - 2.5 = 47.5
+    assert any(abs(v - 9.0) < 1e-9 for v in inv.values())
+    assert not any(abs(v - 47.5) < 1e-9 for v in inv.values())
+
+
+def test_global_min_is_the_counted_last_resort():
+    """A component with no inverts, no informed neighbours and no rims still gets the
+    global minimum — but the fall-through is counted, never silent."""
+    from swmmcanada.sources.cities.base import RawPipe, assemble_network
+    low = RawPipe("LOW", (0.0, 0.0), (0.001, 0.0), inv_a=5.0, inv_b=4.0)
+    orphan = RawPipe("ORPHAN", (0.05, 0.05), (0.051, 0.05), inv_a=None, inv_b=None)
+    res = assemble_network([low, orphan])
+    assert res.diagnostics["n_inv_from_global_min"] == 2      # both orphan ends
+    inv = {j.name: j.invert_m for j in res.network.junctions}
+    inv.update({o.name: o.invert_m for o in res.network.outfalls})
+    assert sum(1 for v in inv.values() if abs(v - 4.0) < 1e-9) >= 2
