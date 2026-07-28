@@ -45,6 +45,10 @@ def test_core_invariants(result):
     assert all(c.from_node in names and c.to_node in names for c in net.conduits)
     counted = Counter([j.name for j in net.junctions] + [o.name for o in net.outfalls])
     assert [n for n, c in counted.items() if c > 1] == []
+    # JDE_FEATURE_ID repeats across the storm/combined services — conduit names must
+    # still come out unique (repeats get an OBJECTID suffix)
+    cn = Counter(c.name for c in net.conduits)
+    assert [n for n, k in cn.items() if k > 1] == []
     inv = {j.name: j.invert_m for j in net.junctions}
     inv.update({o.name: o.invert_m for o in net.outfalls})
     assert all(inv[c.to_node] <= inv[c.from_node] + 1e-9 for c in net.conduits)
