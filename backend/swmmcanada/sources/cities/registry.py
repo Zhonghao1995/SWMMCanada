@@ -31,6 +31,10 @@ from swmmcanada.sources.cities.esquimalt import (
     build_esquimalt_network, fetch_esquimalt_land, fetch_esquimalt_sanitary,
     fetch_esquimalt_storm,
 )
+from swmmcanada.sources.cities.kamloops import (
+    build_kamloops_network, fetch_kamloops_land, fetch_kamloops_sanitary,
+    fetch_kamloops_storm,
+)
 from swmmcanada.sources.cities.kelowna import (
     build_kelowna_network, fetch_kelowna_land, fetch_kelowna_sanitary, fetch_kelowna_storm,
 )
@@ -287,6 +291,15 @@ CITIES: Tuple[CitySpec, ...] = (
         storm=lambda bbox, client: build_nanaimo_network(fetch_nanaimo_storm(bbox, client=client)),
         land=lambda bbox, client: fetch_nanaimo_land(bbox, client=client),
         sanitary=lambda bbox, client: build_nanaimo_network(fetch_nanaimo_sanitary(bbox, client=client)),
+    ),
+    # Kamloops (wave 2, tier 2): endpoint snapping; the missing sentinel is literal 9999.
+    CitySpec(
+        key="kamloops", label="Kamloops, BC",
+        coverage=(-120.53, 50.60, -120.17, 50.78), sub_crs="EPSG:32610",
+        network_source="City of Kamloops drainage open data (real municipal network)",
+        storm=lambda bbox, client: build_kamloops_network(fetch_kamloops_storm(bbox, client=client)),
+        land=lambda bbox, client: fetch_kamloops_land(bbox, client=client),
+        sanitary=lambda bbox, client: build_kamloops_network(fetch_kamloops_sanitary(bbox, client=client)),
     ),
     # Esquimalt (wave 2): compass-wall manhole inverts lifted by pipe bearing; box
     # NESTS inside Victoria's (smallest-box dispatch).
