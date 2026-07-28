@@ -60,6 +60,9 @@ from swmmcanada.sources.cities.peterborough import (
 from swmmcanada.sources.cities.regina import (
     build_regina_network, fetch_regina_land, fetch_regina_sanitary, fetch_regina_storm,
 )
+from swmmcanada.sources.cities.sarnia import (
+    build_sarnia_network, fetch_sarnia_land, fetch_sarnia_sanitary, fetch_sarnia_storm,
+)
 from swmmcanada.sources.cities.saskatoon import (
     build_saskatoon_network, fetch_saskatoon_land, fetch_saskatoon_sanitary,
     fetch_saskatoon_storm,
@@ -284,6 +287,15 @@ CITIES: Tuple[CitySpec, ...] = (
         storm=lambda bbox, client: build_peterborough_network(fetch_peterborough_storm(bbox, client=client)),
         land=lambda bbox, client: fetch_peterborough_land(bbox, client=client),
         sanitary=lambda bbox, client: build_peterborough_network(fetch_peterborough_sanitary(bbox, client=client)),
+    ),
+    # Sarnia (wave 2): text-mm diameters, (150,250) invert band, MH-id labels.
+    CitySpec(
+        key="sarnia", label="Sarnia, ON",
+        coverage=(-82.48, 42.92, -82.25, 43.03), sub_crs="EPSG:32617",
+        network_source="City of Sarnia storm open data (real municipal network)",
+        storm=lambda bbox, client: build_sarnia_network(fetch_sarnia_storm(bbox, client=client)),
+        land=lambda bbox, client: fetch_sarnia_land(bbox, client=client),
+        sanitary=lambda bbox, client: build_sarnia_network(fetch_sarnia_sanitary(bbox, client=client)),
     ),
     # Penticton (wave 2): text-with-units diameters, trailing-code materials, Outlet layer.
     CitySpec(
