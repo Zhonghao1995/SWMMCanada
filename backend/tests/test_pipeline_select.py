@@ -44,6 +44,7 @@ def test_real_network_cities_selected():
         (-80.995, 46.492, "sudbury", "Sudbury"),        # Greater Sudbury, ON
         (-121.958, 49.163, "chilliwack", "Chilliwack"),  # Chilliwack, BC
         (-122.775, 49.262, "portcoquitlam", "Port Coquitlam"),  # nests inside Coquitlam box
+        (-113.317, 53.519, "strathcona", "Strathcona"),  # Strathcona County, AB (Sherwood Park)
     ]
     for lon, lat, key, label in cases:
         assert city_for_point(lon, lat).key == key, (lon, lat)
