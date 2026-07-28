@@ -92,7 +92,7 @@ def fetch_paged(client, url, bbox, *, where: str = "1=1", fmt: str = "geojson",
 # --- material -> Manning's n (uppercase code match; default when unknown) ----------------
 MATERIAL_ROUGHNESS: Dict[str, float] = {
     "PVC": 0.010, "VT": 0.013, "VITC": 0.013, "VC": 0.013,            # clay
-    "CONC": 0.013, "CON": 0.013, "RC": 0.013, "CO": 0.013,            # concrete
+    "CONC": 0.013, "CON": 0.013, "RC": 0.013, "CO": 0.013, "CP": 0.013,  # concrete (CP = concrete pipe)
     "AC": 0.011, "ASB": 0.011, "AbsC": 0.011,                          # asbestos cement
     "PE": 0.011, "HDPE": 0.011,                                        # polyethylene
     "CMP": 0.024, "CSP": 0.024,                                        # corrugated metal
