@@ -37,7 +37,9 @@ def test_uncovered_aoi_synthesizes():
 
 
 def test_registry_invariants():
-    """First-match dispatch is only sound if keys are unique and coverage boxes disjoint."""
+    """Smallest-box dispatch is sound if keys are unique and any two coverage boxes are
+    either disjoint or strictly nested (a suburb's tight box inside a neighbour's envelope).
+    PARTIAL overlap stays illegal — it would create seams where 'smallest' is ambiguous."""
     keys = [s.key for s in CITIES]
     assert len(keys) == len(set(keys))
     for i, a in enumerate(CITIES):
@@ -45,4 +47,27 @@ def test_registry_invariants():
             ax1, ay1, ax2, ay2 = a.coverage
             bx1, by1, bx2, by2 = b.coverage
             disjoint = ax2 < bx1 or bx2 < ax1 or ay2 < by1 or by2 < ay1
-            assert disjoint, f"coverage overlap: {a.key} vs {b.key}"
+            a_in_b = bx1 <= ax1 and by1 <= ay1 and ax2 <= bx2 and ay2 <= by2
+            b_in_a = ax1 <= bx1 and ay1 <= by1 and bx2 <= ax2 and by2 <= ay2
+            assert disjoint or a_in_b or b_in_a, f"partial coverage overlap: {a.key} vs {b.key}"
+            if a_in_b or b_in_a:
+                area = lambda s: (s.coverage[2] - s.coverage[0]) * (s.coverage[3] - s.coverage[1])
+                assert area(a) != area(b), f"nested boxes with equal area: {a.key} vs {b.key}"
+
+
+def test_nested_coverage_prefers_smaller_box():
+    """A point inside two nested boxes dispatches to the tighter one (synthetic specs —
+    the live registry may or may not contain a nested pair at any given time)."""
+    import swmmcanada.sources.cities.registry as reg
+    outer = reg.CitySpec(key="outer", label="Outer", coverage=(-10.0, -10.0, 10.0, 10.0),
+                         sub_crs="EPSG:32610", network_source="t", storm=None, land=None)
+    inner = reg.CitySpec(key="inner", label="Inner", coverage=(-1.0, -1.0, 1.0, 1.0),
+                         sub_crs="EPSG:32610", network_source="t", storm=None, land=None)
+    orig = reg.CITIES
+    reg.CITIES = (outer, inner)          # outer listed first: order must NOT win
+    try:
+        assert reg.city_for_point(0.0, 0.0).key == "inner"
+        assert reg.city_for_point(5.0, 5.0).key == "outer"
+        assert reg.city_for_point(50.0, 50.0) is None
+    finally:
+        reg.CITIES = orig

@@ -201,13 +201,23 @@ def coverage_summary() -> list:
 
 
 def city_for_point(lon: float, lat: float) -> Optional[CitySpec]:
-    """The city whose coverage bbox contains the point, else None. First match wins;
-    coverage boxes must not overlap (same rule the old pipeline table had)."""
+    """The city whose coverage bbox contains the point, else None.
+
+    Smallest containing bbox wins (ties: registry order). Adjacent-municipality regions
+    (e.g. Metro Vancouver) make strict non-overlap impossible with axis-aligned boxes —
+    a suburb's tight box can sit inside a neighbour's natural envelope (White Rock inside
+    Surrey's, Port Coquitlam inside Coquitlam's). Nesting is therefore legal; the tighter
+    box is always the more specific claim. With disjoint boxes this reduces to the old
+    first-match behaviour."""
+    best: Optional[CitySpec] = None
+    best_area = float("inf")
     for spec in CITIES:
         lo1, la1, lo2, la2 = spec.coverage
         if lo1 <= lon <= lo2 and la1 <= lat <= la2:
-            return spec
-    return None
+            area = (lo2 - lo1) * (la2 - la1)
+            if area < best_area:
+                best, best_area = spec, area
+    return best
 
 
 def city_spec(key: str) -> CitySpec:
