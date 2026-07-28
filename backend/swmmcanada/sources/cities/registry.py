@@ -17,6 +17,9 @@ from swmmcanada.sources.cities.abbotsford import (
 from swmmcanada.sources.cities.barrie import (
     build_barrie_network, fetch_barrie_land, fetch_barrie_sanitary, fetch_barrie_storm,
 )
+from swmmcanada.sources.cities.burnaby import (
+    build_burnaby_network, fetch_burnaby_land, fetch_burnaby_sanitary, fetch_burnaby_storm,
+)
 from swmmcanada.sources.cities.calgary import (
     build_calgary_network, fetch_calgary_land, fetch_calgary_sanitary, fetch_calgary_storm,
 )
@@ -140,7 +143,10 @@ CITIES: Tuple[CitySpec, ...] = (
     # Surrey: geometry-inferred topology (gravity mains); parcels (Lot) + buildings published.
     CitySpec(
         key="surrey", label="Surrey, BC",
-        coverage=(-123.00, 49.00, -122.69, 49.22), sub_crs="EPSG:32610",
+        # Tightened 2026-07-28 (wave 2): the old box (-123.00..-122.69 x 49.00..49.22)
+        # annexed North Delta, Queensborough/New West and south Burnaby — areas whose
+        # assets Surrey's feed does not carry. True envelope: Scott Rd west, Fraser north.
+        coverage=(-122.89, 49.00, -122.68, 49.205), sub_crs="EPSG:32610",
         network_source="City of Surrey storm drainage (real municipal network)",
         storm=lambda bbox, client: build_surrey_network(fetch_surrey_storm(bbox, client=client)),
         land=lambda bbox, client: fetch_surrey_land(bbox, client=client),
@@ -171,7 +177,8 @@ CITIES: Tuple[CitySpec, ...] = (
     # rim-anchored inverts (no inverts published); land kit from the open-data portal.
     CitySpec(
         key="vancouver", label="Vancouver, BC",
-        coverage=(-123.26, 49.19, -123.02, 49.32), sub_crs="EPSG:32610",
+        # East edge tightened to Boundary Road (wave 2) so Burnaby's box can sit flush.
+        coverage=(-123.26, 49.19, -123.024, 49.32), sub_crs="EPSG:32610",
         network_source="City of Vancouver sewer network via VanMap (real municipal network; "
                        "storm + combined mains)",
         storm=lambda bbox, client: build_vancouver_network(fetch_vancouver_storm(bbox, client=client)),
@@ -208,6 +215,17 @@ CITIES: Tuple[CitySpec, ...] = (
         storm=lambda bbox, client: build_saskatoon_network(fetch_saskatoon_storm(bbox, client=client)),
         land=lambda bbox, client: fetch_saskatoon_land(bbox, client=client),
         sanitary=lambda bbox, client: build_saskatoon_network(fetch_saskatoon_sanitary(bbox, client=client)),
+    ),
+    # Burnaby (wave 2): UNITID labels + 65% inverts; no rim source (default depths).
+    # Boundary slivers ceded: Boundary Rd -> Vancouver's box, North Rd -> Coquitlam's;
+    # New Westminster's box NESTS inside this one (smallest-box dispatch).
+    CitySpec(
+        key="burnaby", label="Burnaby, BC",
+        coverage=(-123.02, 49.176, -122.895, 49.30), sub_crs="EPSG:32610",
+        network_source="City of Burnaby storm open data (real municipal network)",
+        storm=lambda bbox, client: build_burnaby_network(fetch_burnaby_storm(bbox, client=client)),
+        land=lambda bbox, client: fetch_burnaby_land(bbox, client=client),
+        sanitary=lambda bbox, client: build_burnaby_network(fetch_burnaby_sanitary(bbox, client=client)),
     ),
     # Coquitlam (wave 2): geometry topology with real per-end inverts (95% populated) and
     # labelled ends; coverage = the city-boundary envelope (Cadastral layer 11 extent), just
