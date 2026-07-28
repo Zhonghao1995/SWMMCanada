@@ -26,6 +26,7 @@ def test_real_network_cities_selected():
         (-79.694, 44.389, "barrie", "Barrie"),         # Barrie, ON (downtown)
         (-122.309, 49.035, "abbotsford", "Abbotsford"), # Abbotsford, BC
         (-106.665, 52.127, "saskatoon", "Saskatoon"),   # Saskatoon, SK (downtown)
+        (-79.390, 43.650, "toronto", "Toronto"),        # Toronto, ON (King West)
     ]
     for lon, lat, key, label in cases:
         assert city_for_point(lon, lat).key == key, (lon, lat)
@@ -35,8 +36,8 @@ def test_real_network_cities_selected():
 
 
 def test_uncovered_aoi_synthesizes():
-    assert city_for_point(-79.38, 43.65) is None                # downtown Toronto — no adapter
-    fn, mode = pipeline_for_aoi(_aoi(-79.38, 43.65))
+    assert city_for_point(-97.14, 49.90) is None                # downtown Winnipeg — no adapter
+    fn, mode = pipeline_for_aoi(_aoi(-97.14, 49.90))
     assert fn is build_from_aoi and "Synth" in mode
 
 
