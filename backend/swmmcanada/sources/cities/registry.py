@@ -10,6 +10,9 @@ from dataclasses import dataclass
 from typing import Callable, Optional, Tuple
 
 from swmmcanada.sources.cities import base
+from swmmcanada.sources.cities.barrie import (
+    build_barrie_network, fetch_barrie_land, fetch_barrie_sanitary, fetch_barrie_storm,
+)
 from swmmcanada.sources.cities.calgary import (
     build_calgary_network, fetch_calgary_land, fetch_calgary_sanitary, fetch_calgary_storm,
 )
@@ -156,6 +159,16 @@ CITIES: Tuple[CitySpec, ...] = (
         storm=lambda bbox, client: build_vancouver_network(fetch_vancouver_storm(bbox, client=client)),
         land=lambda bbox, client: fetch_vancouver_land(bbox, client=client),
         sanitary=lambda bbox, client: build_vancouver_network(fetch_vancouver_sanitary(bbox, client=client)),
+    ),
+    # Barrie (wave 2): geometry topology + FROM/TO_ID labels; device layer carries rims,
+    # outfall candidates and catch-basin seeds; real non-circular sections (#130).
+    CitySpec(
+        key="barrie", label="Barrie, ON",
+        coverage=(-79.74, 44.30, -79.61, 44.42), sub_crs="EPSG:32617",
+        network_source="City of Barrie storm open data (real municipal network)",
+        storm=lambda bbox, client: build_barrie_network(fetch_barrie_storm(bbox, client=client)),
+        land=lambda bbox, client: fetch_barrie_land(bbox, client=client),
+        sanitary=lambda bbox, client: build_barrie_network(fetch_barrie_sanitary(bbox, client=client)),
     ),
     # Coquitlam (wave 2): geometry topology with real per-end inverts (95% populated) and
     # labelled ends; coverage = the city-boundary envelope (Cadastral layer 11 extent), just
