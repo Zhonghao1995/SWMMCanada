@@ -78,6 +78,10 @@ from swmmcanada.sources.cities.peterborough import (
     build_peterborough_network, fetch_peterborough_land, fetch_peterborough_sanitary,
     fetch_peterborough_storm,
 )
+from swmmcanada.sources.cities.portcoquitlam import (
+    build_portcoquitlam_network, fetch_portcoquitlam_land, fetch_portcoquitlam_sanitary,
+    fetch_portcoquitlam_storm,
+)
 from swmmcanada.sources.cities.regina import (
     build_regina_network, fetch_regina_land, fetch_regina_sanitary, fetch_regina_storm,
 )
@@ -314,6 +318,18 @@ CITIES: Tuple[CitySpec, ...] = (
         storm=lambda bbox, client: build_langley_network(fetch_langley_storm(bbox, client=client)),
         land=lambda bbox, client: fetch_langley_land(bbox, client=client),
         sanitary=lambda bbox, client: build_langley_network(fetch_langley_sanitary(bbox, client=client)),
+    ),
+    # Port Coquitlam (wave 2, tier 2): -99 sentinel; box NESTS inside Coquitlam's
+    # (fourth production nesting).
+    CitySpec(
+        key="portcoquitlam", label="Port Coquitlam, BC",
+        # West edge = the Coquitlam River, north edge 49.278 — Coquitlam Town Centre
+        # (west of the river) must stay in Coquitlam's box.
+        coverage=(-122.79, 49.225, -122.71, 49.278), sub_crs="EPSG:32610",
+        network_source="City of Port Coquitlam drainage open data (real municipal network)",
+        storm=lambda bbox, client: build_portcoquitlam_network(fetch_portcoquitlam_storm(bbox, client=client)),
+        land=lambda bbox, client: fetch_portcoquitlam_land(bbox, client=client),
+        sanitary=lambda bbox, client: build_portcoquitlam_network(fetch_portcoquitlam_sanitary(bbox, client=client)),
     ),
     # Chilliwack (wave 2, tier 2): one SYM_TYPE-split symbol layer carries rims AND seeds;
     # WAF-fronted host (small pages).
