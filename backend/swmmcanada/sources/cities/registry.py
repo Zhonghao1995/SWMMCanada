@@ -80,6 +80,9 @@ from swmmcanada.sources.cities.vancouver import (
 from swmmcanada.sources.cities.toronto import (
     build_toronto_network, fetch_toronto_land, fetch_toronto_sanitary, fetch_toronto_storm,
 )
+from swmmcanada.sources.cities.whitby import (
+    build_whitby_network, fetch_whitby_land, fetch_whitby_storm,
+)
 from swmmcanada.sources.cities.whiterock import (
     build_whiterock_network, fetch_whiterock_land, fetch_whiterock_sanitary,
     fetch_whiterock_storm,
@@ -287,6 +290,16 @@ CITIES: Tuple[CitySpec, ...] = (
         storm=lambda bbox, client: build_peterborough_network(fetch_peterborough_storm(bbox, client=client)),
         land=lambda bbox, client: fetch_peterborough_land(bbox, client=client),
         sanitary=lambda bbox, client: build_peterborough_network(fetch_peterborough_sanitary(bbox, client=client)),
+    ),
+    # Whitby (wave 2): one-layer city; CB-prefixed pipe endpoints are the seeds;
+    # 31% inverts (0-sentinel) with gap-fill; no sanitary (Durham Region asset).
+    CitySpec(
+        key="whitby", label="Whitby, ON",
+        coverage=(-78.99, 43.83, -78.89, 43.95), sub_crs="EPSG:32617",
+        network_source="Town of Whitby storm open data (real municipal network)",
+        storm=lambda bbox, client: build_whitby_network(fetch_whitby_storm(bbox, client=client)),
+        land=lambda bbox, client: fetch_whitby_land(bbox, client=client),
+        sanitary=None,
     ),
     # Sarnia (wave 2): text-mm diameters, (150,250) invert band, MH-id labels.
     CitySpec(
