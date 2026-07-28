@@ -27,6 +27,9 @@ from swmmcanada.sources.cities.coquitlam import (
 from swmmcanada.sources.cities.kelowna import (
     build_kelowna_network, fetch_kelowna_land, fetch_kelowna_sanitary, fetch_kelowna_storm,
 )
+from swmmcanada.sources.cities.kingston import (
+    build_kingston_network, fetch_kingston_land, fetch_kingston_storm,
+)
 from swmmcanada.sources.cities.kitchener import (
     build_kitchener_network, fetch_kitchener_land, fetch_kitchener_sanitary, fetch_kitchener_storm,
 )
@@ -213,6 +216,16 @@ CITIES: Tuple[CitySpec, ...] = (
         storm=lambda bbox, client: build_coquitlam_network(fetch_coquitlam_storm(bbox, client=client)),
         land=lambda bbox, client: fetch_coquitlam_land(bbox, client=client),
         sanitary=lambda bbox, client: build_coquitlam_network(fetch_coquitlam_sanitary(bbox, client=client)),
+    ),
+    # Kingston (wave 2): richest link schema (3 node-id families); bimodal invert
+    # sentinel band; no rims (default depths); no sanitary network published.
+    CitySpec(
+        key="kingston", label="Kingston, ON",
+        coverage=(-76.69, 44.19, -76.37, 44.32), sub_crs="EPSG:32618",
+        network_source="City of Kingston storm open data (real municipal network)",
+        storm=lambda bbox, client: build_kingston_network(fetch_kingston_storm(bbox, client=client)),
+        land=lambda bbox, client: fetch_kingston_land(bbox, client=client),
+        sanitary=None,
     ),
     # Toronto (wave 2): Toronto Water Ext View services; Combined joins storm (ADR 0021),
     # SAN is the tracer; MH-id labels; inlets seed subcatchments (no parcels/buildings).
