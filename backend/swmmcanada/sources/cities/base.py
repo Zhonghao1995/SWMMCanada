@@ -619,7 +619,10 @@ def _shape_cells(seeds, parcels, aoi, crs):
             if poly_m is None or poly_m.area < 1.0:
                 n_dropped += 1
                 continue
-            exterior = [(float(x), float(y)) for x, y in shp_transform(to_ll, poly_m).exterior.coords]
+            # c[:2] tolerates Z-enabled sources (Esquimalt's cadastre publishes 3D rings;
+            # a 2-tuple unpack crashed on the (x, y, z) coords)
+            exterior = [(float(c[0]), float(c[1]))
+                        for c in shp_transform(to_ll, poly_m).exterior.coords]
             # Guard the validator's exact check: the stored EPSG:4326 ring must reproject back to a
             # valid, non-empty metric polygon. A rare sliver is valid in metric yet flips invalid
             # through the 4326 round-trip (float precision) — drop it rather than ship it.
