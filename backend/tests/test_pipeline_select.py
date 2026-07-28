@@ -43,6 +43,7 @@ def test_real_network_cities_selected():
         (-122.910, 49.147, "delta", "Delta"),           # Delta, BC (North Delta)
         (-80.995, 46.492, "sudbury", "Sudbury"),        # Greater Sudbury, ON
         (-121.958, 49.163, "chilliwack", "Chilliwack"),  # Chilliwack, BC
+        (-122.775, 49.262, "portcoquitlam", "Port Coquitlam"),  # nests inside Coquitlam box
     ]
     for lon, lat, key, label in cases:
         assert city_for_point(lon, lat).key == key, (lon, lat)
