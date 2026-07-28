@@ -39,6 +39,9 @@ from swmmcanada.sources.cities.kitchener import (
 from swmmcanada.sources.cities.london import (
     build_london_network, fetch_london_land, fetch_london_sanitary, fetch_london_storm,
 )
+from swmmcanada.sources.cities.nanaimo import (
+    build_nanaimo_network, fetch_nanaimo_land, fetch_nanaimo_sanitary, fetch_nanaimo_storm,
+)
 from swmmcanada.sources.cities.ottawa import (
     build_ottawa_network, fetch_ottawa_land, fetch_ottawa_sanitary, fetch_ottawa_storm,
 )
@@ -226,6 +229,16 @@ CITIES: Tuple[CitySpec, ...] = (
         storm=lambda bbox, client: build_burnaby_network(fetch_burnaby_storm(bbox, client=client)),
         land=lambda bbox, client: fetch_burnaby_land(bbox, client=client),
         sanitary=lambda bbox, client: build_burnaby_network(fetch_burnaby_sanitary(bbox, client=client)),
+    ),
+    # Nanaimo (wave 2): rims-on-row (ST/END_COVELV) + inverts on the pipe ends;
+    # Inlet/Outlet layer unused (does not distinguish inlets — Barrie headwall lesson).
+    CitySpec(
+        key="nanaimo", label="Nanaimo, BC",
+        coverage=(-124.05, 49.06, -123.81, 49.26), sub_crs="EPSG:32610",
+        network_source="City of Nanaimo storm open data (real municipal network)",
+        storm=lambda bbox, client: build_nanaimo_network(fetch_nanaimo_storm(bbox, client=client)),
+        land=lambda bbox, client: fetch_nanaimo_land(bbox, client=client),
+        sanitary=lambda bbox, client: build_nanaimo_network(fetch_nanaimo_sanitary(bbox, client=client)),
     ),
     # Coquitlam (wave 2): geometry topology with real per-end inverts (95% populated) and
     # labelled ends; coverage = the city-boundary envelope (Cadastral layer 11 extent), just
