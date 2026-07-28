@@ -36,6 +36,7 @@ def test_real_network_cities_selected():
         (-122.807, 49.023, "whiterock", "White Rock"),  # nests inside Surrey box
         (-82.400, 42.970, "sarnia", "Sarnia"),          # Sarnia, ON (downtown)
         (-78.945, 43.878, "whitby", "Whitby"),          # Whitby, ON
+        (-123.410, 48.433, "esquimalt", "Esquimalt"),   # nests inside Victoria box
     ]
     for lon, lat, key, label in cases:
         assert city_for_point(lon, lat).key == key, (lon, lat)

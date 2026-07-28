@@ -27,6 +27,10 @@ from swmmcanada.sources.cities.coquitlam import (
     build_coquitlam_network, fetch_coquitlam_land, fetch_coquitlam_sanitary,
     fetch_coquitlam_storm,
 )
+from swmmcanada.sources.cities.esquimalt import (
+    build_esquimalt_network, fetch_esquimalt_land, fetch_esquimalt_sanitary,
+    fetch_esquimalt_storm,
+)
 from swmmcanada.sources.cities.kelowna import (
     build_kelowna_network, fetch_kelowna_land, fetch_kelowna_sanitary, fetch_kelowna_storm,
 )
@@ -269,6 +273,16 @@ CITIES: Tuple[CitySpec, ...] = (
         storm=lambda bbox, client: build_nanaimo_network(fetch_nanaimo_storm(bbox, client=client)),
         land=lambda bbox, client: fetch_nanaimo_land(bbox, client=client),
         sanitary=lambda bbox, client: build_nanaimo_network(fetch_nanaimo_sanitary(bbox, client=client)),
+    ),
+    # Esquimalt (wave 2): compass-wall manhole inverts lifted by pipe bearing; box
+    # NESTS inside Victoria's (smallest-box dispatch).
+    CitySpec(
+        key="esquimalt", label="Esquimalt, BC",
+        coverage=(-123.43, 48.42, -123.395, 48.46), sub_crs="EPSG:32610",
+        network_source="Township of Esquimalt drain open data (real municipal network)",
+        storm=lambda bbox, client: build_esquimalt_network(fetch_esquimalt_storm(bbox, client=client)),
+        land=lambda bbox, client: fetch_esquimalt_land(bbox, client=client),
+        sanitary=lambda bbox, client: build_esquimalt_network(fetch_esquimalt_sanitary(bbox, client=client)),
     ),
     # Coquitlam (wave 2): geometry topology with real per-end inverts (95% populated) and
     # labelled ends; coverage = the city-boundary envelope (Cadastral layer 11 extent), just
