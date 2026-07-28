@@ -77,6 +77,10 @@ from swmmcanada.sources.cities.vancouver import (
 from swmmcanada.sources.cities.toronto import (
     build_toronto_network, fetch_toronto_land, fetch_toronto_sanitary, fetch_toronto_storm,
 )
+from swmmcanada.sources.cities.whiterock import (
+    build_whiterock_network, fetch_whiterock_land, fetch_whiterock_sanitary,
+    fetch_whiterock_storm,
+)
 from swmmcanada.sources.cities.victoria import (
     build_victoria_network, fetch_victoria_land, fetch_victoria_sanitary, fetch_victoria_storm,
 )
@@ -309,6 +313,15 @@ CITIES: Tuple[CitySpec, ...] = (
         storm=lambda bbox, client: build_toronto_network(fetch_toronto_storm(bbox, client=client)),
         land=lambda bbox, client: fetch_toronto_land(bbox, client=client),
         sanitary=lambda bbox, client: build_toronto_network(fetch_toronto_sanitary(bbox, client=client)),
+    ),
+    # White Rock (wave 2): rims-on-row; box NESTS inside Surrey's (smallest-box dispatch).
+    CitySpec(
+        key="whiterock", label="White Rock, BC",
+        coverage=(-122.845, 49.005, -122.79, 49.045), sub_crs="EPSG:32610",
+        network_source="City of White Rock storm open data (real municipal network)",
+        storm=lambda bbox, client: build_whiterock_network(fetch_whiterock_storm(bbox, client=client)),
+        land=lambda bbox, client: fetch_whiterock_land(bbox, client=client),
+        sanitary=lambda bbox, client: build_whiterock_network(fetch_whiterock_sanitary(bbox, client=client)),
     ),
     # Reykjavík (IS) — first non-Canadian city: geometry-inferred topology like Ottawa, but with
     # REAL surveyed inverts carried on the structure points (BOTNKODI) and snapped onto pipe ends.

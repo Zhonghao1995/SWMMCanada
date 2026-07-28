@@ -33,6 +33,7 @@ def test_real_network_cities_selected():
         (-123.999, 49.234, "nanaimo", "Nanaimo"),       # Nanaimo, BC (north)
         (-122.929, 49.207, "newwestminster", "New Westminster"),  # nests inside Burnaby box
         (-119.595, 49.487, "penticton", "Penticton"),   # Penticton, BC
+        (-122.807, 49.023, "whiterock", "White Rock"),  # nests inside Surrey box
     ]
     for lon, lat, key, label in cases:
         assert city_for_point(lon, lat).key == key, (lon, lat)
