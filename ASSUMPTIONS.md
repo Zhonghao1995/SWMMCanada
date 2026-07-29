@@ -13,11 +13,11 @@ in the [README](README.md).
 
 | | Bucket | What it means | Layers |
 |---|---|---|---|
-| 🟢 | **Real data** | measured & published, used as-is | storm pipe network (the 8 real-network cities); ground elevation; rainfall & temperature; parcel & building footprints; node / outfall / catch-basin locations |
+| 🟢 | **Real data** | measured & published, used as-is | storm pipe network (the 35 real-network cities); ground elevation; rainfall & temperature; parcel & building footprints; node / outfall / catch-basin locations |
 | 🟢 | **Derived from real data** | computed from the above by a standard, accepted method — trustworthy model inputs, the way professional models are built | imperviousness %, terrain slope, curve number (CN), evaporation, and the outlines of parcel-followed subcatchments |
-| 🟠 | **Approximated / assumed** | where direct data is thin: a sensible approximation or a standard default — apply judgment | the network **outside** the 8 cities (synthesized from streets); how subcatchments are **partitioned** (nearest-inlet service areas, not surveyed watersheds); gap-fills for missing inverts/diameters; non-circular pipes treated as circular; default roughness / depths |
+| 🟠 | **Approximated / assumed** | where direct data is thin: a sensible approximation or a standard default — apply judgment | the network **outside** the 35 cities (synthesized from streets); how subcatchments are **partitioned** (nearest-inlet service areas, not surveyed watersheds); gap-fills for missing inverts/diameters; non-circular pipes treated as circular; default roughness / depths |
 
-> In a 7-city model, the great majority of what matters — pipes, terrain, climate, roofs, and the
+> In a real-network-city model, the great majority of what matters — pipes, terrain, climate, roofs, and the
 > parameters derived from them — is 🟢. The 🟠 items are normal modelling approximations to be
 > aware of, not red flags.
 
@@ -25,7 +25,7 @@ in the [README](README.md).
 
 | Layer | Grounding | Notes |
 |---|---|---|
-| **Storm network** (pipes, nodes, outfalls) | 🟢 Real (8 cities) · 🟠 synthesized elsewhere | Real = published inverts, diameters, materials, locations. Honest gap-fills: ~7–10% of missing inverts are slope/neighbour-interpolated; dangling node refs snap to pipe geometry; non-circular profiles → equivalent circular (original shape kept in diagnostics). |
+| **Storm network** (pipes, nodes, outfalls) | 🟢 Real (35 cities) · 🟠 synthesized elsewhere | Real = published inverts, diameters, materials, locations. Honest gap-fills for missing inverts (share varies by city — see the per-city table): neighbour values, the node's own rim, then the DEM surface, each counted in the diagnostics; dangling node refs snap to pipe geometry; non-circular profiles → equivalent circular (original shape kept in diagnostics). |
 | **Imperviousness (%)** | 🟢 Derived | From real building roofs + road right-of-way where parcels/buildings are published; otherwise from the NALCMS land-cover raster (30 m). |
 | **Terrain slope** | 🟢 Derived | Computed from the real NRCan MRDEM (30 m). |
 | **Infiltration / curve number** | 🟢 Derived · 🟠 fallback | From real soil (SoilGrids/HYSOGs) → hydrologic soil group → SCS curve number. Falls back to a documented HSG-B default only if soil can't be fetched. |
@@ -39,29 +39,80 @@ in the [README](README.md).
 
 ## Per-city differences
 
-All 8 real-network cities use **real pipes** (🟢). They differ only in how subcatchments and
-imperviousness are built, depending on what each city publishes:
+All 35 real-network cities use **real pipes** (🟢): published locations, connectivity,
+diameters and materials. They differ in two things — what each city publishes around the
+pipes (subcatchment/imperviousness inputs), and how complete the **vertical** data is
+(pipe inverts). The vertical tier is the honest one-glance signal:
 
-| City | Network topology | Subcatchment outline | Imperviousness |
-|---|---|---|---|
-| Victoria, BC | explicit node IDs | 🟢 real parcel lines | 🟢 real buildings |
-| Ottawa, ON | geometry-inferred | 🟠 catch-basin tessellation | 🟢 land cover (no parcels published) |
-| Calgary, AB | geometry-inferred | 🟢 real parcel lines | 🟢 real buildings |
-| Surrey, BC | geometry-inferred | 🟢 real parcel lines | 🟢 real buildings |
-| London, ON | explicit node IDs | 🟢 real parcel lines | 🟢 real buildings |
-| Kitchener–Waterloo, ON | explicit node IDs | 🟠 catch-basin tessellation | 🟢 land cover (no parcels published) |
-| Kelowna, BC | geometry-inferred | 🟢 real parcel lines | 🟢 real buildings |
-| Regina, SK | geometry-inferred | 🟢 real parcel lines | 🟢 real buildings |
+- **A** — published inverts, ≤10 % of nodes gap-filled on the recorded test AOI.
+- **B** — published inverts with real gaps (~10–35 % of nodes gap-filled from
+  neighbours / rims / the DEM).
+- **C** — vertical data thin (>35 % gap-filled): pipe locations are real, but a large
+  share of node inverts is estimated, mostly anchored to the DEM surface. Fine for a
+  first-pass screening model; not a basis for detailed design.
+
+Percentages are measured on each city's recorded test AOI; every build reports the exact
+per-tier counts for *your* AOI in its diagnostics
+(`n_inv_from_neighbour` / `n_inv_from_rim` / `n_inv_from_dem` / `n_inv_from_global_min`).
+
+| City | Vertical (inverts) | Network topology | Subcatchment outline | Imperviousness |
+|---|---|---|---|---|
+| Abbotsford, BC | 🟠 B (~16 %) | geometry-inferred | 🟢 real parcel lines | 🟢 land cover (no buildings published) |
+| Barrie, ON | 🟠 B (~20 %) | geometry-inferred | 🟢 real parcel lines | 🟢 real buildings |
+| Burnaby, BC | 🟠 B (~20 %) | geometry-inferred | 🟢 real parcel lines | 🟢 real buildings |
+| Calgary, AB | 🟢 A | geometry-inferred | 🟢 real parcel lines | 🟢 real buildings |
+| Chilliwack, BC | 🟠 B (~26 %) | geometry-inferred | 🟠 catch-basin tessellation | 🟢 land cover |
+| Coquitlam, BC | 🟢 A (~7 %) | geometry-inferred | 🟢 real parcel lines | 🟢 real buildings |
+| Delta, BC | 🟠 B (~17 %) | geometry-inferred | 🟠 junction cells (no catch-basin layer) | 🟢 land cover |
+| Esquimalt, BC | 🟠 B (~25 %) | geometry-inferred | 🟢 real parcel lines | 🟢 real buildings |
+| Greater Sudbury, ON | 🟠 B (~34 %) | geometry-inferred | 🟢 real parcel lines | 🟢 real buildings |
+| Kamloops, BC | 🟢 A (~4 %) | geometry-inferred | 🟠 catch-basin tessellation | 🟢 real buildings |
+| Kelowna, BC | 🟢 A | geometry-inferred | 🟢 real parcel lines | 🟢 real buildings |
+| Kingston, ON | 🟠 C (~60 %) | geometry-inferred | 🟠 catch-basin tessellation | 🟢 real buildings |
+| Kitchener–Waterloo, ON | 🟢 A | explicit node IDs | 🟠 catch-basin tessellation | 🟢 land cover (no parcels published) |
+| Langley (Township), BC | 🟢 A (~7 %) | geometry-inferred | 🟢 real parcel lines | 🟢 land cover |
+| London, ON | 🟢 A | explicit node IDs | 🟢 real parcel lines | 🟢 real buildings |
+| Moncton, NB | 🟠 B (~25 %) | geometry-inferred | 🟢 real parcel lines | 🟢 real buildings |
+| Nanaimo, BC | 🟠 C (~41 %) | geometry-inferred | 🟢 real parcel lines | 🟢 real buildings |
+| New Westminster, BC | 🟠 B (~30 %) | geometry-inferred | 🟢 real parcel lines | 🟢 real buildings |
+| North Vancouver (District), BC | 🟠 C (~66 %) | geometry-inferred | 🟠 junction cells (packaged download, no land layers) | 🟢 land cover |
+| Ottawa, ON | 🟢 A | geometry-inferred | 🟠 catch-basin tessellation | 🟢 land cover (no parcels published) |
+| Penticton, BC | 🟠 B (~13 %) | geometry-inferred | 🟠 catch-basin tessellation | 🟢 land cover |
+| Peterborough, ON | 🟠 B (~17 %) | geometry-inferred | 🟠 catch-basin tessellation | 🟢 land cover |
+| Port Coquitlam, BC | 🟠 B (~28 %) | geometry-inferred | 🟢 real parcel lines | 🟢 real buildings |
+| Regina, SK | 🟢 A | geometry-inferred | 🟢 real parcel lines | 🟢 real buildings |
+| Reykjavík, IS | 🟠 C | geometry-inferred | 🟢 real parcel lines | 🟢 real buildings |
+| Sarnia, ON | 🟢 A (~10 %) | geometry-inferred | 🟠 catch-basin tessellation | 🟢 real buildings |
+| Saskatoon, SK | 🟢 A (~9 %) | geometry-inferred | 🟢 real parcel lines | 🟢 land cover |
+| Strathcona County, AB | 🟠 C (~48 %) | geometry-inferred | 🟠 catch-basin tessellation | 🟢 real buildings |
+| Surrey, BC | 🟢 A | geometry-inferred | 🟢 real parcel lines | 🟢 real buildings |
+| Toronto, ON | 🟠 B (~15 %) | geometry-inferred | 🟠 catch-basin tessellation | 🟢 land cover |
+| Vancouver, BC | 🟠 B | geometry-inferred | 🟢 real parcel lines | 🟢 real buildings |
+| Victoria, BC | 🟢 A | explicit node IDs | 🟢 real parcel lines | 🟢 real buildings |
+| Whitby, ON | 🟠 C (~70 %) | geometry-inferred | 🟠 catch-basin tessellation | 🟢 land cover |
+| White Rock, BC | 🟠 C (~36 %) | geometry-inferred | 🟢 real parcel lines | 🟢 real buildings |
+| Windsor, ON | 🟠 B (~21 %) | geometry-inferred | 🟠 junction cells (packaged download, no land layers) | 🟢 land cover |
+
+City-specific notes:
+
+- **Vancouver** publishes an invert *rows* table (some entries city-flagged as estimated);
+  ends it doesn't cover are anchored to the real manhole rim minus the default 2.5 m depth.
+- **Reykjavík** sits outside the Canadian DEM, so the DEM tier cannot help its gaps — thin
+  spots fall back to neighbour values and the counted AOI minimum.
+- "Geometry-inferred" topology means nodes come from snapped pipe endpoints; most of these
+  cities publish manhole/structure IDs, which are kept as the node names.
+- The original 8 cities (Victoria → Regina) were re-audited field-by-field in 2026-07
+  (elevation semantics: what each city's "invert"/"elevation" column actually means).
 
 Outside these cities, the network itself is 🟠 synthesized from OpenStreetMap streets.
 
 ## The bottom line
 
 > [!NOTE]
-> A generated model is **grounded in real data and ready to run**: the pipes (in the 8 cities),
+> A generated model is **grounded in real data and ready to run**: the pipes (in the 35 cities),
 > terrain, climate, roofs/parcels, and the parameters derived from them are real or standard
 > derivations from real data. The approximations to keep in mind are the **subcatchment
-> partitioning** and, outside the 8 cities, the **network** itself.
+> partitioning** and, outside the 35 cities, the **network** itself.
 
 > [!WARNING]
 > **Models are uncalibrated.** No parameters are fitted to observations — this is true of any
