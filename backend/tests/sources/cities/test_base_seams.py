@@ -288,6 +288,37 @@ def test_dem_tier_nodata_holes_borrow_then_global_min():
     assert res2.diagnostics["n_inv_from_global_min"] == 4
 
 
+def test_fill_source_map_is_opt_in_and_names_every_node():
+    """record_fill_sources=True emits inv_fill_source: node name -> tier, covering every
+    node; off by default so packages don't grow a node-sized map unasked."""
+    from swmmcanada.sources.cities.base import (
+        SURFACE_SAMPLER, AssembleConfig, RawPipe, assemble_network,
+    )
+    low = RawPipe("LOW", (0.0, 0.0), (0.001, 0.0), inv_a=5.0, inv_b=4.0)
+    rimp = RawPipe("RIMP", (0.03, 0.03), (0.031, 0.03), inv_a=None, inv_b=None)
+    hill = RawPipe("HILL", (0.05, 0.05), (0.051, 0.05), inv_a=None, inv_b=None)
+    far = RawPipe("FAR", (0.09, 0.09), (0.091, 0.09), inv_a=None, inv_b=None)
+    elev = {(0.05, 0.05): 60.0}
+    tok = SURFACE_SAMPLER.set(lambda coords: [elev.get(c) for c in coords])
+    try:
+        res = assemble_network([low, rimp, hill, far], ground_points=[((0.03, 0.03), 40.0)],
+                               config=AssembleConfig(record_fill_sources=True))
+        res_off = assemble_network([low, rimp, hill, far])
+    finally:
+        SURFACE_SAMPLER.reset(tok)
+    src = res.diagnostics["inv_fill_source"]
+    n_nodes = len(res.network.junctions) + sum(1 for o in res.network.outfalls
+                                               if not o.name.startswith("OUT_"))
+    assert len(src) == n_nodes                      # every snapped node is attributed
+    from collections import Counter
+    counts = Counter(src.values())
+    assert counts["data"] == 2                      # LOW's two ends
+    assert counts["rim"] == 1 and counts["dem"] == 1            # RIMP / HILL anchors
+    assert counts["neighbour"] == 2                 # their far ends borrow next door
+    assert counts["global_min"] == 2                # FAR: nothing to anchor either end
+    assert "inv_fill_source" not in res_off.diagnostics
+
+
 def test_dem_tier_never_overrides_data_rim_or_neighbour():
     """The DEM is the LAST informed tier: published pipe-ends, neighbour values and the
     node's own rim all win over it — the sampler is only ever asked about the leftovers."""
