@@ -108,10 +108,15 @@ pipeline uses, now stated explicitly rather than left implicit in the code:
   at that node). Where a city publishes no invert for a node, the gap fills in TIERS
   (#158): first from neighbouring nodes; then from **the node's own rim minus a default
   2.5 m node depth** (a local estimate anchored to real ground — the Vancouver ADR 0020
-  convention generalised); only a node with no invert, no informed neighbour AND no rim
-  falls back to the AOI-wide minimum, and every tier is counted in the diagnostics
-  (`n_inv_from_neighbour` / `n_inv_from_rim` / `n_inv_from_global_min`). The old
-  two-step fill let the global minimum put sea-level inverts on 80 m hillsides.
+  convention generalised); then, in pipeline builds, from **the DEM surface at the node
+  minus the same 2.5 m** (rim ≈ DEM ground), which is what carries cities that publish no
+  rim layer at all — the sampled surface also serves as the node's ground estimate so max
+  depth is real; only a node with no invert, no informed neighbour, no rim AND no DEM
+  sample falls back to the AOI-wide minimum, and every tier is counted in the diagnostics
+  (`n_inv_from_neighbour` / `n_inv_from_rim` / `n_inv_from_dem` / `n_inv_from_global_min`).
+  The old two-step fill let the global minimum put sea-level inverts on 80 m hillsides;
+  with the DEM tier a North Vancouver District test AOI went from 1,377 identical
+  valley-floor inverts to 0.
 - **Sump depth is not modelled.** Regina (`SUMPELEVATION`, a median 1.77 m below the rim),
   Kelowna (`SUMP_ELEVATION`) and Kitchener (`SUMP`) all publish a genuine chamber-floor
   field. None is read. A sump is dead storage that traps grit; it does not carry flow, and

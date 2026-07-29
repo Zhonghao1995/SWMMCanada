@@ -16,13 +16,24 @@ subcatchment delineation (ADR 0005), parameterised by metric CRS so any city can
 import math
 import re
 from collections import Counter, defaultdict
+from contextvars import ContextVar
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
 from swmmcanada.sources import _http
 from swmmcanada.build.models import ConduitIn, JunctionIn, NetworkIn, OutfallIn
 
 Coord = Tuple[float, float]
+
+# Optional surface-elevation sampler for the invert gap-fill (#158 follow-up): takes node
+# lon/lat coords, returns one elevation (or None) per coord. The PIPELINE sets this around
+# network fetches — a DEM-backed sampler — so cities with no rim data still get
+# terrain-anchored inverts (rim ≈ DEM surface) before the global minimum. A context
+# variable rather than an AssembleConfig field so the 35 per-city adapter configs and the
+# offline fixture tests stay untouched; unset (None) means the tier is skipped.
+SURFACE_SAMPLER: ContextVar[Optional[Callable[[Sequence[Coord]], List[Optional[float]]]]] = (
+    ContextVar("SURFACE_SAMPLER", default=None)
+)
 
 
 # --- shared ArcGIS fetch helpers (lifted so every city adapter reuses one copy) ----------
@@ -323,7 +334,11 @@ def assemble_network(
     #      real ground (the Vancouver ADR 0020 convention, generalised to every city);
     #      followed by one more neighbour sweep so rim-anchored values reach rim-less
     #      neighbours before the global minimum ever gets a say;
-    #   3. the global minimum, demoted to a counted last resort.
+    #   3. the DEM surface at the node minus the same default depth (rim ≈ DEM), for
+    #      cities that publish no rim at all — only when the pipeline has injected a
+    #      SURFACE_SAMPLER; a sampled elevation also becomes the node's ground estimate
+    #      so max depth is real instead of the default;
+    #   4. the global minimum, demoted to a counted last resort.
     node_inv: Dict[Coord, Optional[float]] = {k: (min(inv_cands[k]) if inv_cands.get(k) else None) for k in node_xy}
     n_missing = sum(1 for v in node_inv.values() if v is None)
     adj: Dict[Coord, set] = defaultdict(set)
@@ -348,6 +363,16 @@ def assemble_network(
             node_inv[k] = ground[k] - config.fallback_node_depth_m
             n_from_rim += 1
     n_from_neighbour += _neighbour_sweep()
+    n_from_dem = 0
+    remaining = [k for k in node_xy if node_inv[k] is None]
+    sampler = SURFACE_SAMPLER.get()
+    if remaining and sampler is not None:
+        for k, elev in zip(remaining, sampler([node_xy[k] for k in remaining])):
+            if elev is not None:
+                node_inv[k] = elev - config.fallback_node_depth_m
+                ground.setdefault(k, elev)  # DEM surface doubles as the rim estimate
+                n_from_dem += 1
+        n_from_neighbour += _neighbour_sweep()  # DEM-anchored values reach nodata holes
     n_from_global_min = sum(1 for v in node_inv.values() if v is None)
     known = [v for v in node_inv.values() if v is not None]
     fallback = min(known) if known else 0.0
@@ -480,7 +505,7 @@ def assemble_network(
         "n_offset_ends": n_offset_ends, "n_offsets_rejected": n_offsets_rejected,
         "n_noncircular": n_noncircular, "n_depths_rejected": n_depths_rejected,
         "n_inv_from_neighbour": n_from_neighbour, "n_inv_from_rim": n_from_rim,
-        "n_inv_from_global_min": n_from_global_min,
+        "n_inv_from_dem": n_from_dem, "n_inv_from_global_min": n_from_global_min,
     }
     return NetworkResult(network=network, diagnostics=diagnostics)
 
