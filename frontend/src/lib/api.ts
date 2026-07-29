@@ -38,17 +38,23 @@ const STATE_MAP: Record<string, JobStatus> = {
   CANCELLED: 'cancelled',
 }
 
-export interface AoiPreview {
+// What a submit of this AOI would get, known BEFORE any build starts: the build
+// pathway, the matched real-network city and its vertical-data tier (A/B/C — the
+// ASSUMPTIONS.md per-city table is the evidence-carrying copy).
+export interface SiteFacts {
+  mode?: string
+  city?: string | null
+  cityLabel?: string | null
+  dataTier?: 'A' | 'B' | 'C' | null
+}
+
+export interface AoiPreview extends SiteFacts {
   boundary: Feature<Polygon | MultiPolygon>
   bbox: Bbox
   areaKm2: number
 }
 
-// Parse an uploaded boundary on the backend WITHOUT starting a build, so the UI can
-// draw it, show its area, and surface parse errors (bad CRS, oversize) immediately.
-export async function previewAoi(file: File): Promise<AoiPreview> {
-  const body = new FormData()
-  body.append('file', file)
+async function postAoiPreview(body: FormData): Promise<AoiPreview> {
   const r = await fetch(`${API}/aoi/preview`, { method: 'POST', body })
   if (!r.ok) {
     let detail = `HTTP ${r.status}`
@@ -63,12 +69,36 @@ export async function previewAoi(file: File): Promise<AoiPreview> {
     geometry: Polygon | MultiPolygon
     bbox: Bbox
     area_km2: number
+    mode?: string
+    city?: string | null
+    city_label?: string | null
+    data_tier?: 'A' | 'B' | 'C' | null
   }
   return {
     boundary: { type: 'Feature', properties: {}, geometry: j.geometry },
     bbox: j.bbox,
     areaKm2: j.area_km2,
+    mode: j.mode,
+    city: j.city,
+    cityLabel: j.city_label,
+    dataTier: j.data_tier,
   }
+}
+
+// Parse an uploaded boundary on the backend WITHOUT starting a build, so the UI can
+// draw it, show its area, and surface parse errors (bad CRS, oversize) immediately.
+export async function previewAoi(file: File): Promise<AoiPreview> {
+  const body = new FormData()
+  body.append('file', file)
+  return postAoiPreview(body)
+}
+
+// Same endpoint for a DRAWN polygon: resolve the site facts (city, data tier, pathway)
+// the moment the user closes the ring, so the panel can say what they are getting.
+export async function resolveAoiPolygon(polygon: Feature<Polygon>): Promise<AoiPreview> {
+  const body = new FormData()
+  body.append('polygon', JSON.stringify(polygon.geometry))
+  return postAoiPreview(body)
 }
 
 export async function submitTask(params: SubmitParams): Promise<{ taskId: string }> {

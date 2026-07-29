@@ -1,6 +1,6 @@
 """FastAPI app for the async tasks-api (integration spec §2.1):
 
-  POST   /api/v1/aoi/preview        -> 200 {geometry, bbox, area_km2, mode, city, in_canada}  (parse only, no build)
+  POST   /api/v1/aoi/preview        -> 200 {geometry, bbox, area_km2, mode, city, city_label, data_tier, in_canada}  (parse only, no build)
   POST   /api/v1/tasks              -> 202 {task_id, status}   (json polygon or multipart shp)
   GET    /api/v1/tasks/{id}         -> 200 {state, progress_pct, stage, error}
   GET    /api/v1/tasks/{id}/result  -> 200 zip | 409 not ready | 404
@@ -30,7 +30,12 @@ from swmmcanada.build.config import InfiltrationModel
 from swmmcanada.geo import aoi_from_geojson, aoi_from_shapefile
 from swmmcanada.geo.errors import AOIOversizeError, GeoError
 from swmmcanada.pipeline import pipeline_for_aoi
-from swmmcanada.sources.cities.registry import city_for_point, coverage_summary, in_canada_coarse
+from swmmcanada.sources.cities.registry import (
+    DATA_TIERS,
+    city_for_point,
+    coverage_summary,
+    in_canada_coarse,
+)
 from swmmcanada.sources.idf_eccc import IDF_RETURN_PERIODS
 
 
@@ -113,6 +118,10 @@ def create_app(*, pipeline=None, workdir=None, run_inline: bool = False) -> Fast
             "source": aoi.source,
             "mode": mode,
             "city": spec.key if spec is not None else None,
+            "city_label": spec.label if spec is not None else None,
+            # Vertical-data tier (A/B/C, see the ASSUMPTIONS.md per-city table):
+            # shown at draw time so users know what they are getting BEFORE a build.
+            "data_tier": DATA_TIERS[spec.key] if spec is not None else None,
             "in_canada": in_canada_coarse(centre_lon, centre_lat),
         }
 

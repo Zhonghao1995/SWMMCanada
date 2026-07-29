@@ -23,6 +23,7 @@ export default function ControlPanel() {
   const designStorm = useStore((s) => s.designStorm)
   const setDesignStorm = useStore((s) => s.setDesignStorm)
   const rainfall = useStore((s) => s.rainfall)
+  const site = useStore((s) => s.site)
   const uploadError = useStore((s) => s.uploadError)
   const checkRainfall = useStore((s) => s.checkRainfall)
   const submit = useStore((s) => s.submit)
@@ -114,6 +115,41 @@ export default function ControlPanel() {
             <button onClick={clearAoi} className="ml-2 text-slate-400 hover:text-red-500">
               <Trash2 size={15} />
             </button>
+          </div>
+        )}
+        {aoi && site && (
+          // Draw-time honesty (ASSUMPTIONS.md per-city table): which city matched and
+          // how complete its vertical data is, BEFORE the user spends a build on it.
+          <div
+            className={`rounded-md px-3 py-2 text-xs ${
+              site.dataTier === 'A'
+                ? 'bg-emerald-50 text-emerald-800'
+                : site.dataTier === 'B'
+                  ? 'bg-amber-50 text-amber-800'
+                  : site.dataTier === 'C'
+                    ? 'bg-orange-50 text-orange-800'
+                    : 'bg-slate-50 text-slate-600'
+            }`}
+          >
+            {site.dataTier ? (
+              <>
+                <span className="font-semibold">
+                  🏙️ {site.cityLabel} · data tier {site.dataTier}
+                </span>
+                <div className="mt-0.5">
+                  {site.dataTier === 'A'
+                    ? 'Real network with published pipe elevations (≤10% gap-filled).'
+                    : site.dataTier === 'B'
+                      ? 'Real network; some pipe elevations are gap-filled estimates (~10–35%).'
+                      : 'Real pipe layout, but most elevations are estimated from terrain — screening use.'}
+                </div>
+              </>
+            ) : (
+              <>
+                <span className="font-semibold">🧩 No city network here</span>
+                <div className="mt-0.5">The network would be synthesized from open data (streets + terrain).</div>
+              </>
+            )}
           </div>
         )}
         {uploadError && <p className="text-[11px] text-red-500">{uploadError}</p>}
