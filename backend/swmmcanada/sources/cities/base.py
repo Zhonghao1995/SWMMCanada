@@ -260,6 +260,10 @@ class AssembleConfig:
     default_diameter_m: float = 0.30
     default_roughness: float = 0.013
     outfall_link_len_m: float = 10.0
+    # Auditability: when True, diagnostics carry ``inv_fill_source`` — per node, which
+    # tier its invert came from (data|neighbour|rim|dem|global_min). Off by default so
+    # result packages don't grow a node-sized map unless asked.
+    record_fill_sources: bool = False
 
 
 @dataclass(frozen=True)
@@ -341,6 +345,7 @@ def assemble_network(
     #   4. the global minimum, demoted to a counted last resort.
     node_inv: Dict[Coord, Optional[float]] = {k: (min(inv_cands[k]) if inv_cands.get(k) else None) for k in node_xy}
     n_missing = sum(1 for v in node_inv.values() if v is None)
+    fill_src: Dict[Coord, str] = {k: "data" for k in node_xy if node_inv[k] is not None}
     adj: Dict[Coord, set] = defaultdict(set)
     for _, ka, kb, *_ in edges:
         adj[ka].add(kb)
@@ -353,6 +358,7 @@ def assemble_network(
                 neigh = [node_inv[n] for n in adj[k] if node_inv[n] is not None]
                 if neigh:
                     node_inv[k] = min(neigh)
+                    fill_src[k] = "neighbour"
                     filled += 1
         return filled
 
@@ -361,6 +367,7 @@ def assemble_network(
     for k in node_xy:
         if node_inv[k] is None and k in ground:
             node_inv[k] = ground[k] - config.fallback_node_depth_m
+            fill_src[k] = "rim"
             n_from_rim += 1
     n_from_neighbour += _neighbour_sweep()
     n_from_dem = 0
@@ -371,9 +378,13 @@ def assemble_network(
             if elev is not None:
                 node_inv[k] = elev - config.fallback_node_depth_m
                 ground.setdefault(k, elev)  # DEM surface doubles as the rim estimate
+                fill_src[k] = "dem"
                 n_from_dem += 1
         n_from_neighbour += _neighbour_sweep()  # DEM-anchored values reach nodata holes
     n_from_global_min = sum(1 for v in node_inv.values() if v is None)
+    for k in node_xy:
+        if node_inv[k] is None:
+            fill_src[k] = "global_min"
     known = [v for v in node_inv.values() if v is not None]
     fallback = min(known) if known else 0.0
     node_inv = {k: (v if v is not None else fallback) for k, v in node_inv.items()}
@@ -507,6 +518,8 @@ def assemble_network(
         "n_inv_from_neighbour": n_from_neighbour, "n_inv_from_rim": n_from_rim,
         "n_inv_from_dem": n_from_dem, "n_inv_from_global_min": n_from_global_min,
     }
+    if config.record_fill_sources:
+        diagnostics["inv_fill_source"] = {nid(k): fill_src[k] for k in node_xy}
     return NetworkResult(network=network, diagnostics=diagnostics)
 
 
