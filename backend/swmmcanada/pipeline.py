@@ -7,6 +7,7 @@ Sources default to the live adapters but are injectable for testing / alternate 
 This is the function the future tasks-api worker will call (run_pipeline).
 """
 import json
+import math
 import os
 from dataclasses import replace
 from datetime import date
@@ -102,6 +103,41 @@ def _dem_source_auto(dem_source):
     from swmmcanada.sources.dem_hrdem import AutoDemSource
 
     return AutoDemSource()
+
+
+def _make_surface_sampler(aoi_bbox, ws, dem_source):
+    """DEM-backed surface sampler for the invert gap-fill (base.SURFACE_SAMPLER seam):
+    lon/lat coords -> one elevation (or None) per coord. Lazy — the DEM is acquired and
+    opened only if the assembler actually has last-resort nodes to fill, so cities with
+    complete inverts never pay for it. Any failure (no coverage — e.g. outside Canada —
+    network trouble, nodata cells) degrades to None per coord and the assembler falls
+    through to the counted global minimum, exactly as before."""
+    state: dict = {}
+
+    def sample(coords):
+        if "ds" not in state:
+            try:
+                import rasterio
+                from pyproj import Transformer
+
+                dem = acquire_dem(tuple(aoi_bbox), ws, source=dem_source)
+                state["ds"] = rasterio.open(dem.path)
+                state["tr"] = Transformer.from_crs("EPSG:4326", state["ds"].crs, always_xy=True)
+            except Exception:  # noqa: BLE001 — sampler is best-effort by contract
+                state["ds"] = None
+        ds = state.get("ds")
+        if ds is None:
+            return [None] * len(coords)
+        xs, ys = state["tr"].transform([c[0] for c in coords], [c[1] for c in coords])
+        out = []
+        for (val,) in ds.sample(zip(xs, ys)):
+            e = float(val)
+            bad = (ds.nodata is not None and e == ds.nodata) or not math.isfinite(e) \
+                or not (-450.0 < e < 6000.0)
+            out.append(None if bad else e)
+        return out
+
+    return sample
 
 
 def _design_intensity_fn(aoi):
@@ -509,7 +545,16 @@ def build_city(
     ws.mkdir(parents=True, exist_ok=True)
 
     _r("FETCH_NETWORK", 15)
-    netres = spec.storm(bbox, client)
+    # DEM-as-rim for the invert gap-fill: cities with no rim layer (e.g. North Van
+    # District) get terrain-anchored inverts instead of the AOI-wide minimum. Lazy — only
+    # fires if the assembler actually has last-resort nodes. Reset so no sampler leaks
+    # into other builds in this process.
+    surface_sampler = _make_surface_sampler(tuple(aoi.bbox), ws, dem_source)
+    _tok = base.SURFACE_SAMPLER.set(surface_sampler)
+    try:
+        netres = spec.storm(bbox, client)
+    finally:
+        base.SURFACE_SAMPLER.reset(_tok)
     network = netres.network
 
     # Subcatchments: catch-basin + parcel/building (ADR 0005), else Voronoi-of-nodes fallback.
@@ -563,7 +608,11 @@ def build_city(
     if spec.sanitary is not None:
         _r("SANITARY", 78)
         try:
-            sanres = spec.sanitary(bbox, client)
+            _tok = base.SURFACE_SAMPLER.set(surface_sampler)  # same DEM tier as storm
+            try:
+                sanres = spec.sanitary(bbox, client)
+            finally:
+                base.SURFACE_SAMPLER.reset(_tok)
             network = base.merge_secondary_system(
                 network, sanres.network, prefix="SAN_", system="sanitary")
             san_diag = {"included": True,

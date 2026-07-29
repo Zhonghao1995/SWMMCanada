@@ -225,3 +225,89 @@ def test_global_min_is_the_counted_last_resort():
     inv = {j.name: j.invert_m for j in res.network.junctions}
     inv.update({o.name: o.invert_m for o in res.network.outfalls})
     assert sum(1 for v in inv.values() if abs(v - 4.0) < 1e-9) >= 2
+
+
+# --- DEM surface tier: rim-less cities anchor to terrain, not the global minimum -------
+
+def test_dem_tier_beats_global_minimum():
+    """With a SURFACE_SAMPLER injected (the pipeline's DEM), a component with no inverts,
+    no informed neighbours and no rims anchors to the DEM surface minus the default node
+    depth — terrain-true inverts, real max depths, zero global-minimum nodes."""
+    from swmmcanada.sources.cities.base import (
+        SURFACE_SAMPLER, AssembleConfig, RawPipe, assemble_network,
+    )
+    cfg = AssembleConfig()
+    low = RawPipe("LOW", (0.0, 0.0), (0.001, 0.0), inv_a=2.0, inv_b=1.0)
+    hill = RawPipe("HILL", (0.05, 0.05), (0.051, 0.05), inv_a=None, inv_b=None)
+    elev = {(0.05, 0.05): 80.0, (0.051, 0.05): 82.0}
+    tok = SURFACE_SAMPLER.set(lambda coords: [elev.get(c) for c in coords])
+    try:
+        res = assemble_network([low, hill])
+    finally:
+        SURFACE_SAMPLER.reset(tok)
+    d = res.diagnostics
+    assert d["n_inv_from_dem"] == 2 and d["n_inv_from_global_min"] == 0
+    inv = {j.name: j.invert_m for j in res.network.junctions}
+    inv.update({o.name: o.invert_m for o in res.network.outfalls})
+    assert any(abs(v - (80.0 - cfg.fallback_node_depth_m)) < 1e-9 for v in inv.values())
+    assert any(abs(v - (82.0 - cfg.fallback_node_depth_m)) < 1e-9 for v in inv.values())
+    # the DEM elevation doubles as the rim estimate -> max depth is the default node depth
+    dem_j = [j for j in res.network.junctions if j.invert_m > 70]
+    assert dem_j and all(j.max_depth_m == pytest.approx(cfg.fallback_node_depth_m) for j in dem_j)
+    # and the component's dedicated sink sits at the DEM-low end, draining downhill
+    assert all(c.from_node != c.to_node for c in res.network.conduits)
+
+
+def test_dem_tier_nodata_holes_borrow_then_global_min():
+    """Coords the sampler cannot answer (None — nodata, outside coverage) borrow from a
+    DEM-anchored neighbour where one exists; a fully unsampled component still falls to
+    the counted global minimum. Iceland-degradation contract: sampler present but useless
+    == sampler absent."""
+    from swmmcanada.sources.cities.base import SURFACE_SAMPLER, RawPipe, assemble_network
+    low = RawPipe("LOW", (0.0, 0.0), (0.001, 0.0), inv_a=5.0, inv_b=4.0)
+    hill = RawPipe("HILL", (0.05, 0.05), (0.051, 0.05), inv_a=None, inv_b=None)
+    far = RawPipe("FAR", (0.09, 0.09), (0.091, 0.09), inv_a=None, inv_b=None)
+    elev = {(0.05, 0.05): 60.0}                     # one sampled node; the rest nodata
+    tok = SURFACE_SAMPLER.set(lambda coords: [elev.get(c) for c in coords])
+    try:
+        res = assemble_network([low, hill, far])
+    finally:
+        SURFACE_SAMPLER.reset(tok)
+    d = res.diagnostics
+    assert d["n_inv_from_dem"] == 1
+    assert d["n_inv_from_neighbour"] >= 1           # the hole borrowed 57.5 next door
+    assert d["n_inv_from_global_min"] == 2          # FAR's component: nothing to anchor
+
+    # all-None sampler behaves exactly like no sampler at all
+    tok = SURFACE_SAMPLER.set(lambda coords: [None] * len(coords))
+    try:
+        res2 = assemble_network([low, hill, far])
+    finally:
+        SURFACE_SAMPLER.reset(tok)
+    assert res2.diagnostics["n_inv_from_dem"] == 0
+    assert res2.diagnostics["n_inv_from_global_min"] == 4
+
+
+def test_dem_tier_never_overrides_data_rim_or_neighbour():
+    """The DEM is the LAST informed tier: published pipe-ends, neighbour values and the
+    node's own rim all win over it — the sampler is only ever asked about the leftovers."""
+    from swmmcanada.sources.cities.base import SURFACE_SAMPLER, RawPipe, assemble_network
+    a = RawPipe("A", (0.0, 0.0), (0.001, 0.0), inv_a=10.0, inv_b=9.0)
+    b = RawPipe("B", (0.001, 0.0), (0.002, 0.0), inv_a=None, inv_b=None)  # neighbour fills
+    c = RawPipe("C", (0.05, 0.05), (0.051, 0.05), inv_a=None, inv_b=None)  # rim fills one end
+    asked: list = []
+
+    def sampler(coords):
+        asked.extend(coords)
+        return [999.0] * len(coords)    # poison: any use where data exists would show
+
+    tok = SURFACE_SAMPLER.set(sampler)
+    try:
+        res = assemble_network([a, b, c], ground_points=[((0.05, 0.05), 40.0)])
+    finally:
+        SURFACE_SAMPLER.reset(tok)
+    inv = {j.name: j.invert_m for j in res.network.junctions}
+    inv.update({o.name: o.invert_m for o in res.network.outfalls})
+    assert not asked, f"sampler consulted although every node had data: {asked}"
+    assert res.diagnostics["n_inv_from_dem"] == 0
+    assert not any(v > 900 for v in inv.values())
