@@ -59,6 +59,17 @@ def test_non_canadian_aoi_flagged(tmp_path):
     assert j["in_canada"] is False
 
 
+def test_city_aoi_reports_data_tier_and_label(tmp_path):
+    """Draw-time honesty: the vertical-data tier (A/B/C, ASSUMPTIONS.md per-city table)
+    and the display label ride along with the routing facts, so the UI can show what
+    the user is getting BEFORE a build. Non-city AOIs carry null tier/label."""
+    j = _preview(tmp_path, OTTAWA)
+    assert j["city_label"] == "Ottawa, ON"
+    assert j["data_tier"] == "A"
+    j2 = _preview(tmp_path, RURAL_SK)
+    assert j2["city_label"] is None and j2["data_tier"] is None
+
+
 def test_existing_preview_fields_unchanged(tmp_path):
     j = _preview(tmp_path, OTTAWA)
     assert j["geometry"]["type"] == "Polygon"

@@ -35,6 +35,13 @@ def test_city_entries_carry_label_bbox_sanitary(tmp_path):
     assert "Victoria" in victoria["label"]
 
 
+def test_city_entries_carry_data_tier(tmp_path):
+    j = _coverage(tmp_path)
+    tiers = {c["key"]: c["data_tier"] for c in j["real_network_cities"]}
+    assert set(tiers.values()) <= {"A", "B", "C"}
+    assert tiers["victoria"] == "A" and tiers["northvandistrict"] == "C"
+
+
 def test_synthesis_fallback_is_stated(tmp_path):
     j = _coverage(tmp_path)
     assert "Canada" in j["synthesis"]

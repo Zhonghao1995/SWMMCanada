@@ -61,6 +61,14 @@ def test_uncovered_aoi_synthesizes():
     assert fn is build_from_aoi and "Synth" in mode
 
 
+def test_every_city_has_a_data_tier():
+    """Adding a city without consciously choosing its vertical-data tier is the
+    failure mode this guards: DATA_TIERS keys must exactly match registry keys."""
+    from swmmcanada.sources.cities.registry import DATA_TIERS
+    assert set(DATA_TIERS) == {s.key for s in CITIES}
+    assert set(DATA_TIERS.values()) <= {"A", "B", "C"}
+
+
 def test_registry_invariants():
     """Smallest-box dispatch is sound if keys are unique and any two coverage boxes are
     either disjoint or strictly nested (a suburb's tight box inside a neighbour's envelope).

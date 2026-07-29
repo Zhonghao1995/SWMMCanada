@@ -1,10 +1,10 @@
 import { create } from 'zustand'
 import type { Feature, FeatureCollection, Polygon, Position } from 'geojson'
 import type { Aoi, JobProgress } from './types'
-import { checkRainfall as apiCheckRainfall, fetchPreview, pollTask, previewAoi, submitTask } from './lib/api'
+import { checkRainfall as apiCheckRainfall, fetchPreview, pollTask, previewAoi, resolveAoiPolygon, submitTask } from './lib/api'
 import type { DesignStormChoice, ForcingInfo, InfiltrationMethod } from './lib/api'
 import { fetchForcing } from './lib/api'
-import type { Bbox, RainfallCheck } from './lib/api'
+import type { Bbox, RainfallCheck, SiteFacts } from './lib/api'
 
 export type LayerKey = 'subcatchments' | 'storm' | 'sanitary'
 
@@ -27,6 +27,7 @@ interface AppState {
   forcing: ForcingInfo | null // rain tier/station the build actually used (ADR 0014/0015)
   layers: Record<LayerKey, boolean>
   rainfall: RainfallState // ECCC rain-data availability for the chosen AOI + period
+  site: SiteFacts | null // draw-time routing facts: city, vertical-data tier, pathway
   uploadError: string | null // boundary parse error, shown the moment a file is picked
 
   startDraw: () => void
@@ -104,19 +105,31 @@ export const useStore = create<AppState>((set, get) => ({
   forcing: null,
   layers: DEFAULT_LAYERS,
   rainfall: IDLE_RAIN,
+  site: null,
   uploadError: null,
 
   startDraw: () =>
-    set({ drawing: true, draft: [], aoi: null, job: { status: 'idle' }, preview: null, rainfall: IDLE_RAIN, uploadError: null }),
+    set({ drawing: true, draft: [], aoi: null, job: { status: 'idle' }, preview: null, rainfall: IDLE_RAIN, site: null, uploadError: null }),
   addVertex: (lng, lat) => set((s) => (s.drawing ? { draft: [...s.draft, [lng, lat]] } : {})),
   finishDraw: () => {
     const { draft } = get()
     if (draft.length < 3) return
-    set({ drawing: false, aoi: { source: 'draw', polygon: polygonFromDraft(draft) }, draft: [], rainfall: IDLE_RAIN })
+    const polygon = polygonFromDraft(draft)
+    set({ drawing: false, aoi: { source: 'draw', polygon }, draft: [], rainfall: IDLE_RAIN, site: null })
+    // Resolve the site facts (city, data tier, pathway) in the background; a failure
+    // just leaves the badge off — drawing must never block on the backend.
+    resolveAoiPolygon(polygon)
+      .then((f) => {
+        const cur = get().aoi
+        if (cur?.source === 'draw' && cur.polygon === polygon) {
+          set({ site: { mode: f.mode, city: f.city, cityLabel: f.cityLabel, dataTier: f.dataTier } })
+        }
+      })
+      .catch(() => {})
   },
   cancelDraw: () => set({ drawing: false, draft: [] }),
   clearAoi: () =>
-    set({ aoi: null, draft: [], drawing: false, job: { status: 'idle' }, preview: null, rainfall: IDLE_RAIN, uploadError: null }),
+    set({ aoi: null, draft: [], drawing: false, job: { status: 'idle' }, preview: null, rainfall: IDLE_RAIN, site: null, uploadError: null }),
   setUpload: async (file) => {
     set({
       aoi: { source: 'upload', file, name: file.name },
@@ -125,6 +138,7 @@ export const useStore = create<AppState>((set, get) => ({
       job: { status: 'idle' },
       preview: null,
       rainfall: IDLE_RAIN,
+      site: null,
       uploadError: null,
     })
     // Parse on the backend right away: boundary on the map, area in the panel, and
@@ -133,7 +147,10 @@ export const useStore = create<AppState>((set, get) => ({
       const parsed = await previewAoi(file)
       const cur = get().aoi
       if (cur?.source === 'upload' && cur.file === file) {
-        set({ aoi: { ...cur, boundary: parsed.boundary, bbox: parsed.bbox, areaKm2: parsed.areaKm2 } })
+        set({
+          aoi: { ...cur, boundary: parsed.boundary, bbox: parsed.bbox, areaKm2: parsed.areaKm2 },
+          site: { mode: parsed.mode, city: parsed.city, cityLabel: parsed.cityLabel, dataTier: parsed.dataTier },
+        })
       }
     } catch (err) {
       const cur = get().aoi

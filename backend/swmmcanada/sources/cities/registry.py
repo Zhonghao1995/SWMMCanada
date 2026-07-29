@@ -7,7 +7,7 @@ Adding city #9 = write its adapter module + append ONE spec below; ``pipeline.py
 untouched (ADR 0006's "a new city is mostly a thin field mapping", now enforced).
 """
 from dataclasses import dataclass
-from typing import Callable, Optional, Tuple
+from typing import Callable, Dict, Optional, Tuple
 
 from swmmcanada.sources.cities import base
 from swmmcanada.sources.cities.abbotsford import (
@@ -534,6 +534,26 @@ def in_canada_coarse(lon: float, lat: float) -> bool:
     """Whether a point falls inside the coarse Canada envelope."""
     min_lon, min_lat, max_lon, max_lat = CANADA_COARSE_BBOX
     return min_lon <= lon <= max_lon and min_lat <= lat <= max_lat
+# Vertical-data tier per city (the ASSUMPTIONS.md per-city table is the public,
+# evidence-carrying copy — percentages measured on each city's recorded test AOI):
+#   A — published inverts, <=10 % of nodes gap-filled
+#   B — published inverts with real gaps (~10-35 % gap-filled)
+#   C — vertical data thin (>35 % gap-filled, mostly DEM-anchored estimates)
+# Every registry key MUST have an entry (enforced by test); adding a city without
+# consciously choosing its tier is the failure mode this guards against.
+DATA_TIERS: Dict[str, str] = {
+    "victoria": "A", "ottawa": "A", "calgary": "A", "surrey": "A", "london": "A",
+    "kitchener": "A", "kelowna": "A", "regina": "A", "coquitlam": "A", "saskatoon": "A",
+    "kamloops": "A", "langley": "A", "sarnia": "A",
+    "vancouver": "B", "barrie": "B", "abbotsford": "B", "toronto": "B",
+    "peterborough": "B", "burnaby": "B", "newwestminster": "B", "penticton": "B",
+    "esquimalt": "B", "moncton": "B", "delta": "B", "sudbury": "B", "chilliwack": "B",
+    "portcoquitlam": "B", "windsor": "B",
+    "kingston": "C", "nanaimo": "C", "whiterock": "C", "whitby": "C", "strathcona": "C",
+    "northvandistrict": "C", "reykjavik": "C",
+}
+
+
 def coverage_summary() -> list:
     """The public shape of the registry for the /coverage endpoint.
 
@@ -546,6 +566,7 @@ def coverage_summary() -> list:
             "label": spec.label,
             "coverage_bbox": list(spec.coverage),
             "has_sanitary": spec.sanitary is not None,
+            "data_tier": DATA_TIERS[spec.key],
         }
         for spec in CITIES
     ]
