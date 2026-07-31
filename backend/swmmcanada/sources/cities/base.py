@@ -599,6 +599,35 @@ def _largest_valid(geom):
     return max(polys, key=lambda p: p.area) if polys else None
 
 
+def _drop_remainder_donuts(parcels):
+    """Some parcel fabrics (Moncton) include the street right-of-way itself as one giant
+    'parcel': a donut whose holes are the real lots (hundreds of interiors, blank
+    attributes). Treating it as a lot assigns the entire road network to a single catch
+    basin, and its exterior blankets every lot inside — a Moncton downtown AOI failed
+    the overlap gate at 22%. A remainder polygon is unmistakable geometrically: most of
+    its exterior is holes. Dropping it returns the road area to the street-sliver path
+    (AOI minus parcels), which Voronoi-splits it between catch basins as intended.
+    Returns (kept_features, n_dropped)."""
+    from shapely.geometry import Polygon, shape
+
+    kept, n_dropped = [], 0
+    for f in parcels or []:
+        try:
+            g = shape(f["geometry"]) if f.get("geometry") else None
+        except Exception:  # noqa: BLE001 — malformed feature: keep, downstream repairs
+            g = None
+        if g is None or g.is_empty:
+            kept.append(f)
+            continue
+        exterior_area = sum(Polygon(p.exterior).area
+                            for p in _all_polygons(g) if not p.is_empty)
+        if exterior_area > 0 and (1.0 - g.area / exterior_area) > 0.5:
+            n_dropped += 1
+            continue
+        kept.append(f)
+    return kept, n_dropped
+
+
 def _parcel_cells(seeds, parcels, aoi, crs):
     """Subcatchment shapes that follow REAL parcel/lot lines: each parcel is assigned whole to
     its nearest catch basin and dissolved (so cell edges fall on lot lines, not a Voronoi
@@ -702,8 +731,13 @@ def _shape_cells(seeds, parcels, aoi, crs):
                 continue
             # c[:2] tolerates Z-enabled sources (Esquimalt's cadastre publishes 3D rings;
             # a 2-tuple unpack crashed on the (x, y, z) coords)
-            exterior = [(float(c[0]), float(c[1]))
-                        for c in shp_transform(to_ll, poly_m).exterior.coords]
+            poly_ll = shp_transform(to_ll, poly_m)
+            exterior = [(float(c[0]), float(c[1])) for c in poly_ll.exterior.coords]
+            # Interior rings ride along as ANALYSIS geometry (round-2 F-005: holes are
+            # enclosed foreign land/water; a wrap-around cell without its holes blankets
+            # the cells inside it and trips the overlap gate).
+            holes = [[(float(c[0]), float(c[1])) for c in ring.coords]
+                     for ring in poly_ll.interiors]
             # Guard the validator's exact check: the stored EPSG:4326 ring must reproject back to a
             # valid, non-empty metric polygon. A rare sliver is valid in metric yet flips invalid
             # through the 4326 round-trip (float precision) — drop it rather than ship it.
@@ -711,7 +745,7 @@ def _shape_cells(seeds, parcels, aoi, crs):
             if check_m.is_empty or not check_m.is_valid:
                 n_dropped += 1
                 continue
-            pieces.append((cb_id, i, poly_m, exterior))
+            pieces.append((cb_id, i, poly_m, exterior, holes))
     return pieces, method, n_dropped
 
 
@@ -838,6 +872,7 @@ def delineate_catchbasin_subcatchments(
     if len(seeds) < 2:
         return [], {}, {"reason": "insufficient catch basins", "n_catchbasins": len(seeds)}
 
+    parcels, n_remainder = _drop_remainder_donuts(parcels)
     cells, shape_method, n_dropped = _shape_cells(seeds, parcels, aoi, crs)
 
     outlet_of = _outlet_resolver(network, crs)
@@ -852,7 +887,7 @@ def delineate_catchbasin_subcatchments(
     bld_sidx = bld.sindex if len(bld) else None
 
     subs, imperv_map, n_parcel, n_split = [], {}, 0, 0
-    for cb_id, i, poly_m, exterior in cells:
+    for cb_id, i, poly_m, exterior, holes in cells:
         area_m2 = poly_m.area
         name = f"S_{cb_id}" if i == 0 else f"S_{cb_id}__{i + 1}"   # split pieces -> same outlet
         if i > 0:
@@ -864,10 +899,11 @@ def delineate_catchbasin_subcatchments(
         subs.append(SubcatchmentIn(
             name=name, outlet_node=outlet_of(seeds[cb_id]), area_ha=area_m2 / 1e4,
             pct_imperv=imperv, width_m=math.sqrt(area_m2),
-            pct_slope=config.default_slope_pct, polygon=exterior))
+            pct_slope=config.default_slope_pct, polygon=exterior, holes=holes or None))
     diag = {"method": f"catchbasin+parcel/building ({shape_method}-shaped)", "n_catchbasins": len(seeds),
             "n_subcatchments": len(subs), "n_split_pieces": n_split, "n_dropped_invalid": n_dropped,
             "n_parcel_based_imperv": n_parcel,
             "n_parcels": int(len(par)), "n_buildings": int(len(bld)),
+            "n_parcels_dropped_remainder": n_remainder,
             "mean_imperv": round(sum(imperv_map.values()) / len(imperv_map), 1) if imperv_map else None}
     return subs, imperv_map, diag
