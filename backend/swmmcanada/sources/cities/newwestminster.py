@@ -106,7 +106,13 @@ def _features(layer) -> list:
 
 def build_newwestminster_network(data, *, config: base.AssembleConfig = _NEWWEST_ASSEMBLE) -> base.NetworkResult:
     """Canonical pipes; a pipe end without its own invert takes its FROMMH/TOMH manhole's
-    chamber INVERT (tier 2); manhole RIMELEV feeds max depths; FROMMH/TOMH label nodes."""
+    chamber INVERT (tier 2); manhole RIMELEV feeds max depths; FROMMH/TOMH label nodes.
+
+    #223 measured what the chamber-stamp join is worth: 68% of informed pipe ends are
+    manhole stamps (true pipe-end measurements cover only ~24% of ends), and holdout
+    error with the join is no better than without it (~4 m MAE on this steep terrain,
+    vs 0.9 m for the rim tier). The join is kept — it anchors absolute elevations —
+    but the city is tiered C, not B: most of its vertical is node-level, not pipe-level."""
     mains = _features((data or {}).get("mains") if isinstance(data, dict) else data)
     manholes = _features((data or {}).get("manholes", []) if isinstance(data, dict) else [])
 
