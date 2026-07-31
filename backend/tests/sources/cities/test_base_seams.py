@@ -78,10 +78,11 @@ def test_shape_cells_without_parcels_is_voronoi_shaped():
     assert method == "voronoi"
     assert n_dropped == 0
     assert {cb for cb, *_ in pieces} == set(SEEDS)         # one repaired cell per seed
-    for cb_id, i, poly_m, exterior in pieces:
+    for cb_id, i, poly_m, exterior, holes in pieces:
         assert i == 0                                      # Voronoi -> single piece per basin
         assert poly_m.is_valid and poly_m.area >= 1.0
         assert len(exterior) >= 4 and exterior[0] == exterior[-1]   # closed 4326 ring
+        assert holes == []                                 # Voronoi cells carry no interiors
 
 
 def test_shape_method_flows_into_public_diag():
