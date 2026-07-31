@@ -546,9 +546,13 @@ DATA_TIERS: Dict[str, str] = {
     "kitchener": "A", "kelowna": "A", "regina": "A", "coquitlam": "A", "saskatoon": "A",
     "kamloops": "A", "langley": "A", "sarnia": "A",
     "vancouver": "B", "barrie": "B", "abbotsford": "B", "toronto": "B",
-    "peterborough": "B", "burnaby": "B", "newwestminster": "B", "penticton": "B",
+    "peterborough": "B", "burnaby": "B", "penticton": "B",
     "esquimalt": "B", "moncton": "B", "delta": "B", "sudbury": "B", "chilliwack": "B",
     "portcoquitlam": "B", "windsor": "B",
+    # newwestminster re-tiered B -> C (#223): 68% of its "published" pipe-end inverts
+    # are manhole chamber stamps, only ~24% of ends are true pipe measurements, and
+    # estimates on its steep terrain err ~4 m typical.
+    "newwestminster": "C",
     "kingston": "C", "nanaimo": "C", "whiterock": "C", "whitby": "C", "strathcona": "C",
     "northvandistrict": "C", "reykjavik": "C",
 }

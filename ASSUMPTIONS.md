@@ -76,7 +76,7 @@ truth). Every build reports the exact per-tier counts for *your* AOI in its diag
 | London, ON | 🟢 A (typ. err 0.8 m)  | explicit node IDs | 🟢 real parcel lines | 🟢 real buildings |
 | Moncton, NB | 🟠 B (~25 %, typ. err 0.7 m)  | geometry-inferred | 🟢 real parcel lines | 🟢 real buildings |
 | Nanaimo, BC | 🟠 C (~41 %, typ. err 4.1 m)  | geometry-inferred | 🟢 real parcel lines | 🟢 real buildings |
-| New Westminster, BC | 🟠 B (~30 %, typ. err 4.1 m)  | geometry-inferred | 🟢 real parcel lines | 🟢 real buildings |
+| New Westminster, BC | 🟠 C (~30 %, typ. err 4.1 m) | geometry-inferred | 🟢 real parcel lines | 🟢 real buildings |
 | North Vancouver (District), BC | 🟠 C (~66 %, typ. err 1.7 m)  | geometry-inferred | 🟠 junction cells (packaged download, no land layers) | 🟢 land cover |
 | Ottawa, ON | 🟢 A (typ. err 1.0 m)  | geometry-inferred | 🟠 catch-basin tessellation | 🟢 land cover (no parcels published) |
 | Penticton, BC | 🟠 B (~13 %, typ. err 0.8 m)  | geometry-inferred | 🟠 catch-basin tessellation | 🟢 land cover |
@@ -99,6 +99,10 @@ City-specific notes:
 
 - **Vancouver** publishes an invert *rows* table (some entries city-flagged as estimated);
   ends it doesn't cover are anchored to the real manhole rim minus the default 2.5 m depth.
+- **New Westminster** sits in tier C despite a ~30 % gap-fill share: 68 % of its
+  "published" pipe-end inverts are manhole chamber stamps (only ~24 % of ends are true
+  pipe measurements), and estimates on its steep riverfront terrain err ~4 m typical.
+  Its manhole rims are excellent; its pipe-end verticals are not.
 - **Reykjavík** sits outside the Canadian DEM, so the DEM tier cannot help its gaps — thin
   spots fall back to neighbour values and the counted AOI minimum.
 - "Geometry-inferred" topology means nodes come from snapped pipe endpoints; most of these
