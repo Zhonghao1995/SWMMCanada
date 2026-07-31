@@ -63,6 +63,10 @@ export default function ControlPanel() {
           Draw or upload an area. Get a ready-to-run drainage model from Canadian open data,
           in SWMM, MIKE+ and InfoWorks ICM formats.
         </p>
+        <p className="mt-1 text-xs text-black">
+          Models are a first-pass research baseline built from open data. Not a basis for
+          detailed design or regulatory approval.
+        </p>
       </header>
 
       <section className="space-y-2">
@@ -121,32 +125,32 @@ export default function ControlPanel() {
           // Draw-time honesty (ASSUMPTIONS.md per-city table): which city matched and
           // how complete its vertical data is, BEFORE the user spends a build on it.
           <div
-            className={`rounded-md px-3 py-2 text-xs ${
+            className={`rounded-md px-3 py-2 text-xs text-black ${
               site.dataTier === 'A'
-                ? 'bg-emerald-50 text-emerald-800'
+                ? 'bg-emerald-50'
                 : site.dataTier === 'B'
-                  ? 'bg-amber-50 text-amber-800'
+                  ? 'bg-amber-50'
                   : site.dataTier === 'C'
-                    ? 'bg-orange-50 text-orange-800'
-                    : 'bg-slate-50 text-slate-600'
+                    ? 'bg-orange-50'
+                    : 'bg-slate-50'
             }`}
           >
             {site.dataTier ? (
               <>
                 <span className="font-semibold">
-                  🏙️ {site.cityLabel} · data tier {site.dataTier}
+                  {site.cityLabel}, data tier {site.dataTier}
                 </span>
                 <div className="mt-0.5">
                   {site.dataTier === 'A'
                     ? 'Real network with published pipe elevations (≤10% gap-filled).'
                     : site.dataTier === 'B'
                       ? 'Real network; some pipe elevations are gap-filled estimates (~10–35%).'
-                      : 'Real pipe layout, but most elevations are estimated from terrain — screening use.'}
+                      : 'Real pipe layout, but most elevations are estimated from terrain. Screening use only.'}
                 </div>
               </>
             ) : (
               <>
-                <span className="font-semibold">🧩 No city network here</span>
+                <span className="font-semibold">No city network here</span>
                 <div className="mt-0.5">The network would be synthesized from open data (streets + terrain).</div>
               </>
             )}
@@ -309,18 +313,15 @@ export default function ControlPanel() {
             {job.mode && (
               <div
                 className={`mt-1 inline-block rounded px-1.5 py-0.5 font-medium ${
-                  job.mode.startsWith('Real')
-                    ? 'bg-emerald-100 text-emerald-700'
-                    : 'bg-amber-100 text-amber-700'
-                }`}
+                  job.mode.startsWith('Real') ? 'bg-emerald-100' : 'bg-amber-100'
+                } text-black`}
               >
-                {job.mode.startsWith('Real') ? '🏙️ ' : '🧩 '}
                 {job.mode}
               </div>
             )}
             {forcing && (
               <div className="mt-1 text-[11px] text-slate-500">
-                {'🌧 Rain used: '}
+                {'Rain used: '}
                 {forcing.rainfall_resolution === 'design_storm'
                   ? `synthetic design storm: T=${forcing.return_period_yr} yr` +
                     `${forcing.duration_h ? ` / ${forcing.duration_h} h` : ''}, ${forcing.total_mm} mm ` +
