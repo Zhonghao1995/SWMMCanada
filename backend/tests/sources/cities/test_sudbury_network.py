@@ -44,7 +44,7 @@ def test_core_invariants(result):
     inv.update({o.name: o.invert_m for o in net.outfalls})
     # 0.02 m tolerance: the recorded fixture really contains one conduit running 1 cm
     # "uphill" into a discharge point — survey noise at the forced-outfall orientation
-    assert all(inv[c.to_node] <= inv[c.from_node] + 0.02 for c in net.conduits)
+    assert all(inv[c.to_node] + c.outlet_offset_m <= inv[c.from_node] + c.inlet_offset_m + 0.02 for c in net.conduits)
 
 
 def test_band_screens_junk_inverts():

@@ -43,7 +43,7 @@ def test_core_invariants(result):
     assert [n for n, c in counted.items() if c > 1] == []
     inv = {j.name: j.invert_m for j in net.junctions}
     inv.update({o.name: o.invert_m for o in net.outfalls})
-    assert all(inv[c.to_node] <= inv[c.from_node] + 1e-9 for c in net.conduits)
+    assert all(inv[c.to_node] + c.outlet_offset_m <= inv[c.from_node] + c.inlet_offset_m + 1e-3 for c in net.conduits)
 
 
 def test_zero_and_minus_one_are_missing_sentinels():

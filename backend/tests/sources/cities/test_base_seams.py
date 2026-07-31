@@ -174,6 +174,38 @@ def test_implausible_node_depth_is_rejected_and_counted():
     assert res3.diagnostics["n_depths_rejected"] == 0
 
 
+# --- #219: a pipe's own end inverts beat the node-minimum orientation ------------------
+
+def test_own_end_inverts_beat_node_minimum_orientation():
+    """A deep trunk through a junction drags the node invert (min-of-all-ends) below a
+    lateral's far end; the old node-minimum rule then flipped the lateral against its
+    own declared slope (46 Windsor conduits in the ADR 0028 topology audit). A pipe
+    with BOTH its own end inverts now orients by them."""
+    from swmmcanada.sources.cities.base import RawPipe, assemble_network
+    trunk = RawPipe("TRUNK", (0.001, 0.0), (0.002, 0.0), inv_a=2.0, inv_b=1.9)
+    # lateral's junction-side end (5.2) is HIGHER than its far end (5.0): water flows
+    # junction -> far, even though the junction NODE (2.0, trunk-dragged) is the lowest.
+    lateral = RawPipe("LAT", (0.0, 0.0), (0.001, 0.0), inv_a=5.0, inv_b=5.2)
+    res = assemble_network([trunk, lateral])
+    name_at = {}
+    for j in res.network.junctions:
+        name_at[(round(j.x, 6), round(j.y, 6))] = j.name
+    for o in res.network.outfalls:
+        name_at[(round(o.x, 6), round(o.y, 6))] = o.name
+    lat = next(c for c in res.network.conduits if c.name == "LAT")
+    assert lat.from_node == name_at[(0.001, 0.0)]     # junction side is upstream
+    assert lat.to_node == name_at[(0.0, 0.0)]
+
+    # flat own ends still fall back to node inverts (tie-break unchanged)
+    flat = RawPipe("FLAT", (0.0, 0.0), (0.001, 0.0), inv_a=5.0, inv_b=5.0)
+    res2 = assemble_network([trunk, flat])
+    f = next(c for c in res2.network.conduits if c.name == "FLAT")
+    n2 = {}
+    for j in res2.network.junctions:
+        n2[(round(j.x, 6), round(j.y, 6))] = j.name
+    assert f.from_node == n2[(0.0, 0.0)]              # node 5.0 >= node 2.0
+
+
 # --- #158: tiered invert gap-fill — rim beats the global minimum -----------------------
 
 def test_rim_tier_beats_global_minimum():
