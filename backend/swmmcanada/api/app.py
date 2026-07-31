@@ -32,6 +32,7 @@ from swmmcanada.geo.errors import AOIOversizeError, GeoError
 from swmmcanada.pipeline import pipeline_for_aoi
 from swmmcanada.sources.cities.registry import (
     DATA_TIERS,
+    TYPICAL_INVERT_ERROR_M,
     city_for_point,
     coverage_summary,
     in_canada_coarse,
@@ -122,6 +123,8 @@ def create_app(*, pipeline=None, workdir=None, run_inline: bool = False) -> Fast
             # Vertical-data tier (A/B/C, see the ASSUMPTIONS.md per-city table):
             # shown at draw time so users know what they are getting BEFORE a build.
             "data_tier": DATA_TIERS[spec.key] if spec is not None else None,
+            "typical_invert_error_m": (
+                TYPICAL_INVERT_ERROR_M[spec.key] if spec is not None else None),
             "in_canada": in_canada_coarse(centre_lon, centre_lat),
         }
 

@@ -554,6 +554,23 @@ DATA_TIERS: Dict[str, str] = {
 }
 
 
+# Typical error of ESTIMATED node inverts per city, in metres: holdout MAE measured on
+# the recorded test AOI at the city's own observed sparsity (mask published inverts,
+# re-run the gap-fill, compare). The ASSUMPTIONS.md per-city table is the public copy.
+# None = not measured on real data (Reykjavik's fixture is synthetic-schema).
+# Every registry key MUST have an entry (enforced by test, like DATA_TIERS).
+TYPICAL_INVERT_ERROR_M: Dict[str, Optional[float]] = {
+    "abbotsford": 0.7, "barrie": 1.0, "burnaby": 1.8, "calgary": 0.4, "chilliwack": 0.3,
+    "coquitlam": 0.8, "delta": 2.4, "esquimalt": 2.0, "kamloops": 2.1, "kelowna": 0.7,
+    "kingston": 1.4, "kitchener": 0.9, "langley": 1.3, "london": 0.8, "moncton": 0.7,
+    "nanaimo": 4.1, "newwestminster": 4.1, "northvandistrict": 1.7, "ottawa": 1.0,
+    "penticton": 0.8, "peterborough": 0.5, "portcoquitlam": 0.4, "regina": 0.6,
+    "reykjavik": None, "sarnia": 0.5, "saskatoon": 1.2, "strathcona": 1.6,
+    "sudbury": 0.9, "surrey": 0.7, "toronto": 0.8, "vancouver": 1.3, "victoria": 1.3,
+    "whitby": 0.7, "whiterock": 3.3, "windsor": 0.9,
+}
+
+
 def coverage_summary() -> list:
     """The public shape of the registry for the /coverage endpoint.
 
@@ -567,6 +584,7 @@ def coverage_summary() -> list:
             "coverage_bbox": list(spec.coverage),
             "has_sanitary": spec.sanitary is not None,
             "data_tier": DATA_TIERS[spec.key],
+            "typical_invert_error_m": TYPICAL_INVERT_ERROR_M[spec.key],
         }
         for spec in CITIES
     ]

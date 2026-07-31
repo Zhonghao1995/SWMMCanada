@@ -69,6 +69,19 @@ def test_every_city_has_a_data_tier():
     assert set(DATA_TIERS.values()) <= {"A", "B", "C"}
 
 
+def test_every_city_has_a_typical_invert_error():
+    """Same guard for the measured typical invert error: every key present; values are
+    plausible metres, or None ONLY where no real-data measurement exists (Reykjavik's
+    fixture is synthetic-schema)."""
+    from swmmcanada.sources.cities.registry import TYPICAL_INVERT_ERROR_M
+    assert set(TYPICAL_INVERT_ERROR_M) == {s.key for s in CITIES}
+    for key, v in TYPICAL_INVERT_ERROR_M.items():
+        if v is None:
+            assert key == "reykjavik"
+        else:
+            assert 0.0 < v < 10.0
+
+
 def test_registry_invariants():
     """Smallest-box dispatch is sound if keys are unique and any two coverage boxes are
     either disjoint or strictly nested (a suburb's tight box inside a neighbour's envelope).
