@@ -147,6 +147,11 @@ export default function ControlPanel() {
                       ? 'Real network; some pipe elevations are gap-filled estimates (~10–35%).'
                       : 'Real pipe layout, but most elevations are estimated from terrain. Screening use only.'}
                 </div>
+                {site.typicalInvertErrorM != null && (
+                  <div className="mt-0.5">
+                    Typical error of estimated pipe elevations: about {site.typicalInvertErrorM} m.
+                  </div>
+                )}
               </>
             ) : (
               <>

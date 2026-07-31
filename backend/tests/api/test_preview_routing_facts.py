@@ -66,8 +66,10 @@ def test_city_aoi_reports_data_tier_and_label(tmp_path):
     j = _preview(tmp_path, OTTAWA)
     assert j["city_label"] == "Ottawa, ON"
     assert j["data_tier"] == "A"
+    assert j["typical_invert_error_m"] == 1.0
     j2 = _preview(tmp_path, RURAL_SK)
     assert j2["city_label"] is None and j2["data_tier"] is None
+    assert j2["typical_invert_error_m"] is None
 
 
 def test_existing_preview_fields_unchanged(tmp_path):

@@ -46,6 +46,7 @@ export interface SiteFacts {
   city?: string | null
   cityLabel?: string | null
   dataTier?: 'A' | 'B' | 'C' | null
+  typicalInvertErrorM?: number | null
 }
 
 export interface AoiPreview extends SiteFacts {
@@ -73,6 +74,7 @@ async function postAoiPreview(body: FormData): Promise<AoiPreview> {
     city?: string | null
     city_label?: string | null
     data_tier?: 'A' | 'B' | 'C' | null
+    typical_invert_error_m?: number | null
   }
   return {
     boundary: { type: 'Feature', properties: {}, geometry: j.geometry },
@@ -82,6 +84,7 @@ async function postAoiPreview(body: FormData): Promise<AoiPreview> {
     city: j.city,
     cityLabel: j.city_label,
     dataTier: j.data_tier,
+    typicalInvertErrorM: j.typical_invert_error_m,
   }
 }
 

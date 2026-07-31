@@ -51,47 +51,49 @@ pipes (subcatchment/imperviousness inputs), and how complete the **vertical** da
   share of node inverts is estimated, mostly anchored to the DEM surface. Fine for a
   first-pass screening model; not a basis for detailed design.
 
-Percentages are measured on each city's recorded test AOI; every build reports the exact
-per-tier counts for *your* AOI in its diagnostics
+Percentages are measured on each city's recorded test AOI. "typ. err" is the measured
+typical error of ESTIMATED node inverts (mask the published inverts on the test AOI at
+the city's own sparsity, re-run the gap-fill, mean absolute error against the masked
+truth). Every build reports the exact per-tier counts for *your* AOI in its diagnostics
 (`n_inv_from_neighbour` / `n_inv_from_rim` / `n_inv_from_dem` / `n_inv_from_global_min`).
 
 | City | Vertical (inverts) | Network topology | Subcatchment outline | Imperviousness |
 |---|---|---|---|---|
-| Abbotsford, BC | 🟠 B (~16 %) | geometry-inferred | 🟢 real parcel lines | 🟢 land cover (no buildings published) |
-| Barrie, ON | 🟠 B (~20 %) | geometry-inferred | 🟢 real parcel lines | 🟢 real buildings |
-| Burnaby, BC | 🟠 B (~20 %) | geometry-inferred | 🟢 real parcel lines | 🟢 real buildings |
-| Calgary, AB | 🟢 A | geometry-inferred | 🟢 real parcel lines | 🟢 real buildings |
-| Chilliwack, BC | 🟠 B (~26 %) | geometry-inferred | 🟠 catch-basin tessellation | 🟢 land cover |
-| Coquitlam, BC | 🟢 A (~7 %) | geometry-inferred | 🟢 real parcel lines | 🟢 real buildings |
-| Delta, BC | 🟠 B (~17 %) | geometry-inferred | 🟠 junction cells (no catch-basin layer) | 🟢 land cover |
-| Esquimalt, BC | 🟠 B (~25 %) | geometry-inferred | 🟢 real parcel lines | 🟢 real buildings |
-| Greater Sudbury, ON | 🟠 B (~34 %) | geometry-inferred | 🟢 real parcel lines | 🟢 real buildings |
-| Kamloops, BC | 🟢 A (~4 %) | geometry-inferred | 🟠 catch-basin tessellation | 🟢 real buildings |
-| Kelowna, BC | 🟢 A | geometry-inferred | 🟢 real parcel lines | 🟢 real buildings |
-| Kingston, ON | 🟠 C (~60 %) | geometry-inferred | 🟠 catch-basin tessellation | 🟢 real buildings |
-| Kitchener–Waterloo, ON | 🟢 A | explicit node IDs | 🟠 catch-basin tessellation | 🟢 land cover (no parcels published) |
-| Langley (Township), BC | 🟢 A (~7 %) | geometry-inferred | 🟢 real parcel lines | 🟢 land cover |
-| London, ON | 🟢 A | explicit node IDs | 🟢 real parcel lines | 🟢 real buildings |
-| Moncton, NB | 🟠 B (~25 %) | geometry-inferred | 🟢 real parcel lines | 🟢 real buildings |
-| Nanaimo, BC | 🟠 C (~41 %) | geometry-inferred | 🟢 real parcel lines | 🟢 real buildings |
-| New Westminster, BC | 🟠 B (~30 %) | geometry-inferred | 🟢 real parcel lines | 🟢 real buildings |
-| North Vancouver (District), BC | 🟠 C (~66 %) | geometry-inferred | 🟠 junction cells (packaged download, no land layers) | 🟢 land cover |
-| Ottawa, ON | 🟢 A | geometry-inferred | 🟠 catch-basin tessellation | 🟢 land cover (no parcels published) |
-| Penticton, BC | 🟠 B (~13 %) | geometry-inferred | 🟠 catch-basin tessellation | 🟢 land cover |
-| Peterborough, ON | 🟠 B (~17 %) | geometry-inferred | 🟠 catch-basin tessellation | 🟢 land cover |
-| Port Coquitlam, BC | 🟠 B (~28 %) | geometry-inferred | 🟢 real parcel lines | 🟢 real buildings |
-| Regina, SK | 🟢 A | geometry-inferred | 🟢 real parcel lines | 🟢 real buildings |
-| Reykjavík, IS | 🟠 C | geometry-inferred | 🟢 real parcel lines | 🟢 real buildings |
-| Sarnia, ON | 🟢 A (~10 %) | geometry-inferred | 🟠 catch-basin tessellation | 🟢 real buildings |
-| Saskatoon, SK | 🟢 A (~9 %) | geometry-inferred | 🟢 real parcel lines | 🟢 land cover |
-| Strathcona County, AB | 🟠 C (~48 %) | geometry-inferred | 🟠 catch-basin tessellation | 🟢 real buildings |
-| Surrey, BC | 🟢 A | geometry-inferred | 🟢 real parcel lines | 🟢 real buildings |
-| Toronto, ON | 🟠 B (~15 %) | geometry-inferred | 🟠 catch-basin tessellation | 🟢 land cover |
-| Vancouver, BC | 🟠 B | geometry-inferred | 🟢 real parcel lines | 🟢 real buildings |
-| Victoria, BC | 🟢 A | explicit node IDs | 🟢 real parcel lines | 🟢 real buildings |
-| Whitby, ON | 🟠 C (~70 %) | geometry-inferred | 🟠 catch-basin tessellation | 🟢 land cover |
-| White Rock, BC | 🟠 C (~36 %) | geometry-inferred | 🟢 real parcel lines | 🟢 real buildings |
-| Windsor, ON | 🟠 B (~21 %) | geometry-inferred | 🟠 junction cells (packaged download, no land layers) | 🟢 land cover |
+| Abbotsford, BC | 🟠 B (~16 %, typ. err 0.7 m)  | geometry-inferred | 🟢 real parcel lines | 🟢 land cover (no buildings published) |
+| Barrie, ON | 🟠 B (~20 %, typ. err 1.0 m)  | geometry-inferred | 🟢 real parcel lines | 🟢 real buildings |
+| Burnaby, BC | 🟠 B (~20 %, typ. err 1.8 m)  | geometry-inferred | 🟢 real parcel lines | 🟢 real buildings |
+| Calgary, AB | 🟢 A (typ. err 0.4 m)  | geometry-inferred | 🟢 real parcel lines | 🟢 real buildings |
+| Chilliwack, BC | 🟠 B (~26 %, typ. err 0.3 m)  | geometry-inferred | 🟠 catch-basin tessellation | 🟢 land cover |
+| Coquitlam, BC | 🟢 A (~7 %, typ. err 0.8 m)  | geometry-inferred | 🟢 real parcel lines | 🟢 real buildings |
+| Delta, BC | 🟠 B (~17 %, typ. err 2.4 m)  | geometry-inferred | 🟠 junction cells (no catch-basin layer) | 🟢 land cover |
+| Esquimalt, BC | 🟠 B (~25 %, typ. err 2.0 m)  | geometry-inferred | 🟢 real parcel lines | 🟢 real buildings |
+| Greater Sudbury, ON | 🟠 B (~34 %, typ. err 0.9 m)  | geometry-inferred | 🟢 real parcel lines | 🟢 real buildings |
+| Kamloops, BC | 🟢 A (~4 %, typ. err 2.1 m)  | geometry-inferred | 🟠 catch-basin tessellation | 🟢 real buildings |
+| Kelowna, BC | 🟢 A (typ. err 0.7 m)  | geometry-inferred | 🟢 real parcel lines | 🟢 real buildings |
+| Kingston, ON | 🟠 C (~60 %, typ. err 1.4 m)  | geometry-inferred | 🟠 catch-basin tessellation | 🟢 real buildings |
+| Kitchener–Waterloo, ON | 🟢 A (typ. err 0.9 m)  | explicit node IDs | 🟠 catch-basin tessellation | 🟢 land cover (no parcels published) |
+| Langley (Township), BC | 🟢 A (~7 %, typ. err 1.3 m)  | geometry-inferred | 🟢 real parcel lines | 🟢 land cover |
+| London, ON | 🟢 A (typ. err 0.8 m)  | explicit node IDs | 🟢 real parcel lines | 🟢 real buildings |
+| Moncton, NB | 🟠 B (~25 %, typ. err 0.7 m)  | geometry-inferred | 🟢 real parcel lines | 🟢 real buildings |
+| Nanaimo, BC | 🟠 C (~41 %, typ. err 4.1 m)  | geometry-inferred | 🟢 real parcel lines | 🟢 real buildings |
+| New Westminster, BC | 🟠 B (~30 %, typ. err 4.1 m)  | geometry-inferred | 🟢 real parcel lines | 🟢 real buildings |
+| North Vancouver (District), BC | 🟠 C (~66 %, typ. err 1.7 m)  | geometry-inferred | 🟠 junction cells (packaged download, no land layers) | 🟢 land cover |
+| Ottawa, ON | 🟢 A (typ. err 1.0 m)  | geometry-inferred | 🟠 catch-basin tessellation | 🟢 land cover (no parcels published) |
+| Penticton, BC | 🟠 B (~13 %, typ. err 0.8 m)  | geometry-inferred | 🟠 catch-basin tessellation | 🟢 land cover |
+| Peterborough, ON | 🟠 B (~17 %, typ. err 0.5 m)  | geometry-inferred | 🟠 catch-basin tessellation | 🟢 land cover |
+| Port Coquitlam, BC | 🟠 B (~28 %, typ. err 0.4 m)  | geometry-inferred | 🟢 real parcel lines | 🟢 real buildings |
+| Regina, SK | 🟢 A (typ. err 0.6 m)  | geometry-inferred | 🟢 real parcel lines | 🟢 real buildings |
+| Reykjavík, IS | 🟠 C (error not measured: synthetic fixture)  | geometry-inferred | 🟢 real parcel lines | 🟢 real buildings |
+| Sarnia, ON | 🟢 A (~10 %, typ. err 0.5 m)  | geometry-inferred | 🟠 catch-basin tessellation | 🟢 real buildings |
+| Saskatoon, SK | 🟢 A (~9 %, typ. err 1.2 m)  | geometry-inferred | 🟢 real parcel lines | 🟢 land cover |
+| Strathcona County, AB | 🟠 C (~48 %, typ. err 1.6 m)  | geometry-inferred | 🟠 catch-basin tessellation | 🟢 real buildings |
+| Surrey, BC | 🟢 A (typ. err 0.7 m)  | geometry-inferred | 🟢 real parcel lines | 🟢 real buildings |
+| Toronto, ON | 🟠 B (~15 %, typ. err 0.8 m)  | geometry-inferred | 🟠 catch-basin tessellation | 🟢 land cover |
+| Vancouver, BC | 🟠 B (typ. err 1.3 m)  | geometry-inferred | 🟢 real parcel lines | 🟢 real buildings |
+| Victoria, BC | 🟢 A (typ. err 1.3 m)  | explicit node IDs | 🟢 real parcel lines | 🟢 real buildings |
+| Whitby, ON | 🟠 C (~70 %, typ. err 0.7 m)  | geometry-inferred | 🟠 catch-basin tessellation | 🟢 land cover |
+| White Rock, BC | 🟠 C (~36 %, typ. err 3.3 m)  | geometry-inferred | 🟢 real parcel lines | 🟢 real buildings |
+| Windsor, ON | 🟠 B (~21 %, typ. err 0.9 m)  | geometry-inferred | 🟠 junction cells (packaged download, no land layers) | 🟢 land cover |
 
 City-specific notes:
 

@@ -122,7 +122,12 @@ export const useStore = create<AppState>((set, get) => ({
       .then((f) => {
         const cur = get().aoi
         if (cur?.source === 'draw' && cur.polygon === polygon) {
-          set({ site: { mode: f.mode, city: f.city, cityLabel: f.cityLabel, dataTier: f.dataTier } })
+          set({
+            site: {
+              mode: f.mode, city: f.city, cityLabel: f.cityLabel, dataTier: f.dataTier,
+              typicalInvertErrorM: f.typicalInvertErrorM,
+            },
+          })
         }
       })
       .catch(() => {})
@@ -149,7 +154,10 @@ export const useStore = create<AppState>((set, get) => ({
       if (cur?.source === 'upload' && cur.file === file) {
         set({
           aoi: { ...cur, boundary: parsed.boundary, bbox: parsed.bbox, areaKm2: parsed.areaKm2 },
-          site: { mode: parsed.mode, city: parsed.city, cityLabel: parsed.cityLabel, dataTier: parsed.dataTier },
+          site: {
+            mode: parsed.mode, city: parsed.city, cityLabel: parsed.cityLabel,
+            dataTier: parsed.dataTier, typicalInvertErrorM: parsed.typicalInvertErrorM,
+          },
         })
       }
     } catch (err) {
