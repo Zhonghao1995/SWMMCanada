@@ -45,6 +45,8 @@ Either mode then gives you the same things: subcatchments, rainfall, and a share
 
 ## Try it
 
+> Models are a first-pass research baseline built from open data. Not a basis for detailed design or regulatory approval.
+
 **Easiest: the hosted beta (nothing to install).** Open **[swmm.h2ox.me](https://swmm.h2ox.me/)**, draw a *small* area, pick dates, and click **Build SWMM model**. Keep the area small (the demo server has ~2 GB RAM); for anything large, self-host as below.
 
 **Quickest local: pull the prebuilt backend image** ([all tags](https://hub.docker.com/r/zhonghao0901/swmmcanada/tags)):
