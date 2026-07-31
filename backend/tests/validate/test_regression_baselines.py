@@ -33,9 +33,10 @@ VIC_WARNINGS = {"shape_plausibility"}                       # 3 extreme cells to
 # outlet_distance/shape = the documented outlet-mapping risk; invert_consistency joined
 # 2026-07-16 (F-007): the check now compares TRUE pipe-end elevations (node invert +
 # conduit offset, #130), which exposes adverse as-built pipe ends in Ottawa's published
-# inverts that min-of-ends node inverts used to smooth away. A more honest warning, not
-# a regression.
-OTT_WARNINGS = {"outlet_distance", "shape_plausibility", "invert_consistency"}
+# inverts that min-of-ends node inverts used to smooth away. #219 then removed the
+# warning again for real: conduits now orient by the flow line at each end, so those
+# adverse ends orient downhill instead of tripping invert_consistency.
+OTT_WARNINGS = {"outlet_distance", "shape_plausibility"}
 
 
 def _load(city: str, name: str) -> list:

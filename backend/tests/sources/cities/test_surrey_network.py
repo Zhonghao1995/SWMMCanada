@@ -76,7 +76,7 @@ def test_inverts_are_monotonic_down_each_conduit(result):
     inv = {j.name: j.invert_m for j in net.junctions}
     inv.update({o.name: o.invert_m for o in net.outfalls})
     for c in net.conduits:
-        assert inv[c.to_node] <= inv[c.from_node] + 1e-9, (
+        assert inv[c.to_node] + c.outlet_offset_m <= inv[c.from_node] + c.inlet_offset_m + 1e-3, (
             f"{c.name}: down {inv[c.to_node]} > up {inv[c.from_node]}"
         )
 

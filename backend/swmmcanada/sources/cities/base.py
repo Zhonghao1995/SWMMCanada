@@ -466,7 +466,20 @@ def assemble_network(
             fr, to = kb, ka
             inv_fr, inv_to = inv_b, inv_a
         else:
-            if node_inv[ka] >= node_inv[kb]:
+            # #219: orient by the FLOW LINE at each end — the pipe's own end invert
+            # where published (clamped exactly like the offsets: an end beyond
+            # MAX_OFFSET_M above the node bottom is bogus, #148), the node bottom
+            # otherwise. The old node-bottom-only comparison had two failure modes the
+            # ADR 0028 topology audit measured: a deep trunk through a junction dragged
+            # laterals into reverse against their own declared slope (66 of 3,268
+            # declared-topology conduits), and partial-end pipes could rise by their
+            # own outlet offset. Flow-line orientation makes the flow line monotone by
+            # construction.
+            def _eff(inv_end, k):
+                if inv_end is None or inv_end - node_inv[k] > MAX_OFFSET_M:
+                    return node_inv[k]
+                return inv_end
+            if _eff(inv_a, ka) >= _eff(inv_b, kb):
                 fr, to, inv_fr, inv_to = ka, kb, inv_a, inv_b
             else:
                 fr, to, inv_fr, inv_to = kb, ka, inv_b, inv_a

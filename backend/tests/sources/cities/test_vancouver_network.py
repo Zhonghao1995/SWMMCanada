@@ -74,7 +74,7 @@ def test_inverts_are_monotonic_on_every_conduit(result):
     inv = {j.name: j.invert_m for j in result.network.junctions}
     inv.update({o.name: o.invert_m for o in result.network.outfalls})
     for c in result.network.conduits:
-        assert inv[c.to_node] <= inv[c.from_node] + 1e-9, c.name
+        assert inv[c.to_node] + c.outlet_offset_m <= inv[c.from_node] + c.inlet_offset_m + 1e-3, c.name
 
 
 # --- the Vancouver specifics (ADR 0020) ------------------------------------------

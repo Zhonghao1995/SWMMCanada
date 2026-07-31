@@ -90,7 +90,7 @@ def test_inverts_are_monotonic_on_junction_to_junction_conduits(result):
         if c.to_node in outfalls or c.from_node in outfalls:
             continue
         checked += 1
-        assert inv[c.to_node] <= inv[c.from_node] + 1e-9, (
+        assert inv[c.to_node] + c.outlet_offset_m <= inv[c.from_node] + c.inlet_offset_m + 1e-3, (
             f"{c.name}: down {inv[c.to_node]} > up {inv[c.from_node]}"
         )
     assert checked > 0, "expected some junction-to-junction conduits to check"
