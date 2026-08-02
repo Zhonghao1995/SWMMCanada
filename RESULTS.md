@@ -10,6 +10,14 @@ end-to-end on two Canadian cities with structurally different data.
 > **not** a claim that the hydrology is accurate. Parameters are first-pass estimates from
 > open data; calibrate against observations before using any output for design or decisions.
 
+## Observed-flow case study: Graham Creek, Ottawa
+
+The first comparison against a real flow gauge lives in
+**[results/graham-creek](results/graham-creek/README.md)**: the uncalibrated model over the
+official 22 km² WSC basin reproduced **all 12 summer rainfall events on the correct
+days** with a **−22.3% volume bias**; the remaining gaps (no baseflow, no in-stream
+storage) are explained honestly in the write-up.
+
 ## Summary
 
 | | **Victoria, BC** | **Ottawa, ON** |

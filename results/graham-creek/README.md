@@ -94,7 +94,7 @@ the observed ones decay slowly.*
 # 1. Get HYDAT (ECCC, ~270 MB zip) and note the sqlite path
 #    https://collaboration.cmc.ec.gc.ca/cmc/hydrometrics/www/
 # 2. Build + run + evaluate (backend venv, Python 3.11, EPA swmm5 on PATH):
-cd case-studies/graham-creek
+cd results/graham-creek
 ../../backend/.venv/bin/python run_case.py --hydat /path/to/Hydat.sqlite3
 ```
 
