@@ -32,6 +32,13 @@ You draw (or upload) a boundary on the map. SWMMCanada pulls the Canadian open d
 </p>
 <p align="center"><sub>The app after building a downtown Victoria area: storm (blue) and sanitary (brick) networks with flow arrows, pipe width scaled by diameter, per-system layer toggles, and click-to-inspect attributes, with the model package (SWMM, MIKE+, ICM) ready to download.</sub></p>
 
+## Checked against a real flow gauge
+
+<p align="center">
+  <img src="results/graham-creek/figs/fig_graham_creek.png" width="820" alt="Daily rainfall and daily mean flow at Graham Creek, Ottawa, summer 2024: observed WSC gauge record in black, the uncalibrated SWMMCanada model in blue. Every rainfall event produces a same-day simulated response." />
+</p>
+<p align="center"><sub>Summer 2024 at Graham Creek, Ottawa: a 22 km&sup2; gauged basin (WSC 02KF015), built fully automatically over the official WSC drainage polygon and run with observed rain. The <strong>uncalibrated</strong> model (blue) reproduced <strong>all 12 rainfall events on the correct days</strong> against the measured record (black), with a total volume bias of <strong>&minus;22.3%</strong>. The remaining gaps are structural and explained honestly (no baseflow on dry days, no wetland storage on wet days). Full write-up: <a href="results/graham-creek/README.md">results/graham-creek</a>.</sub></p>
+
 ## Two modes (picked automatically)
 
 SWMMCanada chooses how to build the network from **where you draw**. You don't set anything:
