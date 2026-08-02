@@ -130,6 +130,7 @@ SWMMCanada is the **first half** of a closed loop: it turns an area into a compl
 
 ## More
 
+- **[Case study: Graham Creek](case-studies/graham-creek/README.md)**: the uncalibrated model vs a real WSC flow gauge over a 22 km² Ottawa basin — all 12 rainfall events reproduced on the correct days, volume bias −22%, with the remaining gaps explained honestly.
 - **[ASSUMPTIONS.md](ASSUMPTIONS.md)**: what's real, derived, or approximated in a model, layer by layer. Most of it is grounded in real data; the approximations (and the uncalibrated caveat) are called out.
 - **[DATA.md](DATA.md)**: every dataset used, with links, licences, and how each one is used (ECCC rainfall, NRCan terrain & land cover, SoilGrids soil, OpenStreetMap, and the nine municipal storm networks). All free / open.
 - **[RESULTS.md](RESULTS.md)**: real-city validation, figures, and the EPA SWMM numbers.
