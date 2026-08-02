@@ -58,6 +58,34 @@ the fast city water and the slow greenbelt water right.*
    means. Observed = HYDAT daily mean flow.
 4. Compare: hydrograph, NSE, PBIAS, and a wet/dry-day decomposition.
 
+## What the build produces
+
+The run directory is a complete, portable model package. Its core is the **datastore** —
+the neutral hub every export format derives from:
+
+```
+run/
+├── datastore/
+│   ├── datastore.json   index: schema version, build config, full provenance
+│   ├── network.gpkg     the model itself: 3,550 junctions, 3,585 conduits,
+│   │                    194 outfalls, 3,074 subcatchments, with all attributes
+│   └── forcing.nc       rainfall, temperature and evaporation series
+├── model.inp            EPA SWMM 5 (generated from the datastore)
+├── mikeplus/ · icm/     MIKE+ and InfoWorks ICM import packages (same source)
+└── preview/             GeoJSON used for the map figure
+```
+
+The SWMM file is one *view* of the model, not the model: to recompute this basin in
+MIKE+ or ICM, or to regenerate the .inp with different options, start from the
+datastore — no refetching needed.
+
+For the record, the engine's own mass balance for this run: runoff continuity −0.16%,
+routing continuity −0.98% (both well inside SWMM's ±2% guideline). Of 448.5 mm of rain,
+311 mm infiltrated (the greenbelt half at work), 23 mm evaporated (Hargreaves from daily
+temperature) and 115 mm became runoff; about 20% of routed volume exits as node flooding
+during the largest storms rather than through outfalls — an honest sign of surcharge on
+the biggest events, and part of why simulated outflow undershoots total volume.
+
 ## Results
 
 ![Simulated vs observed](figs/fig_graham_creek.png)
