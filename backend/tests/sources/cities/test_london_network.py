@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 from swmmcanada.build.config import BuildConfig
-from swmmcanada.build.models import NetworkIn, RainfallSeries, SubcatchmentIn
+from swmmcanada.build.models import NetworkIn, RainfallSeries, SurfaceCatchment
 from swmmcanada.sources.cities.london import (
     LONDON_CRS,
     LondonNetworkConfig,
@@ -139,7 +139,7 @@ def test_network_feeds_build_model(result, tmp_path):
     from swmmcanada.build.assemble import BuildResult, build_model
 
     outlet = result.network.junctions[0].name
-    sub = SubcatchmentIn(
+    sub = SurfaceCatchment(
         name="S_TEST", outlet_node=outlet, area_ha=1.0, pct_imperv=50.0,
         width_m=100.0, pct_slope=1.0,
     )

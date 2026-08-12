@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 
 from swmmcanada.build.config import BuildConfig
-from swmmcanada.build.models import RainfallSeries, SubcatchmentIn
+from swmmcanada.build.models import RainfallSeries, SurfaceCatchment
 from swmmcanada.sources.cities.barrie import _roughness, build_barrie_network
 
 FIXTURES = Path(__file__).resolve().parents[2] / "fixtures" / "barrie"
@@ -153,7 +153,7 @@ def test_network_feeds_build_model(result, tmp_path):
     from swmmcanada.build.assemble import BuildResult, build_model
 
     outlet = result.network.junctions[0].name
-    sub = SubcatchmentIn(name="S_TEST", outlet_node=outlet, area_ha=1.0, pct_imperv=50.0,
+    sub = SurfaceCatchment(name="S_TEST", outlet_node=outlet, area_ha=1.0, pct_imperv=50.0,
                          width_m=100.0, pct_slope=1.0)
     rain = RainfallSeries(
         timestamps=[datetime(2022, 6, 1, 0), datetime(2022, 6, 1, 1), datetime(2022, 6, 1, 2)],

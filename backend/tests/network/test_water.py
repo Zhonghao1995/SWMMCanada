@@ -7,7 +7,7 @@ import rasterio
 from rasterio.transform import from_origin
 from shapely.geometry import Polygon, box
 
-from swmmcanada.build.models import SubcatchmentIn
+from swmmcanada.build.models import SurfaceCatchment
 from swmmcanada.network import synth as SY
 from swmmcanada.network.water import (
     WATER_CLASS, nodes_near_water, subtract_water, thin_by_spacing, water_union,
@@ -55,7 +55,7 @@ def test_water_union_none_without_water(tmp_path):
 
 
 def _sub(name, outlet, poly):
-    return SubcatchmentIn(name, outlet, area_ha=1.0, pct_imperv=50.0, width_m=50.0,
+    return SurfaceCatchment(name, outlet, area_ha=1.0, pct_imperv=50.0, width_m=50.0,
                           pct_slope=1.0, polygon=[(x, y) for x, y in poly.exterior.coords])
 
 
@@ -144,9 +144,9 @@ def test_validation_coverage_discounts_water(tmp_path):
     west = box(-123.40, 48.40, -123.36, 48.44)
     east = box(-123.34, 48.40, -123.30, 48.44)
     subs = [
-        SubcatchmentIn("SW", "JW", area_ha=1, pct_imperv=50, width_m=50, pct_slope=1,
+        SurfaceCatchment("SW", "JW", area_ha=1, pct_imperv=50, width_m=50, pct_slope=1,
                        polygon=list(west.exterior.coords)),
-        SubcatchmentIn("SE", "JE", area_ha=1, pct_imperv=50, width_m=50, pct_slope=1,
+        SurfaceCatchment("SE", "JE", area_ha=1, pct_imperv=50, width_m=50, pct_slope=1,
                        polygon=list(east.exterior.coords)),
     ]
     net = NetworkIn(
@@ -175,7 +175,7 @@ def test_thin_by_spacing_orders_by_elevation():
 # --- F-005 (ADR 0024 §4): enclosed water is NOT land, width follows area ---------------
 
 def test_enclosed_pond_reduces_area_but_not_the_display_ring():
-    from swmmcanada.build.models import SubcatchmentIn
+    from swmmcanada.build.models import SurfaceCatchment
     from swmmcanada.geo import aoi_from_geojson
     from swmmcanada.network.water import subtract_water
     from shapely.geometry import Polygon as ShPoly
@@ -187,7 +187,7 @@ def test_enclosed_pond_reduces_area_but_not_the_display_ring():
         [-123.512, 48.446], [-123.512, 48.438]]]})
     pond = ShPoly([(-123.5085, 48.4415), (-123.5065, 48.4415),
                    (-123.5065, 48.4425), (-123.5085, 48.4425)])   # fully inside the cell
-    sub = SubcatchmentIn(name="S1", outlet_node="J1", area_ha=16.0, pct_imperv=40.0,
+    sub = SurfaceCatchment(name="S1", outlet_node="J1", area_ha=16.0, pct_imperv=40.0,
                          width_m=200.0, pct_slope=1.0, polygon=cell)
     out, diag = subtract_water([sub], pond, {"J1": (-123.509, 48.4405)}, aoi)
     s = out[0]
@@ -208,7 +208,7 @@ def test_pond_hole_rides_analysis_geometry_and_datastore():
     from datetime import date, datetime
     from shapely.geometry import Polygon as ShPoly
     from swmmcanada.build.config import BuildConfig
-    from swmmcanada.build.models import RainfallSeries, SubcatchmentIn
+    from swmmcanada.build.models import RainfallSeries, SurfaceCatchment
     from swmmcanada.geo import aoi_from_geojson
     from swmmcanada.network.water import subtract_water
 
@@ -219,7 +219,7 @@ def test_pond_hole_rides_analysis_geometry_and_datastore():
         [-123.512, 48.446], [-123.512, 48.438]]]})
     pond = ShPoly([(-123.5085, 48.4415), (-123.5065, 48.4415),
                    (-123.5065, 48.4425), (-123.5085, 48.4425)])
-    sub = SubcatchmentIn(name="S1", outlet_node="J1", area_ha=16.0, pct_imperv=40.0,
+    sub = SurfaceCatchment(name="S1", outlet_node="J1", area_ha=16.0, pct_imperv=40.0,
                          width_m=200.0, pct_slope=1.0, polygon=cell)
     out, _ = subtract_water([sub], pond, {"J1": (-123.509, 48.4405)}, aoi)
     s = out[0]

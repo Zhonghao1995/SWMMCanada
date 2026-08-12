@@ -26,7 +26,7 @@ from swmmcanada.build import (
     NetworkIn,
     OutfallIn,
     RainfallSeries,
-    SubcatchmentIn,
+    SurfaceCatchment,
     TemperatureSeries,
 )
 from swmmcanada.datastore import (
@@ -58,19 +58,19 @@ def _network() -> NetworkIn:
 def _subcatchments():
     return [
         # WITH a polygon
-        SubcatchmentIn(
+        SurfaceCatchment(
             "S1", outlet_node="J1", area_ha=1.5, pct_imperv=42.0, width_m=120.0,
             pct_slope=1.2, cn=82.0, n_imperv=0.011, n_perv=0.12,
             s_imperv_mm=1.6, s_perv_mm=5.5, pct_zero=20.0,
             polygon=[(-75.701, 45.409), (-75.699, 45.409), (-75.699, 45.411), (-75.701, 45.411)],
         ),
         # WITHOUT a polygon (must round-trip back to polygon=None)
-        SubcatchmentIn(
+        SurfaceCatchment(
             "S2", outlet_node="J2", area_ha=0.8, pct_imperv=30.0, width_m=90.0,
             pct_slope=0.9, polygon=None,
         ),
         # another WITH a polygon (defaults otherwise)
-        SubcatchmentIn(
+        SurfaceCatchment(
             "S3", outlet_node="J3", area_ha=2.1, pct_imperv=55.0, width_m=150.0,
             pct_slope=1.8,
             polygon=[(-75.686, 45.414), (-75.684, 45.414), (-75.684, 45.416), (-75.686, 45.416)],
@@ -181,7 +181,7 @@ def test_roundtrip_returns_modelready_datastore(tmp_path):
     ds = _write_and_read(tmp_path)
     assert isinstance(ds, ModelReadyDatastore)
     assert isinstance(ds.network, NetworkIn)
-    assert all(isinstance(s, SubcatchmentIn) for s in ds.subcatchments)
+    assert all(isinstance(s, SurfaceCatchment) for s in ds.subcatchments)
     assert isinstance(ds.rain, RainfallSeries)
 
 

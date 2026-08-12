@@ -15,7 +15,7 @@ from rasterio import features as rio_features
 from shapely.geometry import Point, Polygon, shape as shp_shape
 from shapely.ops import transform as shp_transform, unary_union
 
-from swmmcanada.build.models import SubcatchmentIn
+from swmmcanada.build.models import SurfaceCatchment
 from swmmcanada.geo.crs import lonlat_projector, utm_crs_for
 
 WATER_CLASS = 18            # NALCMS "Water" (acquire.landcover legend)
@@ -75,11 +75,11 @@ def water_union(landcover_path, aoi):
 
 
 def subtract_water(
-    subcatchments: List[SubcatchmentIn],
+    subcatchments: List[SurfaceCatchment],
     water,                                    # 4326 geometry from water_union (or None)
     node_xy: Dict[str, Tuple[float, float]],  # outlet-node name -> (lon, lat) seed
     aoi,
-) -> Tuple[List[SubcatchmentIn], dict]:
+) -> Tuple[List[SurfaceCatchment], dict]:
     """Remove open water from the subcatchment tiling (ADR 0016 §2): clip every cell to
     land, keep only the piece containing its seed node when a river splits it (the far
     bank belongs to the far bank's own nodes), drop cells that were essentially water.
@@ -94,7 +94,7 @@ def subtract_water(
     to_m = lonlat_projector(utm_crs_for(aoi))
     diag["water_area_ha"] = round(shp_transform(to_m, water).area / 10_000.0, 2)
 
-    out: List[SubcatchmentIn] = []
+    out: List[SurfaceCatchment] = []
     for s in subcatchments:
         if not s.polygon:
             out.append(s)

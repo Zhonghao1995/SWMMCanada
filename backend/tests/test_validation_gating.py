@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from swmmcanada.build.models import JunctionIn, NetworkIn, SubcatchmentIn
+from swmmcanada.build.models import JunctionIn, NetworkIn, SurfaceCatchment
 from swmmcanada.geo import aoi_from_geojson
 from swmmcanada.pipeline import _method_descriptor, _validate_or_raise
 from swmmcanada.validate import MethodDescriptor, SubcatchmentValidationError
@@ -18,7 +18,7 @@ LEFT = [(-123.372, 48.418), (-123.370, 48.418), (-123.370, 48.422), (-123.372, 4
 
 
 def _sub(ring):
-    return SubcatchmentIn("S", "J1", area_ha=AOI.area_km2 * 100, pct_imperv=50.0,
+    return SurfaceCatchment("S", "J1", area_ha=AOI.area_km2 * 100, pct_imperv=50.0,
                           width_m=100.0, pct_slope=1.0, polygon=ring)
 
 

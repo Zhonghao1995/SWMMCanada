@@ -7,7 +7,7 @@ from swmm_api import read_inp_file
 from swmmcanada.build.assemble import build_model
 from swmmcanada.build.config import BuildConfig
 from swmmcanada.build.models import (
-    ConduitIn, JunctionIn, NetworkIn, OutfallIn, RainfallSeries, SubcatchmentIn,
+    ConduitIn, JunctionIn, NetworkIn, OutfallIn, RainfallSeries, SurfaceCatchment,
 )
 
 NET = NetworkIn(
@@ -20,7 +20,7 @@ NET = NetworkIn(
                   shape="RECT_CLOSED", height_m=1.2, width_m=2.4),
     ],
 )
-SUB = SubcatchmentIn(name="S1", outlet_node="J1", area_ha=1.0, pct_imperv=50.0,
+SUB = SurfaceCatchment(name="S1", outlet_node="J1", area_ha=1.0, pct_imperv=50.0,
                      width_m=100.0, pct_slope=1.0)
 RAIN = RainfallSeries(timestamps=[datetime(2022, 6, 1, 0), datetime(2022, 6, 1, 1)],
                       precip_mm=[5.0, 0.0])

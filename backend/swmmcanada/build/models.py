@@ -97,14 +97,6 @@ class SurfaceCatchment:
     ga_imd: float = 0.434
 
 
-#: Migration bridge (ADR 0029 Q8) — **temporary, with a deadline**. The internal model must
-#: end up with the new type only; this alias exists so ~60 call sites across 16 modules can
-#: move in reviewable steps instead of one unreadable diff. Delete it once the last consumer
-#: is migrated. If external API stability is ever needed, that belongs in a deprecated
-#: adapter at the outermost edge, never leaking back inside.
-SubcatchmentIn = SurfaceCatchment
-
-
 @dataclass(frozen=True)
 class SewerServiceArea:
     """The land whose **wastewater** a sanitary or combined sewer collects (ADR 0029 Q1).

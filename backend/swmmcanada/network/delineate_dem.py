@@ -21,7 +21,7 @@ from typing import Dict, List, Tuple
 
 import numpy as np
 
-from swmmcanada.build.models import JunctionIn, NetworkIn, SubcatchmentIn
+from swmmcanada.build.models import JunctionIn, NetworkIn, SurfaceCatchment
 from swmmcanada.network.subcatchments import _AREA_CRS, SubcatchmentCell, _largest_polygon
 from swmmcanada.network.synth import NetworkConfig, _build_subcatchments
 
@@ -59,7 +59,7 @@ def delineate_junction_subcatchments(
     min_cell_ha=None,      # ADR 0017: sliver-merge threshold; None = no merging (v2)
     config: DemDelineationConfig = DemDelineationConfig(),
     network_config: NetworkConfig = NetworkConfig(),
-) -> Tuple[List[SubcatchmentIn], dict]:
+) -> Tuple[List[SurfaceCatchment], dict]:
     """One subcatchment per junction, DEM-delineated when the terrain earns it.
 
     Returns ``(subcatchments, diagnostics)``; diagnostics carries the method used and the
@@ -170,7 +170,7 @@ def _apply_service(subs, junction_xy, aoi, service_mask, min_cell_ha):
 # fallback + gate helpers
 # --------------------------------------------------------------------------- #
 def _voronoi(junction_xy, aoi, network_config, gate,
-             service_mask=None, min_cell_ha=None) -> Tuple[List[SubcatchmentIn], dict]:
+             service_mask=None, min_cell_ha=None) -> Tuple[List[SurfaceCatchment], dict]:
     # The Voronoi tiling clips to the corridor at the source (ADR 0017): pass it as the
     # clip polygon, then apply size discipline. None/None = the v2 whole-AOI behaviour.
     clip = None

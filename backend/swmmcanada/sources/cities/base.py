@@ -864,7 +864,7 @@ def delineate_catchbasin_subcatchments(
     import numpy as np
     from shapely.geometry import shape
 
-    from swmmcanada.build.models import SubcatchmentIn
+    from swmmcanada.build.models import SurfaceCatchment
 
     if not network.junctions:
         return [], {}, {"reason": "no network junctions"}
@@ -901,7 +901,7 @@ def delineate_catchbasin_subcatchments(
         if parcel_based:
             imperv_map[name] = imperv
             n_parcel += 1
-        subs.append(SubcatchmentIn(
+        subs.append(SurfaceCatchment(
             name=name, outlet_node=outlet_of(seeds[cb_id]), area_ha=area_m2 / 1e4,
             pct_imperv=imperv, width_m=math.sqrt(area_m2),
             pct_slope=config.default_slope_pct, polygon=exterior, holes=holes or None))

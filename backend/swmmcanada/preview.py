@@ -4,10 +4,10 @@ carries a `kind` so the map can split it into toggleable layers. Coords are lon/
 """
 from typing import List
 
-from swmmcanada.build.models import NetworkIn, SubcatchmentIn
+from swmmcanada.build.models import NetworkIn, SurfaceCatchment
 
 
-def network_geojson(network: NetworkIn, subcatchments: List[SubcatchmentIn]) -> dict:
+def network_geojson(network: NetworkIn, subcatchments: List[SurfaceCatchment]) -> dict:
     coord = {}
     for n in list(network.junctions) + list(network.outfalls):
         coord[n.name] = [float(n.x), float(n.y)]

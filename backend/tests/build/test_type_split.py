@@ -7,7 +7,7 @@ cross-connection municipalities run dedicated programmes to find and fix.
 import pytest
 
 from swmmcanada.build.assemble import _reject_service_areas
-from swmmcanada.build.models import SewerServiceArea, SubcatchmentIn, SurfaceCatchment
+from swmmcanada.build.models import SewerServiceArea, SurfaceCatchment, SurfaceCatchment
 
 
 def surface(name="S1"):
@@ -80,14 +80,14 @@ class TestWriterGuard:
         _reject_service_areas([])
 
 
-class TestMigrationBridge:
-    def test_the_old_name_still_resolves(self):
-        """~60 call sites across 16 modules move in reviewable steps, not one diff."""
-        assert SubcatchmentIn is SurfaceCatchment
+class TestMigrationIsComplete:
+    """The bridge was deleted once the last consumer moved (ADR 0029 Q8). Keeping it would
+    have left the ambiguous word as the thing a developer reaches for by default, and
+    "subcatchment" meaning two different things is what started this work.
 
-    def test_the_bridge_is_documented_as_temporary(self):
+    Full coverage of the removal lives in test_migration_complete.py."""
+
+    def test_the_old_name_is_gone(self):
         import swmmcanada.build.models as models
-        src = open(models.__file__).read()
-        head = src[src.index("SubcatchmentIn = SurfaceCatchment") - 700:
-                   src.index("SubcatchmentIn = SurfaceCatchment")]
-        assert "deadline" in head.lower() and "delete it" in head.lower()
+
+        assert not hasattr(models, "SubcatchmentIn")

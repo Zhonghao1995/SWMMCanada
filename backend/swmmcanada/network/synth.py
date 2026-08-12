@@ -26,7 +26,7 @@ from swmmcanada.build.models import (
     JunctionIn,
     NetworkIn,
     OutfallIn,
-    SubcatchmentIn,
+    SurfaceCatchment,
 )
 from swmmcanada.network.errors import NetworkError
 from swmmcanada.network.subcatchments import delineate_subcatchments
@@ -48,7 +48,7 @@ class NetworkConfig:
 @dataclass(frozen=True)
 class SynthesisedNetwork:
     network: NetworkIn
-    subcatchments: List[SubcatchmentIn]
+    subcatchments: List[SurfaceCatchment]
     diagnostics: dict = field(default_factory=dict)
 
 
@@ -191,8 +191,8 @@ def _select_sinks(g: nx.Graph, *, aoi, water, config: NetworkConfig):
 
 
 def _build_subcatchments(junction_xy, aoi, config: NetworkConfig, cells=None,
-                         widths=None, clip_poly=None) -> List[SubcatchmentIn]:
-    """Cells → one SubcatchmentIn per junction (missing cell → nominal placeholder; %imperv
+                         widths=None, clip_poly=None) -> List[SurfaceCatchment]:
+    """Cells → one SurfaceCatchment per junction (missing cell → nominal placeholder; %imperv
     stays a placeholder, derive overwrites). ``cells`` defaults to Voronoi delineation when
     an AOI polygon is given; the DEM delineator (delineate_dem, ADR 0010) passes its own,
     plus optional per-junction ``widths`` (area / DEM flow length) that beat the √area
@@ -205,7 +205,7 @@ def _build_subcatchments(junction_xy, aoi, config: NetworkConfig, cells=None,
             poly = clip_poly if clip_poly is not None else (
                 aoi.geometry if hasattr(aoi, "geometry") else aoi)
             cells = delineate_subcatchments(junction_xy, poly)
-    subs: List[SubcatchmentIn] = []
+    subs: List[SurfaceCatchment] = []
     for jname in junction_xy:
         cell = cells.get(jname)
         if cell is not None and cell.area_m2 > 0:
@@ -217,7 +217,7 @@ def _build_subcatchments(junction_xy, aoi, config: NetworkConfig, cells=None,
             width = math.sqrt(config.sub_area_ha * 10_000.0)
             polygon = None
         subs.append(
-            SubcatchmentIn(
+            SurfaceCatchment(
                 f"S_{jname}",
                 outlet_node=jname,
                 area_ha=area_ha,

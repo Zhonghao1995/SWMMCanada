@@ -13,7 +13,7 @@ from swmmcanada.build.models import (
     NetworkIn,
     OutfallIn,
     RainfallSeries,
-    SubcatchmentIn,
+    SurfaceCatchment,
     TemperatureSeries,
     TideSeries,
 )
@@ -31,7 +31,7 @@ __all__ = [
     "JunctionIn",
     "OutfallIn",
     "ConduitIn",
-    "SubcatchmentIn",
+    "SurfaceCatchment",
     "RainfallSeries",
     "EvaporationSeries",
     "TemperatureSeries",

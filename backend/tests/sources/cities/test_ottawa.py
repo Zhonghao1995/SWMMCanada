@@ -9,7 +9,7 @@ from pathlib import Path
 
 from swmmcanada.build.assemble import build_model
 from swmmcanada.build.config import BuildConfig
-from swmmcanada.build.models import RainfallSeries, SubcatchmentIn
+from swmmcanada.build.models import RainfallSeries, SurfaceCatchment
 from swmmcanada.sources.cities.ottawa import build_ottawa_network
 
 FIX = Path(__file__).resolve().parents[2] / "fixtures" / "ottawa"
@@ -33,7 +33,7 @@ def test_ottawa_network_from_fixtures(tmp_path):
     assert all(c.from_node != c.to_node for c in net.conduits)   # no self-loops
 
     # build-compatibility: the inferred network is genuinely SWMM-valid
-    sub = SubcatchmentIn(name="S1", outlet_node=net.junctions[0].name, area_ha=1.0,
+    sub = SurfaceCatchment(name="S1", outlet_node=net.junctions[0].name, area_ha=1.0,
                          pct_imperv=50.0, width_m=100.0, pct_slope=1.0)
     rain = RainfallSeries(timestamps=[datetime(2022, 6, 1), datetime(2022, 6, 2)], precip_mm=[5.0, 0.0])
     out = build_model(network=net, subcatchments=[sub], rain=rain,

@@ -7,7 +7,7 @@ and use `unary_union` so coverage/overlap stay O(n) rather than O(n²) pairwise.
 import math
 from typing import Dict, List, Tuple
 
-from swmmcanada.build.models import NetworkIn, SubcatchmentIn
+from swmmcanada.build.models import NetworkIn, SurfaceCatchment
 from swmmcanada.validate import schema
 
 
@@ -19,7 +19,7 @@ def _result(id, severity, passed, message, **metrics):
 # --- topological checks (no polygon needed) -----------------------------------
 
 
-def check_outlet_present(subs: List[SubcatchmentIn]):
+def check_outlet_present(subs: List[SurfaceCatchment]):
     bad = [s.name for s in subs if not (s.outlet_node and str(s.outlet_node).strip())]
     return _result("outlet_present", schema.ERROR, not bad,
                    "every subcatchment has an outlet node" if not bad
@@ -27,7 +27,7 @@ def check_outlet_present(subs: List[SubcatchmentIn]):
                    n_missing=len(bad), sample=bad[:10])
 
 
-def check_outlet_exists(subs: List[SubcatchmentIn], node_names):
+def check_outlet_exists(subs: List[SurfaceCatchment], node_names):
     bad = [s.name for s in subs if s.outlet_node not in node_names]
     return _result("outlet_exists", schema.ERROR, not bad,
                    "every outlet resolves to a network node" if not bad
@@ -35,7 +35,7 @@ def check_outlet_exists(subs: List[SubcatchmentIn], node_names):
                    n_dangling=len(bad), sample=bad[:10])
 
 
-def check_area_positive(subs: List[SubcatchmentIn]):
+def check_area_positive(subs: List[SurfaceCatchment]):
     bad = [s.name for s in subs if not (s.area_ha and s.area_ha > 0)]
     return _result("area_positive", schema.ERROR, not bad,
                    "every subcatchment has positive area" if not bad
@@ -43,7 +43,7 @@ def check_area_positive(subs: List[SubcatchmentIn]):
                    n_bad=len(bad), sample=bad[:10])
 
 
-def check_geometry_absent(subs: List[SubcatchmentIn]):
+def check_geometry_absent(subs: List[SurfaceCatchment]):
     missing = [s.name for s in subs if not s.polygon]
     return _result("geometry_absent", schema.WARNING, not missing,
                    "every subcatchment carries a polygon" if not missing
@@ -92,7 +92,7 @@ def check_invert_consistency(network: NetworkIn):
 class GeoContext:
     """Cell polygons + AOI reprojected once into a metric CRS, with a cached cell union."""
 
-    def __init__(self, subcatchments: List[SubcatchmentIn], aoi, water=None, served=None):
+    def __init__(self, subcatchments: List[SurfaceCatchment], aoi, water=None, served=None):
         from shapely.geometry import Polygon
         from shapely.ops import transform as shp_transform
 
@@ -111,7 +111,7 @@ class GeoContext:
         if self.water_m is not None:
             eff = eff.difference(self.water_m)
         self.effective_aoi_m = eff
-        self.cells: List[Tuple[SubcatchmentIn, object]] = []
+        self.cells: List[Tuple[SurfaceCatchment, object]] = []
         for s in subcatchments:
             if not s.polygon:
                 continue
@@ -171,7 +171,7 @@ def check_overlap(geo: GeoContext):
                    overlap_m2=round(overlap, 1), fraction=round(frac, 4))
 
 
-def check_area_conservation(subs: List[SubcatchmentIn], aoi, effective_aoi_m2=None):
+def check_area_conservation(subs: List[SurfaceCatchment], aoi, effective_aoi_m2=None):
     sum_m2 = sum((s.area_ha or 0.0) for s in subs) * 1e4
     aoi_m2 = effective_aoi_m2 if effective_aoi_m2 is not None else aoi.area_km2 * 1e6
     frac = abs(sum_m2 - aoi_m2) / aoi_m2 if aoi_m2 > 0 else 0.0

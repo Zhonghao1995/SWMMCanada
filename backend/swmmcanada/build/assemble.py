@@ -40,7 +40,7 @@ from swmmcanada.build.models import (
     EvaporationSeries,
     NetworkIn,
     RainfallSeries,
-    SubcatchmentIn,
+    SurfaceCatchment,
     TemperatureSeries,
     TideSeries,
 )
@@ -170,7 +170,7 @@ def _reject_service_areas(subcatchments) -> None:
 
 def assemble_inp(
     network: NetworkIn,
-    subcatchments: List[SubcatchmentIn],
+    subcatchments: List[SurfaceCatchment],
     rain: RainfallSeries,
     config: BuildConfig,
     evaporation: Optional[EvaporationSeries] = None,
@@ -399,7 +399,7 @@ class BuildValidationError(Exception):
 def build_model(
     *,
     network: NetworkIn,
-    subcatchments: List[SubcatchmentIn],
+    subcatchments: List[SurfaceCatchment],
     rain: RainfallSeries,
     config: BuildConfig,
     evaporation: Optional[EvaporationSeries] = None,

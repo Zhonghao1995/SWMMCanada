@@ -3,7 +3,7 @@
 Tests assert external behaviour — which checks pass/fail and the report's verdict — on
 hand-built models, not the internal merge steps.
 """
-from swmmcanada.build.models import ConduitIn, JunctionIn, NetworkIn, OutfallIn, SubcatchmentIn
+from swmmcanada.build.models import ConduitIn, JunctionIn, NetworkIn, OutfallIn, SurfaceCatchment
 from swmmcanada.geo import aoi_from_geojson
 from swmmcanada.validate import MethodDescriptor, validate_model
 
@@ -22,7 +22,7 @@ def _rect(lo, la, lo2, la2):
 
 
 def _sub(name, outlet, ring, area_ha=HALF_HA):
-    return SubcatchmentIn(name=name, outlet_node=outlet, area_ha=area_ha,
+    return SurfaceCatchment(name=name, outlet_node=outlet, area_ha=area_ha,
                           pct_imperv=50.0, width_m=100.0, pct_slope=1.0, polygon=ring)
 
 
@@ -112,7 +112,7 @@ def test_polygon_none_warns_but_topology_still_ok():
     # Cell A covers the whole AOI (no blank); cell B carries no polygon -> geometry_absent warns,
     # geometric checks skip B, topology is fine -> the model is not blocked.
     full = _rect(-123.372, 48.418, -123.368, 48.422)
-    subs = [_sub("A", "J1", full), SubcatchmentIn("B", "J2", area_ha=HALF_HA, pct_imperv=50.0,
+    subs = [_sub("A", "J1", full), SurfaceCatchment("B", "J2", area_ha=HALF_HA, pct_imperv=50.0,
                                                   width_m=100.0, pct_slope=1.0, polygon=None)]
     r = validate_model(NET, subs, AOI, method=METHOD)
     assert not _ids(r)["geometry_absent"].passed            # the None cell is flagged (warning)

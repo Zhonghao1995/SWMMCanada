@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from swmmcanada.build.config import BuildConfig
-from swmmcanada.build.models import RainfallSeries, SubcatchmentIn
+from swmmcanada.build.models import RainfallSeries, SurfaceCatchment
 from swmmcanada.sources.cities.abbotsford import (
     _invert,
     _roughness,
@@ -128,7 +128,7 @@ def test_diagnostics_and_build_model(result, tmp_path):
     assert d["n_junctions"] == len(result.network.junctions)
 
     from swmmcanada.build.assemble import BuildResult, build_model
-    sub = SubcatchmentIn(name="S_TEST", outlet_node=result.network.junctions[0].name,
+    sub = SurfaceCatchment(name="S_TEST", outlet_node=result.network.junctions[0].name,
                          area_ha=1.0, pct_imperv=50.0, width_m=100.0, pct_slope=1.0)
     rain = RainfallSeries(
         timestamps=[datetime(2022, 6, 1, 0), datetime(2022, 6, 1, 1), datetime(2022, 6, 1, 2)],

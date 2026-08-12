@@ -12,7 +12,7 @@ approximate. `ValidationReport.ok` is true iff there are zero failing error-seve
 from dataclasses import dataclass, field
 from typing import List, Optional
 
-from swmmcanada.build.models import NetworkIn, SubcatchmentIn
+from swmmcanada.build.models import NetworkIn, SurfaceCatchment
 from swmmcanada.validate import checks as C
 from swmmcanada.validate import schema
 
@@ -92,7 +92,7 @@ class ValidationReport:
 
 def validate_model(
     network: NetworkIn,
-    subcatchments: List[SubcatchmentIn],
+    subcatchments: List[SurfaceCatchment],
     aoi,
     *,
     method: MethodDescriptor,

@@ -4,7 +4,7 @@ import networkx as nx
 import pytest
 from shapely.geometry import Polygon, box
 
-from swmmcanada.build.models import SubcatchmentIn
+from swmmcanada.build.models import SurfaceCatchment
 from swmmcanada.network.delineate_dem import delineate_junction_subcatchments
 from swmmcanada.network.service_area import (
     block_aware_service_area, merge_slivers, street_service_corridor,
@@ -69,11 +69,11 @@ def test_merge_slivers_conserves_area():
     tiny = box(-123.38, 48.40, -123.3799, 48.42)          # sliver sharing big's east edge
     other = box(-123.37, 48.40, -123.36, 48.42)
     subs = [
-        SubcatchmentIn("B", "J1", area_ha=100.0, pct_imperv=50, width_m=50, pct_slope=1,
+        SurfaceCatchment("B", "J1", area_ha=100.0, pct_imperv=50, width_m=50, pct_slope=1,
                        polygon=list(big.exterior.coords)),
-        SubcatchmentIn("T", "J2", area_ha=0.01, pct_imperv=50, width_m=50, pct_slope=1,
+        SurfaceCatchment("T", "J2", area_ha=0.01, pct_imperv=50, width_m=50, pct_slope=1,
                        polygon=list(tiny.exterior.coords)),
-        SubcatchmentIn("O", "J3", area_ha=50.0, pct_imperv=50, width_m=50, pct_slope=1,
+        SurfaceCatchment("O", "J3", area_ha=50.0, pct_imperv=50, width_m=50, pct_slope=1,
                        polygon=list(other.exterior.coords)),
     ]
     out, diag = merge_slivers(subs, aoi, min_cell_ha=0.05)

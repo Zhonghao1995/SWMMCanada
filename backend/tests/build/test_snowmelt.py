@@ -12,7 +12,7 @@ from swmmcanada.build import (
     NetworkIn,
     OutfallIn,
     RainfallSeries,
-    SubcatchmentIn,
+    SurfaceCatchment,
     TemperatureSeries,
     build_model,
 )
@@ -27,8 +27,8 @@ def _net():
 
 
 def _subs():
-    return [SubcatchmentIn("S1", "J1", 1.0, 40.0, 100.0, 1.0),
-            SubcatchmentIn("S2", "J2", 0.5, 30.0, 70.0, 1.0)]
+    return [SurfaceCatchment("S1", "J1", 1.0, 40.0, 100.0, 1.0),
+            SurfaceCatchment("S2", "J2", 0.5, 30.0, 70.0, 1.0)]
 
 
 def _rain():

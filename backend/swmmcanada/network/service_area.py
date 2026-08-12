@@ -15,7 +15,7 @@ from typing import Dict, List, Tuple
 from shapely.geometry import LineString, Polygon
 from shapely.ops import transform as shp_transform, unary_union
 
-from swmmcanada.build.models import SubcatchmentIn
+from swmmcanada.build.models import SurfaceCatchment
 from swmmcanada.geo.crs import lonlat_projector, utm_crs_for
 
 # One lot depth each side of the street — the served band. Urban lot depths run ~40-60 m
@@ -96,17 +96,17 @@ def block_aware_service_area(streets, aoi, *, lot_depth_m: float = LOT_DEPTH_M,
 
 
 def merge_slivers(
-    subcatchments: List[SubcatchmentIn],
+    subcatchments: List[SurfaceCatchment],
     aoi,
     *,
     min_cell_ha: float = MIN_CELL_HA,
-) -> Tuple[List[SubcatchmentIn], dict]:
+) -> Tuple[List[SurfaceCatchment], dict]:
     """Size discipline (ADR 0017 §3): cells below ``min_cell_ha`` merge into the polygon
     neighbour they share the longest boundary with (area conserved, union geometry).
     Cells without polygons pass through untouched."""
     to_m = lonlat_projector(utm_crs_for(aoi))
 
-    keep: List[SubcatchmentIn] = [s for s in subcatchments if not s.polygon]
+    keep: List[SurfaceCatchment] = [s for s in subcatchments if not s.polygon]
     cells = [(s, Polygon([(float(x), float(y)) for x, y in s.polygon]))
              for s in subcatchments if s.polygon]
     cells = [(s, p if p.is_valid else p.buffer(0)) for s, p in cells]

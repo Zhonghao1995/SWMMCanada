@@ -35,7 +35,7 @@ from swmmcanada.build import (
     NetworkIn,
     OutfallIn,
     RainfallSeries,
-    SubcatchmentIn,
+    SurfaceCatchment,
     TemperatureSeries,
     TideSeries,
     build_model,
@@ -48,7 +48,7 @@ class ModelReadyDatastore:
     """In-memory view of a datastore directory, reconstructed by :func:`read_datastore`."""
 
     network: NetworkIn
-    subcatchments: List[SubcatchmentIn]
+    subcatchments: List[SurfaceCatchment]
     rain: RainfallSeries
     config: dict
     provenance: dict
@@ -67,7 +67,7 @@ def write_datastore(
     out_dir,
     *,
     network: NetworkIn,
-    subcatchments: List[SubcatchmentIn],
+    subcatchments: List[SurfaceCatchment],
     rain: RainfallSeries,
     config: BuildConfig,
     provenance: Optional[dict] = None,
@@ -122,7 +122,7 @@ def _node_coords(network: NetworkIn) -> dict:
 
 
 def _write_network_gpkg(
-    path: Path, network: NetworkIn, subcatchments: List[SubcatchmentIn],
+    path: Path, network: NetworkIn, subcatchments: List[SurfaceCatchment],
     service_areas: Optional[List] = None,
 ) -> None:
     coords = _node_coords(network)
@@ -387,7 +387,7 @@ def _read_network(gpkg: Path) -> NetworkIn:
     return NetworkIn(junctions=junctions, outfalls=outfalls, conduits=conduits)
 
 
-def _read_subcatchments(gpkg: Path) -> List[SubcatchmentIn]:
+def _read_subcatchments(gpkg: Path) -> List[SurfaceCatchment]:
     sdf = gpd.read_file(gpkg, layer=schema.LAYER_SUBCATCHMENTS)
     subs = []
     for geom, r in zip(sdf.geometry, sdf.to_dict("records")):
@@ -396,7 +396,7 @@ def _read_subcatchments(gpkg: Path) -> List[SubcatchmentIn]:
         if geom is not None and geom.geom_type == "Polygon" and list(geom.interiors):
             holes = [[(float(x), float(y)) for x, y in ring.coords] for ring in geom.interiors]
         subs.append(
-            SubcatchmentIn(
+            SurfaceCatchment(
                 name=str(r["name"]),
                 outlet_node=str(r["outlet_node"]),
                 area_ha=float(r["area_ha"]),

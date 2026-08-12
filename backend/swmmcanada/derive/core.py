@@ -1,6 +1,6 @@
 """derive.core (spec 07 §3): turn already-acquired/clipped DEM + land-cover + soil(HSG)
 rasters plus `network`'s subcatchment polygons into REAL SWMM subcatchment parameters,
-overwriting the placeholder `pct_imperv` / `cn` / `pct_slope` carried by `SubcatchmentIn`.
+overwriting the placeholder `pct_imperv` / `cn` / `pct_slope` carried by `SurfaceCatchment`.
 
 This stage is pure computation and fully offline: every input has already been acquired
 and clipped by `acquire.dem / acquire.landcover / acquire.soil`. For each subcatchment that
@@ -35,7 +35,7 @@ from shapely.ops import transform as shp_transform
 
 from swmmcanada.acquire.landcover import LandcoverResult
 from swmmcanada.acquire.soil import SoilResult
-from swmmcanada.build.models import SubcatchmentIn
+from swmmcanada.build.models import SurfaceCatchment
 from swmmcanada.derive import infiltration
 
 # HYSOGs250m code -> HSG letter. Dual (shallow-water-table) codes 11-14 reduce to their
@@ -52,17 +52,17 @@ class DeriveError(Exception):
 
 
 def derive_parameters(
-    subcatchments: List[SubcatchmentIn],
+    subcatchments: List[SurfaceCatchment],
     dem_path: "Path | str",
     landcover: LandcoverResult,
     soil: SoilResult,
-) -> List[SubcatchmentIn]:
+) -> List[SurfaceCatchment]:
     """Compute real SWMM parameters per subcatchment, overwriting placeholders.
 
-    Returns a NEW list of SubcatchmentIn. Subcatchments with `polygon is None` are passed
+    Returns a NEW list of SurfaceCatchment. Subcatchments with `polygon is None` are passed
     through unchanged. Empty raster overlap keeps the subcatchment's existing value.
     """
-    out: List[SubcatchmentIn] = []
+    out: List[SurfaceCatchment] = []
     for sub in subcatchments:
         if not sub.polygon:
             out.append(sub)

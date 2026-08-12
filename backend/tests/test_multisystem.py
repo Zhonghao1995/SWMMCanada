@@ -12,7 +12,7 @@ from swmmcanada.build import (
     NetworkIn,
     OutfallIn,
     RainfallSeries,
-    SubcatchmentIn,
+    SurfaceCatchment,
     build_model,
 )
 from swmmcanada.geo import aoi_from_geojson
@@ -45,7 +45,7 @@ def _merged():
 
 def test_default_system_is_storm_minor():
     assert JunctionIn("J", 1.0, 0.0, 0.0).system == "storm_minor"
-    assert SubcatchmentIn("S", "J", 1.0, 50.0, 100.0, 1.0).system == "storm_minor"
+    assert SurfaceCatchment("S", "J", 1.0, 50.0, 100.0, 1.0).system == "storm_minor"
 
 
 def test_merge_prefixes_tags_and_keeps_primary_untouched():
@@ -60,7 +60,7 @@ def test_merge_prefixes_tags_and_keeps_primary_untouched():
 def test_merged_model_builds_and_datastore_roundtrips_system(tmp_path):
     from swmmcanada.datastore import build_from_datastore, read_datastore, write_datastore
 
-    subs = [SubcatchmentIn("S1", "J1", 1.0, 40.0, 100.0, 1.0)]
+    subs = [SurfaceCatchment("S1", "J1", 1.0, 40.0, 100.0, 1.0)]
     rain = RainfallSeries([datetime(2020, 6, 1, h) for h in range(3)], [1.0, 2.0, 0.0])
     cfg = BuildConfig(out_dir=tmp_path / "x", start=date(2020, 6, 1), end=date(2020, 6, 2))
 
@@ -78,7 +78,7 @@ def test_validation_scopes_node_checks_to_storm():
     aoi = aoi_from_geojson({"type": "Polygon", "coordinates": [[
         [-104.625, 50.435], [-104.605, 50.435], [-104.605, 50.445], [-104.625, 50.445],
         [-104.625, 50.435]]]})
-    subs = [SubcatchmentIn("S1", "J1", area_ha=aoi.area_km2 * 100, pct_imperv=50.0,
+    subs = [SurfaceCatchment("S1", "J1", area_ha=aoi.area_km2 * 100, pct_imperv=50.0,
                            width_m=100.0, pct_slope=1.0,
                            polygon=[(-104.625, 50.435), (-104.605, 50.435),
                                     (-104.605, 50.445), (-104.625, 50.445)])]
@@ -98,7 +98,7 @@ def test_mikeplus_export_honours_a_storm_only_selection(tmp_path):
 
     ds = ModelReadyDatastore(
         network=_merged(),
-        subcatchments=[SubcatchmentIn("S1", "J1", 1.0, 40.0, 100.0, 1.0,
+        subcatchments=[SurfaceCatchment("S1", "J1", 1.0, 40.0, 100.0, 1.0,
                                       polygon=[(-104.62, 50.439), (-104.615, 50.439),
                                                (-104.615, 50.441), (-104.62, 50.441)])],
         rain=RainfallSeries([datetime(2020, 6, 1, h) for h in range(3)], [1.0, 2.0, 0.0]),
@@ -139,7 +139,7 @@ def test_regina_storm_plus_sanitary_one_inp(tmp_path):
     merged = base.merge_secondary_system(storm, san, prefix="SAN_", system="sanitary")
 
     rain = RainfallSeries([datetime(2020, 6, 1, h) for h in range(3)], [1.0, 2.0, 0.0])
-    sub = SubcatchmentIn("S1", storm.junctions[0].name, 1.0, 50.0, 100.0, 1.0)
+    sub = SurfaceCatchment("S1", storm.junctions[0].name, 1.0, 50.0, 100.0, 1.0)
     res = build_model(network=merged, subcatchments=[sub], rain=rain,
                       config=BuildConfig(out_dir=tmp_path, start=date(2020, 6, 1), end=date(2020, 6, 2)))
     manifest = json.loads(res.manifest_path.read_text())

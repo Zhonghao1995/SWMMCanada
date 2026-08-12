@@ -19,7 +19,7 @@ from swmmcanada.build import (
     NetworkIn,
     OutfallIn,
     RainfallSeries,
-    SubcatchmentIn,
+    SurfaceCatchment,
 )
 from swmmcanada.datastore import ModelReadyDatastore
 from swmmcanada.export.base import ModelExporter
@@ -52,12 +52,12 @@ def _datastore() -> ModelReadyDatastore:
         ],
     )
     subcatchments = [
-        SubcatchmentIn(name="S1", outlet_node="J1", area_ha=1.0, pct_imperv=40.0,
+        SurfaceCatchment(name="S1", outlet_node="J1", area_ha=1.0, pct_imperv=40.0,
                        width_m=50.0, pct_slope=1.5, cn=80.0, n_imperv=0.01, n_perv=0.10,
                        polygon=_POLY),
-        SubcatchmentIn(name="S2", outlet_node="J2", area_ha=2.0, pct_imperv=25.0,
+        SurfaceCatchment(name="S2", outlet_node="J2", area_ha=2.0, pct_imperv=25.0,
                        width_m=80.0, pct_slope=2.0, cn=70.0, polygon=None),
-        SubcatchmentIn(name="S_SAN", outlet_node="SAN_J1", area_ha=0.5, pct_imperv=30.0,
+        SurfaceCatchment(name="S_SAN", outlet_node="SAN_J1", area_ha=0.5, pct_imperv=30.0,
                        width_m=30.0, pct_slope=1.0, system="sanitary"),
     ]
     rain = RainfallSeries(

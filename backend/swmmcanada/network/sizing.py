@@ -14,7 +14,7 @@ from collections import defaultdict, deque
 from dataclasses import dataclass, replace
 from typing import Callable, Dict, List, Tuple
 
-from swmmcanada.build.models import NetworkIn, SubcatchmentIn
+from swmmcanada.build.models import NetworkIn, SurfaceCatchment
 
 # Commercial ladder (m): standard storm-sewer diameters, 300 mm floor.
 COMMERCIAL_DIAMETERS_M = (
@@ -35,7 +35,7 @@ class SizingConfig:
 
 def size_conduits(
     network: NetworkIn,
-    subcatchments: List[SubcatchmentIn],
+    subcatchments: List[SurfaceCatchment],
     intensity_fn: Callable[[float], float],
     config: SizingConfig = SizingConfig(),
 ) -> Tuple[NetworkIn, dict]:
