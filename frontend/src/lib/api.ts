@@ -16,6 +16,18 @@ export interface SubmitParams {
   endDate: string
   infiltration: InfiltrationMethod
   designStorm: DesignStormChoice | null // null = historical observed rain (default)
+  systems: DrainageSystem[] // ADR 0029: which systems to include; all available by default
+}
+
+// ADR 0029: the model carries every system at once; a selection is a view of it, not a
+// separate model. Which of these a given AOI can offer comes from the backend, never from
+// a list held here — a client-side list drifts the moment a city gains a layer.
+export type DrainageSystem = 'storm' | 'sanitary' | 'combined'
+
+export const SYSTEM_LABELS: Record<DrainageSystem, string> = {
+  storm: 'Storm drainage',
+  sanitary: 'Sanitary sewer',
+  combined: 'Combined sewer',
 }
 
 // ADR 0013: build-time infiltration choice; Horton is the default (municipal practice).
@@ -47,6 +59,7 @@ export interface SiteFacts {
   cityLabel?: string | null
   dataTier?: 'A' | 'B' | 'C' | null
   typicalInvertErrorM?: number | null
+  systems?: DrainageSystem[]
 }
 
 export interface AoiPreview extends SiteFacts {
@@ -74,6 +87,7 @@ async function postAoiPreview(body: FormData): Promise<AoiPreview> {
     city?: string | null
     city_label?: string | null
     data_tier?: 'A' | 'B' | 'C' | null
+    systems?: DrainageSystem[]
     typical_invert_error_m?: number | null
   }
   return {
@@ -85,6 +99,9 @@ async function postAoiPreview(body: FormData): Promise<AoiPreview> {
     cityLabel: j.city_label,
     dataTier: j.data_tier,
     typicalInvertErrorM: j.typical_invert_error_m,
+    // Falls back to storm rather than to everything: promising a system the AOI
+    // cannot deliver is worse than offering one checkbox.
+    systems: j.systems ?? ['storm'],
   }
 }
 
@@ -109,6 +126,7 @@ export async function submitTask(params: SubmitParams): Promise<{ taskId: string
   body.append('start_date', params.startDate)
   body.append('end_date', params.endDate)
   body.append('infiltration', params.infiltration)
+  body.append('systems', params.systems.join(','))
   if (params.designStorm) {
     // ADR 0018: presence of the return period IS the mode selection.
     body.append('design_storm_yr', String(params.designStorm.returnPeriodYr))

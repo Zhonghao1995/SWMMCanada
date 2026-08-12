@@ -39,6 +39,7 @@ from swmmcanada.sources.cities.registry import (
     DATA_TIERS,
     TYPICAL_INVERT_ERROR_M,
     city_for_point,
+    systems_for_city,
     coverage_summary,
     in_canada_coarse,
 )
@@ -125,6 +126,11 @@ def create_app(*, pipeline=None, workdir=None, run_inline: bool = False) -> Fast
             "mode": mode,
             "city": spec.key if spec is not None else None,
             "city_label": spec.label if spec is not None else None,
+            # ADR 0029 Q3: which systems this AOI could produce, so the frontend renders a
+            # checkbox per system that actually exists rather than a fixed list. Outside a
+            # supported city there is no municipal sanitary layer, so offering the choice
+            # would promise something the build cannot deliver.
+            "systems": systems_for_city(spec.key) if spec is not None else ["storm"],
             # Vertical-data tier (A/B/C, see the ASSUMPTIONS.md per-city table):
             # shown at draw time so users know what they are getting BEFORE a build.
             "data_tier": DATA_TIERS[spec.key] if spec is not None else None,

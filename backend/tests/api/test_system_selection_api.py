@@ -111,3 +111,26 @@ class TestTheSelectionReachesTheBuild:
                                       "polygon": json.dumps(OTTAWA),
                                       "systems": "storm, sanitary"})
         assert seen.get("systems") == ["storm", "sanitary"]
+
+
+class TestPreviewOffersTheChoice:
+    """The frontend renders a checkbox per system the matched city has. Preview already
+    knows the city, so the list rides along with it — an extra round trip would let the
+    two answers disagree."""
+
+    def test_preview_lists_the_systems_available(self, client):
+        r = client.post("/api/v1/aoi/preview", data={"polygon": json.dumps(OTTAWA)})
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["city"] == "ottawa"
+        assert set(body["systems"]) == set(systems_for_city("ottawa"))
+
+    def test_a_synthesis_aoi_offers_storm_only(self, client):
+        """Outside every supported city there is no municipal sanitary layer to include, so
+        offering the checkbox would promise something the build cannot deliver."""
+        remote = {"type": "Polygon", "coordinates": [[
+            [-100.00, 60.00], [-99.99, 60.00], [-99.99, 60.01], [-100.00, 60.01],
+            [-100.00, 60.00]]]}
+        body = client.post("/api/v1/aoi/preview", data={"polygon": json.dumps(remote)}).json()
+        assert body["city"] is None
+        assert body["systems"] == ["storm"]

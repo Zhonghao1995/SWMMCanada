@@ -1,7 +1,8 @@
 import { useMemo, useRef } from 'react'
 import { AlertTriangle, Check, CloudRain, Download, Loader2, MapPin, Play, Trash2, Upload } from 'lucide-react'
 import { useStore } from '../store'
-import type { InfiltrationMethod } from '../lib/api'
+import { SYSTEM_LABELS } from '../lib/api'
+import type { DrainageSystem, InfiltrationMethod } from '../lib/api'
 import logoMark from '../assets/logo-mark.png'
 
 export default function ControlPanel() {
@@ -20,6 +21,8 @@ export default function ControlPanel() {
   const setDates = useStore((s) => s.setDates)
   const infiltration = useStore((s) => s.infiltration)
   const setInfiltration = useStore((s) => s.setInfiltration)
+  const systems = useStore((s) => s.systems)
+  const setSystems = useStore((s) => s.setSystems)
   const designStorm = useStore((s) => s.designStorm)
   const setDesignStorm = useStore((s) => s.setDesignStorm)
   const rainfall = useStore((s) => s.rainfall)
@@ -28,6 +31,10 @@ export default function ControlPanel() {
   const checkRainfall = useStore((s) => s.checkRainfall)
   const submit = useStore((s) => s.submit)
   const preview = useStore((s) => s.preview)
+  // What this AOI can offer, answered by the backend at draw time. Storm-only until the
+  // preview lands, because promising a system the build cannot deliver is worse than
+  // showing one checkbox.
+  const available: DrainageSystem[] = site?.systems ?? ['storm']
   const forcing = useStore((s) => s.forcing)
 
   const counts = useMemo(() => {
@@ -288,6 +295,41 @@ export default function ControlPanel() {
 
       <section className="space-y-2">
         <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-400">3 · Build</h2>
+        <fieldset className="block text-sm text-slate-600">
+          <legend className="mb-1 block text-[11px] text-slate-400">Systems to include</legend>
+          {/* ADR 0029: one model carries every system; this picks the view. Only the
+              systems the matched city actually publishes are offered, and the list comes
+              from the backend so it cannot drift from what a build can deliver. */}
+          <div className="space-y-1">
+            {available.map((sys) => (
+              <label key={sys} className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={systems.includes(sys)}
+                  onChange={(e) =>
+                    setSystems(
+                      e.target.checked
+                        ? [...systems, sys]
+                        : systems.filter((s) => s !== sys),
+                    )
+                  }
+                />
+                <span>{SYSTEM_LABELS[sys]}</span>
+              </label>
+            ))}
+          </div>
+          {systems.length === 0 && (
+            <p className="mt-1 text-[11px] text-slate-500">
+              Select at least one system to build.
+            </p>
+          )}
+          {available.length === 1 && (
+            <p className="mt-1 text-[11px] text-slate-500">
+              This area has no published sanitary or combined network.
+            </p>
+          )}
+        </fieldset>
+
         <label className="block text-sm text-slate-600">
           <span className="mb-1 block text-[11px] text-slate-400">Infiltration method</span>
           <select
@@ -302,7 +344,7 @@ export default function ControlPanel() {
         </label>
         <button
           onClick={submit}
-          disabled={!aoi || busy}
+          disabled={!aoi || busy || systems.length === 0}
           className="flex w-full items-center justify-center gap-2 rounded-md bg-slate-800 px-3 py-2 text-sm font-medium text-white hover:bg-slate-900 disabled:opacity-40"
         >
           {busy ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} />}
