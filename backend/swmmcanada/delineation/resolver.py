@@ -30,7 +30,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from swmmcanada.validate.schema import (METHOD_CATCHBASIN_VORONOI,
+from swmmcanada.validate.schema import (METHOD_CATCHBASIN_DEM,
+                                        METHOD_CATCHBASIN_VORONOI,
                                         METHOD_JUNCTION_VORONOI)
 from typing import Dict, Optional
 
@@ -47,6 +48,10 @@ JUNCTION = "junction"
 AOI = "aoi"
 OFFICIAL_BASIN = "official_basin"
 
+#: Coarsest posting on which a kerb is worth encoding. A 150 mm face is far below the
+#: vertical noise of a 30 m DEM; at 1–2 m LiDAR it is a real, decisive feature.
+KERB_MAX_DEM_RES_M = 2.0
+
 
 @dataclass(frozen=True)
 class Evidence:
@@ -61,6 +66,9 @@ class Evidence:
     n_parcels: int = 0
     n_buildings: int = 0
     n_junctions: int = 0
+    #: Kerb lines published for this AOI. A kerb decides where street runoff goes, and a
+    #: bare DEM at LiDAR posting usually cannot see it (规划书 §4 priority 2).
+    n_kerbs: int = 0
     dem_available: bool = False
     dem_resolution_m: Optional[float] = None
     official_basin_level: Optional[str] = None   # capability table verdict, if any
@@ -70,6 +78,7 @@ class Evidence:
     def as_dict(self) -> Dict:
         return {"n_catchbasins": self.n_catchbasins, "n_parcels": self.n_parcels,
                 "n_buildings": self.n_buildings, "n_junctions": self.n_junctions,
+                "n_kerbs": self.n_kerbs,
                 "dem_available": self.dem_available,
                 "dem_resolution_m": self.dem_resolution_m,
                 "official_basin_level": self.official_basin_level}
@@ -106,9 +115,21 @@ def resolve(evidence: Evidence) -> DelineationPlan:
 
     has_inlets = evidence.n_catchbasins > 0
     has_land = evidence.n_parcels > 0 or evidence.n_buildings > 0
+    # A 150 mm kerb only exists on a surface fine enough to hold it. Conditioning a 30 m
+    # posting with kerb lines would be theatre: the edit is smaller than a pixel's noise.
+    fine_enough = (evidence.dem_resolution_m is not None
+                   and evidence.dem_resolution_m <= KERB_MAX_DEM_RES_M)
+    kerbs_usable = bool(evidence.n_kerbs) and evidence.dem_available and fine_enough
     gates = {"inlets_present": has_inlets, "land_present": has_land,
-             "dem_present": evidence.dem_available}
+             "dem_present": evidence.dem_available, "kerb_usable": kerbs_usable}
 
+    if has_inlets and kerbs_usable:
+        return DelineationPlan(
+            method=METHOD_CATCHBASIN_DEM, boundary=boundary, anchors=CATCH_BASIN,
+            shaping=DEM_D8, gates=gates, evidence=ev, confidence="medium",
+            reason=(f"{evidence.n_catchbasins} inlets, {evidence.n_kerbs} kerb lines and a "
+                    f"{evidence.dem_resolution_m:g} m surface: runoff is routed to the "
+                    f"inlets over terrain that knows where the kerbs are"))
     if has_inlets and has_land:
         return DelineationPlan(
             method="catchbasin_parcel", boundary=boundary, anchors=CATCH_BASIN,

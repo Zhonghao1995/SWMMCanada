@@ -44,6 +44,13 @@ STORM_CATCHMENTS = 12
 #: 11,969 city-wide. A lead states which pipe an inlet actually reaches, which
 #: geometry only approximates where two mains run close together (规划书 §5).
 STORM_LATERALS = 8
+
+#: Planimetry: the surveyed street furniture a DEM cannot see. 26,809 kerb lines and 54,331
+#: kerb drops city-wide, in a service no adapter referenced until the capability scan walked
+#: the sibling folder. A kerb decides where street runoff goes and a drop is the one place
+#: through it (规划书 §4 priority 2).
+PLANIMETRY_BASE = "https://maps.victoria.ca/server/rest/services/OpenData/OpenData_Planimetry/MapServer"
+KERBS, KERB_DROPS = 2, 3
 LAND_BASE = "https://maps.victoria.ca/server/rest/services/OpenData/OpenData_Land/MapServer"
 LAND_PARCELS, LAND_BUILDINGS = 5, 1            # Parcels (Folio based), Buildings
 SEWER_BASE = "https://maps.victoria.ca/server/rest/services/OpenData/OpenData_Sewer/MapServer"
@@ -169,6 +176,8 @@ def fetch_victoria_land(bbox, *, client=None) -> dict:
         "parcels": _fetch_layer_bbox(LAND_BASE, LAND_PARCELS, bbox, client),
         "buildings": _fetch_layer_bbox(LAND_BASE, LAND_BUILDINGS, bbox, client),
         "laterals": _fetch_layer_bbox(BASE, STORM_LATERALS, bbox, client),
+        "kerbs": _fetch_layer_bbox(PLANIMETRY_BASE, KERBS, bbox, client),
+        "kerb_openings": _fetch_layer_bbox(PLANIMETRY_BASE, KERB_DROPS, bbox, client),
     }
 
 

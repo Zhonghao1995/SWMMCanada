@@ -69,7 +69,8 @@ class TestPlansExplainThemselves:
     def test_every_plan_carries_reason_gates_and_evidence(self, ev):
         p = resolve(ev)
         assert p.reason and p.gates and isinstance(p.evidence, dict)
-        assert set(p.gates) == {"inlets_present", "land_present", "dem_present"}
+        assert set(p.gates) == {"inlets_present", "land_present", "dem_present",
+                                "kerb_usable"}
 
     def test_reason_quotes_the_numbers_it_used(self):
         p = resolve(Evidence(n_catchbasins=7864, n_parcels=15728, n_buildings=21969))
@@ -131,3 +132,44 @@ class TestPipelineSeam:
                                     derive=False, subcatchment_method="parcel")
         assert plan.evidence["n_junctions"] == 42
         assert plan.method == schema.METHOD_JUNCTION_VORONOI
+
+
+class TestKerbConditionedDemIsAMethod:
+    """规划书 §4 priority 2: inlets as drainage targets, kerb-conditioned terrain, D8.
+
+    Not a new algorithm — the same DEM delineator with inlets as pour points and the kerb
+    geometry as an extra input (ADR 0029 Q10). The resolver's job is to notice when all
+    three are present."""
+
+    def test_inlets_plus_kerbs_plus_terrain_pick_the_kerb_method(self):
+        from swmmcanada.validate import schema
+
+        p = resolve(Evidence(n_catchbasins=773, n_parcels=4749, n_buildings=499,
+                             n_kerbs=2189, dem_available=True, dem_resolution_m=1.0))
+        assert p.method == schema.METHOD_CATCHBASIN_DEM
+        assert p.anchors == "catch_basin" and p.shaping == "dem_d8"
+
+    def test_without_kerbs_it_stays_on_the_parcel_method(self):
+        """Thirty cities publish none, and must be left where they were."""
+        p = resolve(Evidence(n_catchbasins=773, n_parcels=4749, n_buildings=499,
+                             dem_available=True, dem_resolution_m=1.0))
+        assert p.method == "catchbasin_parcel"
+
+    def test_kerbs_without_terrain_cannot_use_them(self):
+        """A kerb only means something as an edit to a surface."""
+        p = resolve(Evidence(n_catchbasins=773, n_parcels=4749, n_kerbs=2189,
+                             dem_available=False))
+        assert p.method == "catchbasin_parcel"
+
+    def test_kerbs_on_a_coarse_dem_are_not_worth_using(self):
+        """A 150 mm kerb cannot be represented on a 30 m posting; claiming to condition
+        with it would be theatre."""
+        p = resolve(Evidence(n_catchbasins=773, n_parcels=4749, n_kerbs=2189,
+                             dem_available=True, dem_resolution_m=30.0))
+        assert p.method == "catchbasin_parcel"
+        assert p.gates["kerb_usable"] is False
+
+    def test_the_reason_names_the_evidence(self):
+        p = resolve(Evidence(n_catchbasins=773, n_parcels=4749, n_kerbs=2189,
+                             dem_available=True, dem_resolution_m=1.0))
+        assert "2189" in p.reason and "kerb" in p.reason.lower()

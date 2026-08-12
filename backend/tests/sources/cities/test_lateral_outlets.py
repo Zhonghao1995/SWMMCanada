@@ -139,3 +139,31 @@ class TestWhatTheAgreementMetricCanAndCannotSee:
         assert rates == [1.0, 1.0], (
             "both mains reach the same outfall, so the metric scores either choice as "
             "correct — it cannot referee between them")
+
+
+class TestKerbsReachTheDelineation:
+    """Five cities publish kerb lines and kerb drops. Victoria publishes 26,809 kerbs and
+    54,331 drops, in a service no adapter referenced until the capability scan found it."""
+
+    def test_victoria_land_includes_kerbs_and_their_drops(self, monkeypatch):
+        from swmmcanada.sources.cities import victoria
+
+        asked = []
+
+        def fake(base_url, layer, bbox, client):
+            asked.append((base_url, layer))
+            return []
+
+        monkeypatch.setattr(victoria, "_fetch_layer_bbox", fake)
+        land = victoria.fetch_victoria_land((-123.37, 48.42, -123.36, 48.43),
+                                            client=object())
+        assert "kerbs" in land and "kerb_openings" in land
+        assert (victoria.PLANIMETRY_BASE, victoria.KERBS) in asked
+        assert (victoria.PLANIMETRY_BASE, victoria.KERB_DROPS) in asked
+
+    def test_a_city_without_kerbs_simply_has_none(self):
+        """The key must be absent or empty, never a fabricated default — conditioning is
+        skipped on falsy input and that is the honest behaviour for thirty cities."""
+        from swmmcanada.sources.cities import ottawa
+
+        assert not hasattr(ottawa, "KERBS")
