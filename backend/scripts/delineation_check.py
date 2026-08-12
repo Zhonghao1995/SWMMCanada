@@ -53,6 +53,11 @@ def check(city, bbox):
     areas = sorted(s.area_ha for s in subs if s.area_ha)
     watched = {c["id"]: c for c in report["checks"] if c["id"] in WATCH}
     return {
+        # Which method actually ran matters as much as the numbers: when Overpass is
+        # unreachable the frontage split is unavailable and the plan falls back, and a table
+        # without this column reads a fallback result as if it were the municipal unit.
+        "method": report.get("subcatchment_method") or "?",
+        "confidence": report.get("confidence") or "?",
         "n": len(subs),
         "median_ha": areas[len(areas) // 2] if areas else 0.0,
         "uncovered": watched.get("aoi_coverage", {}).get("metrics", {}).get(
@@ -74,19 +79,19 @@ def main(argv=None):
     if unknown:
         ap.error(f"no sample AOI for {unknown}; known: {', '.join(SAMPLES)}")
 
-    print(f"{'city':10} {'cells':>6} {'median ha':>10} {'uncovered':>10} "
+    print(f"{'city':10} {'method':26} {'cells':>6} {'median ha':>10} {'uncovered':>10} "
           f"{'|Σ−AOI|':>9}  failing checks")
     worst = 0
     for city in cities:
         try:
             r = check(city, SAMPLES[city])
         except Exception as e:                       # a portal being down is a row, not a stop
-            print(f"{city:10} {'—':>6} {'—':>10} {'—':>10} {'—':>9}  "
+            print(f"{city:10} {'—':26} {'—':>6} {'—':>10} {'—':>10} {'—':>9}  "
                   f"unavailable: {type(e).__name__}: {str(e)[:60]}")
             continue
         worst = max(worst, len(r["failing"]))
-        print(f"{city:10} {r['n']:6d} {r['median_ha']:10.3f} {r['uncovered']*100:9.1f}% "
-              f"{r['conservation']*100:8.1f}%  "
+        print(f"{city:10} {r['method'][:26]:26} {r['n']:6d} {r['median_ha']:10.3f} "
+              f"{r['uncovered']*100:9.1f}% {r['conservation']*100:8.1f}%  "
               f"{', '.join(r['failing']) if r['failing'] else 'none'}")
     return 1 if worst else 0
 
