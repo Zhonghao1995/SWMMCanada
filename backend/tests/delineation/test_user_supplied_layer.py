@@ -21,7 +21,7 @@ RING = [(-123.370, 48.420), (-123.365, 48.420), (-123.365, 48.425), (-123.370, 4
 class TestItOutranksEverything:
     def test_a_user_layer_wins_over_inlets_kerbs_and_terrain(self):
         """Even the best thing we could have produced does not override an explicit choice."""
-        p = resolve(Evidence(n_user_units=120, n_catchbasins=773, n_parcels=4749,
+        p = resolve(Evidence(n_user_units=120, n_junctions=391, n_parcels=4749,
                              n_kerbs=2189, dem_available=True, dem_resolution_m=1.0))
         assert p.method == schema.METHOD_USER_SUPPLIED
 
@@ -31,8 +31,8 @@ class TestItOutranksEverything:
 
     def test_an_empty_upload_is_not_an_upload(self):
         """Nothing to use is not a choice to use nothing."""
-        p = resolve(Evidence(n_user_units=0, n_catchbasins=773, n_parcels=4749))
-        assert p.method == "catchbasin_parcel"
+        p = resolve(Evidence(n_user_units=0, n_junctions=391, n_parcels=4749))
+        assert p.method == schema.METHOD_JUNCTION_PARCEL
 
 
 class TestItDoesNotInheritOurConfidence:

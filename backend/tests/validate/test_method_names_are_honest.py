@@ -14,8 +14,9 @@ class TestTheVocabularyNamesItAsAFallback:
     def test_the_junction_fallback_says_fallback(self):
         assert schema.METHOD_JUNCTION_VORONOI == "fallback_voronoi_junction"
 
-    def test_the_inlet_seeded_fallback_says_fallback(self):
-        """Real inlets, geometric division: the seeds are evidence, the boundaries are not."""
+    def test_the_inlet_seeded_fallback_keeps_its_name(self):
+        """Retained in the vocabulary for datastores written before storm land was divided
+        among nodes; nothing produces it now."""
         assert schema.METHOD_CATCHBASIN_VORONOI == "fallback_voronoi_catchbasin"
 
     def test_the_delineated_methods_are_not_renamed(self):
@@ -43,15 +44,11 @@ class TestTheLabelIsConsistentEverywhere:
         from swmmcanada.delineation import Evidence, resolve
 
         assert resolve(Evidence(n_junctions=5)).method == schema.METHOD_JUNCTION_VORONOI
-        assert resolve(Evidence(n_catchbasins=5)).method == schema.METHOD_CATCHBASIN_VORONOI
 
     def test_the_pipeline_descriptor_uses_the_shared_constant(self):
         from swmmcanada.pipeline import _method_descriptor
 
         assert _method_descriptor({"method": "x"}).method == schema.METHOD_JUNCTION_VORONOI
-        assert _method_descriptor(
-            {"method": "catchbasin+parcel/building (voronoi-shaped)"}
-        ).method == schema.METHOD_CATCHBASIN_VORONOI
 
 
 def test_the_confidence_of_a_fallback_stays_low():

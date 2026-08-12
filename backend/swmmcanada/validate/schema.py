@@ -19,6 +19,14 @@ WARNING = "warning"    # runs, but the user should know it's approximate
 #: authoritative about what this user wants modelled.
 METHOD_USER_SUPPLIED = "user_supplied"
 
+#: The municipal unit: each model node takes the land draining to its own reach — the street
+#: segment plus the lots fronting it, back to the rear-lot line. What a city draws by hand.
+METHOD_JUNCTION_STREET = "junction_street_segment"
+#: Node-seeded, parcel-shaped: the unit is still the model node, and the boundary
+#: between neighbouring nodes follows real lot lines rather than a bisector through
+#: the middle of a garden.
+METHOD_JUNCTION_PARCEL = "junction_parcel"
+
 METHOD_CATCHBASIN_PARCEL = "catchbasin_parcel"      # real inlets, parcel-shaped (Victoria)
 # The two Voronoi entries are named as fallbacks on purpose (规划书 §3 Level 5). This label
 # travels into provenance and the result package, where someone decides how much to trust

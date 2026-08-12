@@ -169,7 +169,7 @@ class TestTerrainPlanningNeedsTheSurfaceFirst:
         _land, plan = _plan_delineation(Spec(), (0, 0, 1, 1), None, Net(), derive=True,
                                         subcatchment_method="parcel",
                                         dem_resolution_m=1.0)
-        assert plan.method == schema.METHOD_CATCHBASIN_DEM
+        assert plan.method == schema.METHOD_JUNCTION_DEM
         assert plan.evidence["dem_resolution_m"] == 1.0
 
     def test_a_coarse_surface_keeps_the_parcel_method(self):
@@ -188,7 +188,9 @@ class TestTerrainPlanningNeedsTheSurfaceFirst:
         _land, plan = _plan_delineation(Spec(), (0, 0, 1, 1), None, Net(), derive=True,
                                         subcatchment_method="parcel",
                                         dem_resolution_m=30.0)
-        assert plan.method == "catchbasin_parcel"
+        from swmmcanada.validate import schema
+
+        assert plan.method == schema.METHOD_JUNCTION_PARCEL
 
     def test_kerbs_are_counted_from_the_land_fetch(self):
         from swmmcanada.pipeline import _plan_delineation

@@ -30,7 +30,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from swmmcanada.validate.schema import (METHOD_CATCHBASIN_DEM,
+from swmmcanada.validate.schema import (METHOD_JUNCTION_DEM,
+                                        METHOD_JUNCTION_PARCEL,
+                                        METHOD_JUNCTION_STREET,
                                         METHOD_USER_SUPPLIED,
                                         METHOD_CATCHBASIN_VORONOI,
                                         METHOD_JUNCTION_VORONOI)
@@ -41,6 +43,7 @@ from typing import Dict, Optional
 #: hydrologically delineated result.
 PARCEL = "parcel"
 DEM_D8 = "dem_d8"
+STREET_SEGMENT = "street_segment"
 VORONOI = "voronoi"
 
 CATCH_BASIN = "catch_basin"
@@ -68,6 +71,9 @@ class Evidence:
     n_parcels: int = 0
     n_buildings: int = 0
     n_junctions: int = 0
+    #: Street centrelines available for this AOI. Frontage splitting needs them: a lot
+    #: drains to the street it faces, and without the streets there is nothing to face.
+    n_streets: int = 0
     #: Kerb lines published for this AOI. A kerb decides where street runoff goes, and a
     #: bare DEM at LiDAR posting usually cannot see it (规划书 §4 priority 2).
     n_kerbs: int = 0
@@ -83,7 +89,8 @@ class Evidence:
     def as_dict(self) -> Dict:
         return {"n_catchbasins": self.n_catchbasins, "n_parcels": self.n_parcels,
                 "n_buildings": self.n_buildings, "n_junctions": self.n_junctions,
-                "n_kerbs": self.n_kerbs, "n_user_units": self.n_user_units,
+                "n_kerbs": self.n_kerbs, "n_streets": self.n_streets,
+                "n_user_units": self.n_user_units,
                 "dem_available": self.dem_available,
                 "dem_resolution_m": self.dem_resolution_m,
                 "official_basin_level": self.official_basin_level}
@@ -127,6 +134,13 @@ def resolve(evidence: Evidence) -> DelineationPlan:
     boundary = (OFFICIAL_BASIN if evidence.official_basin_level in ("level_2", "level_1")
                 else AOI)
 
+    # Municipal practice: a subcatchment discharges to a node that exists in the model, and
+    # in a published network those are the maintenance holes. Catch basins are surface
+    # structures joined by leads — almost none are model nodes, and the reach between two
+    # nodes has ONE tributary area however many inlets sit on it. They stay as evidence
+    # (which main a lead taps) without becoming the unit land is divided among.
+    has_nodes = evidence.n_junctions > 0
+    has_streets = evidence.n_streets > 0
     has_inlets = evidence.n_catchbasins > 0
     has_land = evidence.n_parcels > 0 or evidence.n_buildings > 0
     # A 150 mm kerb only exists on a surface fine enough to hold it. Conditioning a 30 m
@@ -135,50 +149,53 @@ def resolve(evidence: Evidence) -> DelineationPlan:
                    and evidence.dem_resolution_m <= KERB_MAX_DEM_RES_M)
     kerbs_usable = bool(evidence.n_kerbs) and evidence.dem_available and fine_enough
     terrain_usable = evidence.dem_available and fine_enough
-    gates = {"inlets_present": has_inlets, "land_present": has_land,
+    gates = {"nodes_present": has_nodes, "streets_present": has_streets,
+             "inlets_present": has_inlets, "land_present": has_land,
              "dem_present": evidence.dem_available, "kerb_usable": kerbs_usable,
              "terrain_usable": terrain_usable}
 
     # 规划书 §4 priorities 2 and 3 are the SAME pipeline: inlets as drainage targets over a
     # conditioned surface. Kerbs are one more input, not another algorithm — they change how
     # much the answer is worth, not how it is produced.
-    if has_inlets and terrain_usable:
+    # Storm land is always divided among the MODEL's nodes. What changes between methods is
+    # how it is divided, never what it is divided among — because a subcatchment has to
+    # discharge to a node that exists, and the reach between two nodes has one tributary
+    # area however many inlets sit on it.
+    if has_nodes and has_streets:
         return DelineationPlan(
-            method=METHOD_CATCHBASIN_DEM, boundary=boundary, anchors=CATCH_BASIN,
+            method=METHOD_JUNCTION_STREET, boundary=boundary, anchors=JUNCTION,
+            shaping=STREET_SEGMENT, gates={**gates, "streets_present": True},
+            evidence=ev, confidence="medium",
+            reason=(f"{evidence.n_junctions} nodes and {evidence.n_streets} street "
+                    f"segments: each node takes the land draining to its own reach — the "
+                    f"segment plus the lots fronting it"))
+    if has_nodes and terrain_usable:
+        return DelineationPlan(
+            method=METHOD_JUNCTION_DEM, boundary=boundary, anchors=JUNCTION,
             shaping=DEM_D8, gates=gates, evidence=ev,
             confidence="high" if kerbs_usable else "medium",
-            reason=(
-                f"{evidence.n_catchbasins} inlets, {evidence.n_kerbs} kerb lines and a "
-                f"{evidence.dem_resolution_m:g} m surface: runoff is routed to the inlets "
-                f"over terrain that knows where the kerbs are"
-                if kerbs_usable else
-                f"{evidence.n_catchbasins} inlets and a {evidence.dem_resolution_m:g} m "
-                f"surface, but no kerb lines published: runoff is routed over terrain, "
-                f"which cannot see where a kerb sends it"))
-    if has_inlets and has_land:
+            reason=(f"{evidence.n_junctions} nodes and a "
+                    f"{evidence.dem_resolution_m:g} m surface with "
+                    f"{evidence.n_kerbs} kerb lines: land follows terrain to its node"
+                    if kerbs_usable else
+                    f"{evidence.n_junctions} nodes and a "
+                    f"{evidence.dem_resolution_m:g} m surface, no kerb lines: land follows "
+                    f"terrain to its node, which cannot see where a kerb sends it"))
+    if has_nodes and has_land:
+        # Same unit, better edges: land still goes to a model node, and the boundary between
+        # neighbouring nodes follows real lot lines instead of a bisector through the middle
+        # of somebody's garden.
         return DelineationPlan(
-            method="catchbasin_parcel", boundary=boundary, anchors=CATCH_BASIN,
+            method=METHOD_JUNCTION_PARCEL, boundary=boundary, anchors=JUNCTION,
             shaping=PARCEL, gates=gates, evidence=ev, confidence="medium",
-            reason=(f"{evidence.n_catchbasins} inlets and "
-                    f"{evidence.n_parcels} parcels / {evidence.n_buildings} buildings in "
-                    f"the AOI: land divides on real lot lines and roofs, seeded at the "
-                    f"real inlets"))
-    if has_inlets:
-        return DelineationPlan(
-            method=METHOD_CATCHBASIN_VORONOI, boundary=boundary, anchors=CATCH_BASIN,
-            shaping=VORONOI, gates=gates, evidence=ev, confidence="low",
-            reason=(f"{evidence.n_catchbasins} inlets but no parcels or buildings "
-                    f"published for this AOI: seeds are real, the division between them "
-                    f"is geometric"))
-    if evidence.dem_available:
-        return DelineationPlan(
-            method="junction_dem", boundary=boundary, anchors=JUNCTION, shaping=DEM_D8,
-            gates=gates, evidence=ev, confidence="medium",
-            reason=("no inlet data for this AOI; a DEM is available, so basins follow "
-                    "terrain to the manholes (subject to the terrain honesty gate)"))
+            reason=(f"{evidence.n_junctions} nodes with {evidence.n_parcels} parcels and "
+                    f"{evidence.n_buildings} buildings, but no streets: land divides on "
+                    f"real lot lines, assigned to its node"))
+
     return DelineationPlan(
         method=METHOD_JUNCTION_VORONOI, boundary=boundary, anchors=JUNCTION,
         shaping=VORONOI,
         gates=gates, evidence=ev, confidence="low",
-        reason=("no inlet data and no DEM for this AOI: land is assigned to the nearest "
-                "node. Geometric, not hydrological — the honest floor, not a delineation"))
+        reason=("no streets and no usable surface for this AOI: land is assigned to the "
+                "nearest node. Geometric, not hydrological — the honest floor, not a "
+                "delineation"))
