@@ -31,7 +31,8 @@ class _Cell:
 class TestItTruncatesStraddlingCells:
     def test_a_cell_crossing_the_divide_is_cut_back_to_its_own_basin(self):
         straddling = box(-20.0, -10.0, 20.0, 10.0)          # 40 x 20, half either side
-        cells = [_Cell("S1", straddling, (-10.0, 0.0))]     # seeded in the WEST basin
+        cells = [_Cell("S1", straddling, (-10.0, 0.0)),     # seeded in the WEST basin
+                 _Cell("S2", box(20.0, -10.0, 60.0, 10.0), (40.0, 0.0))]   # takes the cut half
         out, diag = clip_to_official_basins(cells, [_basin(WEST, "OUT_W"),
                                                     _basin(EAST, "OUT_E")])
         assert out[0].polygon.bounds[2] == pytest.approx(0.0), "still reaches into the east"
@@ -48,7 +49,8 @@ class TestItTruncatesStraddlingCells:
     def test_area_lost_to_the_cut_is_reported(self):
         """Land removed from a cell has to be accounted for, or coverage silently drops."""
         straddling = box(-20.0, -10.0, 20.0, 10.0)
-        cells = [_Cell("S1", straddling, (-10.0, 0.0))]
+        cells = [_Cell("S1", straddling, (-10.0, 0.0)),
+                 _Cell("S2", box(20.0, -10.0, 60.0, 10.0), (40.0, 0.0))]
         _out, diag = clip_to_official_basins(cells, [_basin(WEST, "OUT_W"),
                                                      _basin(EAST, "OUT_E")])
         assert diag["area_removed_m2"] == pytest.approx(400.0, rel=0.01)
@@ -80,3 +82,45 @@ class TestItRefusesToActOnGuesswork:
                                             min_retained_frac=0.2)
         assert out[0].polygon.equals(straddling)
         assert diag["n_declined_too_small"] == 1
+
+
+class TestClippingRedistributesRatherThanDeletes:
+    """A boundary says which node land belongs to, not that it stops raining there.
+
+    Cutting a straddling cell back to its own basin removed the far half from the model
+    entirely. Measured on a live downtown: coverage 100% before the clip and 93% after —
+    6.1 ha of land producing no runoff, and the delineation that fed it was complete.
+    """
+
+    def test_the_far_half_goes_to_a_cell_in_that_basin(self):
+        straddling = box(-20.0, -10.0, 20.0, 10.0)          # half either side of x=0
+        neighbour = box(20.0, -10.0, 60.0, 10.0)            # wholly in EAST
+        cells = [_Cell("S1", straddling, (-10.0, 0.0)),
+                 _Cell("S2", neighbour, (40.0, 0.0))]
+        out, diag = clip_to_official_basins(cells, [_basin(WEST, "OUT_W"),
+                                                    _basin(EAST, "OUT_E")])
+        by_name = {c.name: c for c in out}
+        assert by_name["S1"].polygon.bounds[2] == pytest.approx(0.0)
+        assert by_name["S2"].polygon.area > neighbour.area, (
+            "the piece cut from S1 was deleted rather than handed to its basin's cell")
+        assert diag["area_reassigned_m2"] == pytest.approx(400.0, rel=0.05)
+
+    def test_total_area_is_preserved(self):
+        straddling = box(-20.0, -10.0, 20.0, 10.0)
+        neighbour = box(20.0, -10.0, 60.0, 10.0)
+        cells = [_Cell("S1", straddling, (-10.0, 0.0)),
+                 _Cell("S2", neighbour, (40.0, 0.0))]
+        before = sum(c.polygon.area for c in cells)
+        out, _ = clip_to_official_basins(cells, [_basin(WEST, "OUT_W"),
+                                                 _basin(EAST, "OUT_E")])
+        assert sum(c.polygon.area for c in out) == pytest.approx(before, rel=0.01)
+
+    def test_with_nowhere_to_send_it_the_cell_keeps_it(self):
+        """No cell serves that basin, so cutting would delete the land. The boundary is
+        worth less than the water."""
+        straddling = box(-20.0, -10.0, 20.0, 10.0)
+        cells = [_Cell("S1", straddling, (-10.0, 0.0))]
+        out, diag = clip_to_official_basins(cells, [_basin(WEST, "OUT_W"),
+                                                    _basin(EAST, "OUT_E")])
+        assert out[0].polygon.area == pytest.approx(straddling.area)
+        assert diag["n_declined_nowhere_to_send"] == 1
