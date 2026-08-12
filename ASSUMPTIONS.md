@@ -125,6 +125,37 @@ Outside these cities, the network itself is 🟠 synthesized from OpenStreetMap 
 > auto-built model, however real its inputs. Calibrate against gauged flow (e.g. ECCC HYDAT)
 > before using results for design or decisions.
 
+## Telling the terrain what it cannot see
+
+At 1 m LiDAR posting a 150 mm kerb is one pixel of a smooth cross-slope, so D8 routes street
+runoff across it into the front garden when in reality it runs along the gutter to the
+nearest inlet. Where a city publishes the assets, three facts are written into the surface
+before flow directions are computed:
+
+- **kerbs** are raised 0.30 m — larger than the real face on purpose, so the barrier is
+  decisive rather than a model of its exact height;
+- **kerb drops and inlets** open a 2 m gate, punched out of the barrier *before* it is
+  raised, so the router finds the crossing on its own;
+- **buildings** are raised 10 m and are not crossed at all.
+
+Conditioning happens before depressions are filled, because ponding behind a kerb is real
+and filling is what resolves it.
+
+Two limits, both physical rather than incidental: a kerb across a valley is simply
+overtopped, because the water behind it has nowhere else to go; and a 150 mm kerb does
+nothing on a steep grade. Neither is a defect and both are pinned by tests.
+
+It is skipped entirely on a DEM coarser than 2 m — a 150 mm edit is far below the vertical
+noise of a 30 m surface, and claiming to have conditioned with it would be theatre. Five of
+the fleet publish kerbs; the rest are untouched.
+
+**Inlets are snapped to the local low** before being used as drainage targets, within about
+one carriageway width. A published inlet coordinate marks the structure, not the pixel water
+arrives at, and an inlet left on the kerb gets a basin of one pixel while its real catchment
+drains past it. The search is deliberately short: a distant low point is somebody else's
+gutter. Snapping is a heuristic, so the delineation is still checked afterwards and falls
+back if it made things worse.
+
 ## How much of a road reserve is pavement
 
 Imperviousness counts roofs in full plus the paved share of the road reserve — the land in a

@@ -95,3 +95,69 @@ def condition_urban_dem(
         "building_height_m": config.building_height_m,
         "opening_radius_m": config.opening_radius_m,
     }
+
+
+#: How far an inlet may be moved to find the gutter. Beyond about a carriageway width the
+#: low point belongs to a different street, and snapping to it hands the inlet a catchment
+#: it does not serve.
+DEFAULT_SNAP_RADIUS_M = 4.0
+
+
+def snap_to_local_low(points, dem, transform, *, search_radius_m: float = DEFAULT_SNAP_RADIUS_M,
+                      nodata=None):
+    """Move each pour point onto the lowest cell within a short search (规划书 §4).
+
+    A published inlet coordinate marks the structure, not the pixel water arrives at. A
+    metre or two of survey offset — or a DEM whose gutter sits half a cell away — puts the
+    pour point on the kerb or the carriageway crown instead of the low line, and D8 then
+    hands that inlet a basin of one pixel while its real catchment drains past it.
+
+    ``points`` maps name to ``(x, y)`` in the DEM's CRS; the same shape comes back. The
+    search is deliberately small and the move is reported: a pour point that travelled is a
+    fact a reader may want to weigh, not a detail to bury.
+    """
+    out = dict(points)
+    if not points:
+        return out, {"n_moved": 0, "n_outside_dem": 0, "max_move_m": 0.0,
+                     "search_radius_m": search_radius_m}
+
+    band = np.asarray(dem, dtype="float64")
+    if nodata is not None:
+        band = np.where(band == float(nodata), np.nan, band)
+    h, w = band.shape
+    px = abs(transform.a) or 1.0
+    reach = max(int(round(search_radius_m / px)), 1)
+
+    n_moved = n_outside = 0
+    max_move = 0.0
+    inv = ~transform
+    for name, (x, y) in points.items():
+        col, row = inv * (x, y)
+        r0, c0 = int(row), int(col)
+        if not (0 <= r0 < h and 0 <= c0 < w):
+            n_outside += 1
+            continue
+        r1, r2 = max(r0 - reach, 0), min(r0 + reach + 1, h)
+        c1, c2 = max(c0 - reach, 0), min(c0 + reach + 1, w)
+        window = band[r1:r2, c1:c2]
+        if np.all(np.isnan(window)):
+            continue
+        lowest = float(np.nanmin(window))
+        here = band[r0, c0]
+        # Already at the low: stay. A gutter is flat along its length, so the lowest cell in
+        # the window is usually a tie — moving to whichever one argmin happens to return
+        # would drag every inlet to the same end of its own gutter.
+        if np.isfinite(here) and here <= lowest + 1e-9:
+            continue
+        k = int(np.nanargmin(window))
+        dr, dc = divmod(k, window.shape[1])
+        rr, cc = r1 + dr, c1 + dc
+        if (rr, cc) == (r0, c0):
+            continue
+        nx, ny = transform * (cc + 0.5, rr + 0.5)
+        out[name] = (nx, ny)
+        n_moved += 1
+        max_move = max(max_move, ((nx - x) ** 2 + (ny - y) ** 2) ** 0.5)
+
+    return out, {"n_moved": n_moved, "n_outside_dem": n_outside,
+                 "max_move_m": round(max_move, 2), "search_radius_m": search_radius_m}

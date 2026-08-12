@@ -64,6 +64,9 @@ def delineate_junction_subcatchments(
     kerbs=None,
     openings=None,
     buildings=None,
+    #: Move pour points onto the local low before routing (规划书 §4). A published inlet
+    #: marks the structure, not the pixel water arrives at.
+    snap_pour_points: bool = False,
 ) -> Tuple[List[SurfaceCatchment], dict]:
     """One subcatchment per junction, DEM-delineated when the terrain earns it.
 
@@ -136,6 +139,20 @@ def delineate_junction_subcatchments(
         return _voronoi(junction_xy, aoi, network_config, gate,
                         service_mask=service_mask, min_cell_ha=min_cell_ha)
 
+    snap_diag = None
+    if snap_pour_points:
+        from pyproj import Transformer
+
+        from swmmcanada.geo.crs import lonlat_projector
+        from swmmcanada.network.urban_conditioning import snap_to_local_low
+
+        to_dem = lonlat_projector(dem_crs)
+        back = Transformer.from_crs(dem_crs, "EPSG:4326", always_xy=True).transform
+        snapped, snap_diag = snap_to_local_low(
+            {n: to_dem(*xy) for n, xy in junction_xy.items()},
+            conditioned, transform, nodata=config.nodata)
+        junction_xy = {n: back(*xy) for n, xy in snapped.items()}
+
     cells, widths, dem_diag = _dem_basins(
         conditioned, transform, dem_crs, aoi_mask, junction_xy, aoi, config
     )
@@ -162,6 +179,7 @@ def delineate_junction_subcatchments(
         "n_subcatchments": len(subs),
         "gate": gate,
         "urban_conditioning": urban_diag,
+        "pour_point_snapping": snap_diag or {"applied": False},
         "width_method": "area_over_flow_length",
         **dem_diag,
     }

@@ -180,3 +180,38 @@ class TestItDoesNotDisturbCitiesWithoutKerbs:
             _inlets(), AOI, dem_path=dem, config=CFG, kerbs=_kerb_along_the_street())
         assert diag["method"] in (schema.METHOD_JUNCTION_DEM,
                                   schema.METHOD_JUNCTION_VORONOI)
+
+
+class TestPourPointSnapping:
+    """规划书 §4 priority 3: a published inlet marks the structure, not the pixel water
+    arrives at. Off by a metre and D8 hands it a basin of one pixel."""
+
+    def test_snapping_is_reported_when_asked_for(self, tmp_path):
+        dem = _write_dem(tmp_path, _street_dem())
+        _s, diag = delineate_junction_subcatchments(
+            _inlets(), AOI, dem_path=dem, config=CFG, snap_pour_points=True)
+        assert diag["pour_point_snapping"]["search_radius_m"] > 0
+
+    def test_it_is_off_unless_asked(self, tmp_path):
+        """Existing cities keep their delineation until the resolver opts them in."""
+        dem = _write_dem(tmp_path, _street_dem())
+        _s, diag = delineate_junction_subcatchments(_inlets(), AOI, dem_path=dem, config=CFG)
+        assert diag["pour_point_snapping"] == {"applied": False}
+
+    def test_a_snap_that_degrades_the_result_is_caught_by_the_posterior_gate(self, tmp_path):
+        """Snapping is a heuristic and can make things worse — here both inlets land on the
+        same flat gutter and the basins degenerate. The posterior gate (ADR 0010) notices
+        and falls back rather than shipping a delineation with holes.
+
+        Pinned because a heuristic without a net is how a plausible-looking bad model gets
+        out. Whether the snap moved anything is checked directly in test_inlet_snapping.py;
+        what matters here is that a bad outcome cannot survive.
+        """
+        dem = _write_dem(tmp_path, _street_dem())
+        off = {name: _TO_LL(*_utm(col, GUTTER_ROW - 2))
+               for name, col in (("CB_W", 30), ("CB_E", 70))}
+        subs, diag = delineate_junction_subcatchments(
+            off, AOI, dem_path=dem, config=CFG, snap_pour_points=True)
+        assert diag["gate"]["decision"] == "posterior_fallback"
+        assert diag["method"] == schema.METHOD_JUNCTION_VORONOI
+        assert subs, "the fallback still has to produce a delineation"
