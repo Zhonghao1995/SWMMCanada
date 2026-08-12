@@ -903,9 +903,12 @@ def build_city(
         # assignment carves a block into a triangle fan meeting at its centre, which is
         # nothing a city would draw.
         junction_xy = {j.name: (j.x, j.y) for j in network.junctions}
+        inlet_xy = [tuple(((f.get("geometry") or {}).get("coordinates") or [])[:2])
+                    for f in (land.get("catchbasins") or [])
+                    if len((f.get("geometry") or {}).get("coordinates") or []) >= 2]
         subcatchments, sub_diag = delineate_junction_subcatchments(
             junction_xy, aoi, dem_path=(dem.path if dem else None), streets=streets,
-            service_mask=aoi.geometry, min_cell_ha=MIN_CELL_HA)
+            service_mask=aoi.geometry, min_cell_ha=MIN_CELL_HA, inlets=inlet_xy)
     if not subcatchments and plan.anchors == "catch_basin" and plan.shaping == "dem_d8":
         # 规划书 §4 priorities 2-3: route runoff over the terrain TO the inlets, rather
         # than dividing land by proximity to them. Same delineator the junction path uses,

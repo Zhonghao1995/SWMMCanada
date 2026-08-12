@@ -64,6 +64,9 @@ def delineate_junction_subcatchments(
     kerbs=None,
     openings=None,
     buildings=None,
+    #: Published inlet positions, as (lon, lat). Not a seeding option — they intercept the
+    #: gutter so a falling street does not run its whole length to one node.
+    inlets=None,
     #: Move pour points onto the local low before routing (规划书 §4). A published inlet
     #: marks the structure, not the pixel water arrives at.
     snap_pour_points: bool = False,
@@ -85,7 +88,13 @@ def delineate_junction_subcatchments(
             from swmmcanada.network.service_area import edge_split_cells
 
             gate["decision"] = "corridor_frontage"
-            cells = edge_split_cells(streets, junction_xy, service_mask, aoi)
+            # Ground decides which way each gutter runs; frontage already decided the
+            # shape. Without a surface the divide stays at the segment midpoint.
+            elevation = _dem_sampler(dem_path) if dem_path else None
+            gate["gutter_grade"] = elevation is not None
+            gate["inlets_intercepting"] = len(inlets or [])
+            cells = edge_split_cells(streets, junction_xy, service_mask, aoi,
+                                     elevation=elevation, inlets=inlets)
             subs = _build_subcatchments(junction_xy, aoi, network_config, cells=cells)
             subs, service_diag = _apply_service(subs, junction_xy, aoi, None, min_cell_ha)
             service_diag["applied"] = True
@@ -207,6 +216,28 @@ def delineate_junction_subcatchments(
 #: rule rather than a tuned number: if most of what came back is too small to be a
 #: subcatchment, the method did not work here whatever its coverage looks like.
 NOISE_CELL_MAJORITY = 0.5
+
+
+def _dem_sampler(dem_path):
+    """``(lon, lat) -> z`` reading a DEM, or ``None`` if it cannot be opened.
+
+    Opened once and held, because the gutter divide asks for a few samples per street
+    segment and reopening per point would dominate the delineation.
+    """
+    try:
+        import rasterio
+        from pyproj import Transformer
+
+        src = rasterio.open(dem_path)
+        to_dem = Transformer.from_crs("EPSG:4326", src.crs, always_xy=True).transform
+    except Exception:  # noqa: BLE001 — no surface is a missing refinement, not a failure
+        return None
+
+    def sample(lon, lat):
+        x, y = to_dem(lon, lat)
+        return next(src.sample([(x, y)]))[0]
+
+    return sample
 
 
 def _noise_share(subs) -> float:

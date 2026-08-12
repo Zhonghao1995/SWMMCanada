@@ -143,10 +143,23 @@ fronting it, back to the rear-lot line, with the divide at the segment midpoint.
 what a municipality draws. Assigning land to the nearest node *point* instead carves every
 block into a triangle fan meeting at its centre, which is not a shape anyone surveys.
 
-Measured on downtown Victoria (88.9 ha, 391 nodes): 241 cells, 93% coverage, median 0.25 ha,
-99% of them inside the 0.05–10 ha range municipal subcatchments occupy. For comparison the
-previous inlet-tessellation gave 64% in that range, and routing terrain to each inlet gave
-41% with a majority of cells at noise scale.
+**Which way each gutter runs is decided by the ground, and by the inlets.** The divide
+between two nodes sits at the crest between them, not at the geometric midpoint — water runs
+downhill to whichever node is lower, and maintenance holes are placed for pipe runs rather
+than for symmetry. Grade alone would send a whole falling street to its lowest node and
+leave every node above it dry, so published inlets intercept: each stretch of gutter is
+caught by the first inlet below it, and that inlet resolves to a node. Several inlets on one
+reach merge into one cell. Without a surface the divide stays at the midpoint; without
+published inlets the grade rule stands alone.
+
+Terrain is used here rather than to cut cells. Cutting by terrain was tried and produced a
+majority of cells at noise scale — the area was all present, gathered into a few basins with
+slivers around the rest of the nodes.
+
+Measured on downtown Victoria (88.9 ha, 391 nodes, 541 inlets): 174 cells, 91% coverage,
+median 0.36 ha, ninetieth percentile 0.86 ha, and no cells at noise scale. For comparison
+the previous inlet tessellation gave a 0.076 ha median with 36% of cells at noise scale, and
+routing terrain to each inlet gave 0.027 ha with 59%.
 
 Where the streets are not published the shaping falls back — to terrain where the surface is
 fine enough, to lot lines where it is not, and to nearest-node tessellation as the floor. The
