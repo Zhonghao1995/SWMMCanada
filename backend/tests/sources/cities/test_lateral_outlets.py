@@ -96,8 +96,19 @@ class TestLateralsReachTheDelineation:
 
         src = inspect.getsource(pipeline)
         assert "delineate_catchbasin_subcatchments(" in src
-        call = src[src.index("delineate_catchbasin_subcatchments("):]
-        call = call[:call.index(")") + 1]
+        # Read to the end of the CALL, not to the first ")" — the argument list contains
+        # nested literals and slicing at the first bracket truncated inside one.
+        start = src.index("delineate_catchbasin_subcatchments(")
+        depth, end = 0, start
+        for i in range(start + len("delineate_catchbasin_subcatchments"), len(src)):
+            if src[i] == "(":
+                depth += 1
+            elif src[i] == ")":
+                depth -= 1
+                if depth == 0:
+                    end = i + 1
+                    break
+        call = src[start:end]
         assert "laterals" in call, f"laterals not passed: {call}"
 
 

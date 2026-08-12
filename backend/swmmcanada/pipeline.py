@@ -579,71 +579,6 @@ def _outlet_agreement_provenance(spec, bbox, client, subcatchments, network) -> 
     return {"rate_pct": (round(rate * 100, 1) if rate is not None else None), **diag}
 
 
-def _delineate_to_inlets(land, aoi, dem, spec, plan, network):
-    """Inlet-seeded D8 over a kerb-conditioned surface (规划书 §4 priorities 2-3).
-
-    Returns ``(subcatchments, diagnostics)``, or ``([], diag)`` when the terrain path cannot
-    produce a usable result — the caller then falls back to inlet tessellation, which is the
-    behaviour the posterior gate already provides inside the delineator.
-    """
-    from shapely.geometry import shape as shp_shape
-
-    inlets = {}
-    for i, f in enumerate(land.get("catchbasins") or []):
-        c = ((f.get("geometry") or {}).get("coordinates") or [])
-        if len(c) >= 2:
-            props = f.get("properties") or {}
-            key = str(props.get("AssetID") or props.get("InfrastructureID")
-                      or props.get("OBJECTID") or f"CB{i}")
-            inlets[key] = (float(c[0]), float(c[1]))
-    if len(inlets) < 2 or dem is None:
-        return [], {"reason": "not enough inlets or no surface for the terrain path"}
-
-    def _geoms(key):
-        out = []
-        for f in land.get(key) or []:
-            g = f.get("geometry")
-            if g:
-                try:
-                    out.append(shp_shape(g))
-                except Exception:  # noqa: BLE001 — a broken feature is not a build failure
-                    continue
-        return out
-
-    # Kerb geometry arrives in EPSG:4326 and the conditioner works in the DEM's own grid.
-    import rasterio
-    from shapely.ops import transform as shp_transform
-
-    from swmmcanada.geo.crs import lonlat_projector
-
-    with rasterio.open(dem.path) as src:
-        to_dem = lonlat_projector(str(src.crs))
-    reproject = lambda gs: [shp_transform(to_dem, g) for g in gs]
-
-    subs, diag = delineate_junction_subcatchments(
-        inlets, aoi, dem_path=dem.path,
-        kerbs=reproject(_geoms("kerbs")),
-        openings=reproject(_geoms("kerb_openings")),
-        buildings=reproject(_geoms("buildings")),
-        snap_pour_points=True,
-    )
-
-    # The delineator names each cell's outlet after its pour point, which here is an INLET
-    # id, not a node. Resolve it the same way the tessellation path does — through the lead
-    # where one is published — so both paths agree about which pipe a cell drains to.
-    from dataclasses import replace as _replace
-
-    outlet_of = base._outlet_resolver(network, spec.sub_crs, land.get("laterals"))
-    resolved = []
-    for sub in subs:
-        seed = inlets.get(sub.outlet_node)
-        resolved.append(_replace(sub, outlet_node=outlet_of(seed)) if seed else sub)
-
-    diag = {**(diag or {}), "seeded_on": "catch_basin", "plan_method": plan.method,
-            "outlets_resolved_to_nodes": sum(1 for s in subs if s.outlet_node in inlets)}
-    return resolved, diag
-
-
 def _subcatchments_from_user_layer(features, network, crs, laterals=None):
     """Turn an uploaded layer into subcatchments (resolver priority 0).
 
@@ -776,6 +711,34 @@ def _apply_official_boundary(subcatchments, official_features, crs):
             polygon=[(float(x), float(y)) for x, y in ring.exterior.coords])
 
     return [rebuilt.get(id(s), s) for s in subcatchments], diag
+
+
+def _dem_crs_geoms(features, dem):
+    """Reproject GeoJSON features into the DEM's grid, or ``[]``. The conditioner edits a
+    raster and needs its geometry in the same frame."""
+    if not features or dem is None:
+        return []
+    import rasterio
+    from shapely.geometry import shape as shp_shape
+    from shapely.ops import transform as _tf
+
+    from swmmcanada.geo.crs import lonlat_projector
+
+    try:
+        with rasterio.open(dem.path) as src:
+            to_dem = lonlat_projector(str(src.crs))
+    except Exception:  # noqa: BLE001 — an unreadable surface costs the refinement only
+        return []
+    out = []
+    for f in features:
+        g = (f or {}).get("geometry")
+        if not g:
+            continue
+        try:
+            out.append(_tf(to_dem, shp_shape(g)))
+        except Exception:  # noqa: BLE001 — one broken feature is not a failed build
+            continue
+    return out
 
 
 def _plan_delineation(spec, bbox, client, network, derive: bool, subcatchment_method: str,
@@ -913,16 +876,25 @@ def build_city(
         subcatchments, sub_diag = delineate_junction_subcatchments(
             junction_xy, aoi, dem_path=(dem.path if dem else None), streets=streets,
             service_mask=aoi.geometry, min_cell_ha=MIN_CELL_HA, inlets=inlet_xy)
-    if not subcatchments and plan.anchors == "catch_basin" and plan.shaping == "dem_d8":
-        # 规划书 §4 priorities 2-3: route runoff over the terrain TO the inlets, rather
-        # than dividing land by proximity to them. Same delineator the junction path uses,
-        # with inlets as pour points and the city's kerb geometry as an extra input — one
-        # pipeline, different inputs (ADR 0029 Q10).
-        subcatchments, sub_diag = _delineate_to_inlets(
-            land, aoi, dem, spec, plan, network)
-    if not subcatchments and plan.anchors == "catch_basin":
+    if not subcatchments and plan.shaping == "dem_d8":
+        # No streets published: land follows the ground to its node instead of the frontage
+        # it cannot see. Same delineator, one input fewer.
+        junction_xy = {j.name: (j.x, j.y) for j in network.junctions}
+        subcatchments, sub_diag = delineate_junction_subcatchments(
+            junction_xy, aoi, dem_path=(dem.path if dem else None),
+            kerbs=_dem_crs_geoms(land.get("kerbs"), dem),
+            openings=_dem_crs_geoms(land.get("kerb_openings"), dem),
+            buildings=_dem_crs_geoms(land.get("buildings"), dem),
+            snap_pour_points=True)
+    if not subcatchments and plan.shaping == "parcel":
+        # Neither streets nor a usable surface: the boundary between neighbouring nodes
+        # follows real lot lines rather than a bisector through the middle of a garden.
+        junction_xy = {j.name: (j.x, j.y) for j in network.junctions}
         subcatchments, imperv_map, sub_diag = base.delineate_catchbasin_subcatchments(
-            network, land["catchbasins"], land["parcels"], land["buildings"], aoi,
+            network, [{"type": "Feature", "properties": {"AssetID": n},
+                       "geometry": {"type": "Point", "coordinates": list(xy)}}
+                      for n, xy in junction_xy.items()],
+            land.get("parcels") or [], land.get("buildings") or [], aoi,
             crs=spec.sub_crs, laterals=land.get("laterals"),
         )
     water = None
