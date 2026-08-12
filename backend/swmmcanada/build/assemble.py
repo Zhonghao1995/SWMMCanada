@@ -107,6 +107,30 @@ def _coord_projector(crs):
     return lonlat_projector(crs)
 
 
+def _reject_service_areas(subcatchments) -> None:
+    """Refuse to write a sewer service area as a surface subcatchment (ADR 0029 Q1/Q8).
+
+    A separated sanitary network has no surface runoff of its own. Emitting a service area
+    into ``[SUBCATCHMENTS]`` would route roof and road runoff straight into a foul sewer —
+    physically the cross-connection municipalities run dedicated programmes to find and fix,
+    and the exact error the type split exists to make impossible.
+
+    Types alone do not enforce this at runtime in Python, so the invariant is guarded here,
+    at the one place the sections are actually written. Failing loudly beats a model that
+    runs, looks plausible and is wrong.
+    """
+    from swmmcanada.build.models import SewerServiceArea
+
+    offenders = [s for s in subcatchments if isinstance(s, SewerServiceArea)]
+    if offenders:
+        names = ", ".join(s.name for s in offenders[:5])
+        raise TypeError(
+            f"{len(offenders)} sewer service area(s) reached the [SUBCATCHMENTS] writer "
+            f"({names}{'...' if len(offenders) > 5 else ''}). Service areas carry wastewater "
+            f"loading to a node via [DWF]/[RDII]; they are never surface subcatchments "
+            f"(ADR 0029). Route them through the loading path instead.")
+
+
 def assemble_inp(
     network: NetworkIn,
     subcatchments: List[SubcatchmentIn],
@@ -116,6 +140,7 @@ def assemble_inp(
     temperature: Optional[TemperatureSeries] = None,
     tide: Optional["TideSeries"] = None,
 ) -> SwmmInput:
+    _reject_service_areas(subcatchments)
     inp = SwmmInput()
     with_snow = temperature is not None and bool(temperature.timestamps)
 

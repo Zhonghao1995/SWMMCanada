@@ -46,7 +46,19 @@ class ConduitIn:
 
 
 @dataclass(frozen=True)
-class SubcatchmentIn:
+class SurfaceCatchment:
+    """A patch of ground whose rain reaches one inlet (ADR 0029 Q1).
+
+    The **only** thing that may be written to ``[SUBCATCHMENTS]`` / ``[SUBAREAS]`` /
+    ``[POLYGONS]``. Its boundary comes from terrain, roads, kerbs and inlets — where water
+    flows over the surface.
+
+    Its counterpart, :class:`SewerServiceArea`, is deliberately *not* a subclass and shares
+    no fields: household sewage does not run downhill to a manhole, it travels by lateral,
+    so a service area has no width, no slope, no imperviousness and no infiltration. Giving
+    the two a common base would invite exactly the confusion the split exists to end.
+    """
+
     name: str
     outlet_node: str
     area_ha: float
@@ -74,6 +86,48 @@ class SubcatchmentIn:
     ga_psi_mm: float = 88.9
     ga_ksat_mm_h: float = 6.6
     ga_imd: float = 0.434
+
+
+#: Migration bridge (ADR 0029 Q8) — **temporary, with a deadline**. The internal model must
+#: end up with the new type only; this alias exists so ~60 call sites across 16 modules can
+#: move in reviewable steps instead of one unreadable diff. Delete it once the last consumer
+#: is migrated. If external API stability is ever needed, that belongs in a deprecated
+#: adapter at the outermost edge, never leaking back inside.
+SubcatchmentIn = SurfaceCatchment
+
+
+@dataclass(frozen=True)
+class SewerServiceArea:
+    """The land whose **wastewater** a sanitary or combined sewer collects (ADR 0029 Q1).
+
+    Not a watershed. Sewage reaches a pipe through a lateral connection, not by flowing over
+    the ground, so this boundary follows parcels, buildings and service connections and may
+    cross a topographic divide without anything being wrong.
+
+    It never becomes a SWMM subcatchment. It enters the model as node loading — ``[DWF]``
+    now, and ``[RDII]`` once a city with measured wet-weather sewer flow exists (ADR 0031
+    keeps the interface and leaves it inactive rather than inventing RTK parameters).
+
+    Geometry provenance and loading provenance are **separate fields on purpose**: an area
+    can be taken verbatim from a municipal polygon while the flow coefficient applied to it
+    is a handbook number. Collapsing them into one "source" would let an official boundary
+    lend its authority to a synthetic rate.
+    """
+
+    name: str
+    node: str                       # the sanitary/combined node this area loads
+    area_ha: float
+    system: str = "sanitary"        # sanitary | combined
+    polygon: Optional[List[Tuple[float, float]]] = None
+    holes: Optional[List[List[Tuple[float, float]]]] = None
+    # --- loading evidence: what the flow was derived FROM, kept beside the flow itself ---
+    population: Optional[float] = None
+    dwelling_units: Optional[int] = None
+    dwf_lps: Optional[float] = None          # dry-weather flow, litres/second
+    dwf_pattern: Optional[str] = None        # diurnal pattern name
+    # --- provenance, split in two (ADR 0031) ---
+    geometry_source: str = "derived"         # official | derived
+    loading_source: str = "synthetic"        # measured | calibrated | synthetic
 
 
 @dataclass(frozen=True)
