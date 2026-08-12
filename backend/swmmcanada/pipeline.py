@@ -28,6 +28,7 @@ from swmmcanada.build import BuildConfig, BuildResult
 from swmmcanada.datastore import build_from_datastore, write_datastore
 from swmmcanada.build.models import filter_system
 from swmmcanada.delineation import DelineationPlan, Evidence, resolve
+from swmmcanada.delineation.outlet import ensure_wastewater_outlet
 from swmmcanada.delineation.service_area import derive_service_areas
 from swmmcanada.loading import load_service_areas
 from swmmcanada import result_package
@@ -659,7 +660,12 @@ def build_city(
                 base.SURFACE_SAMPLER.reset(_tok)
             network = base.merge_secondary_system(
                 network, sanres.network, prefix="SAN_", system="sanitary")
-            san_diag = {"included": True,
+            # ADR 0029 Q4: give the wastewater system a destination of its own. No
+            # supported city publishes a CSO structure (Phase 0), so this is almost always
+            # a synthetic interceptor/WWTP boundary — labelled as one, never a borrowed
+            # storm outfall.
+            network, outlet_diag = ensure_wastewater_outlet(network, system="sanitary")
+            san_diag = {"included": True, "terminal_outlet": outlet_diag,
                         "n_junctions": len(sanres.network.junctions),
                         "n_conduits": len(sanres.network.conduits)}
             # ADR 0031: a sanitary network with no inflow is a drawing, not a model. Derive
