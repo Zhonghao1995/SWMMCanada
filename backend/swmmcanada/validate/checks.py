@@ -359,23 +359,78 @@ def check_finite_hydraulics(network: NetworkIn):
                    n_bad=len(bad), sample=bad[:10])
 
 
+#: Systems a `combined` element may legitimately connect to. A combined sewer carries both
+#: stormwater and wastewater, so it is the one place the two meet by design rather than by
+#: fault (ADR 0029 Q5).
+_COMBINED_ADJACENT = frozenset({"storm_minor", "storm_major", "sanitary", "combined"})
+
+
 def check_system_outfalls(network: NetworkIn):
-    """ADR 0011: every tagged system included in the model must reach at least one
-    outfall of its own system, and conduits must not bridge systems — ERROR."""
-    systems = {c.system for c in network.conduits}
+    """System integrity (ADR 0029 Q5, superseding ADR 0011's stricter rule) — ERROR.
+
+    ADR 0011 required every system to be physically isolated and to own an outfall. That
+    held only because sanitary was grafted in as a disconnected subgraph; it is false for
+    combined sewers, where storm and sanitary meet by design. Ottawa serves storm, sanitary
+    and combined pipes from one network, and the old rule would have failed the city for
+    describing itself accurately.
+
+    Two rules replace it:
+
+    1. **Connectivity by type.** ``storm <-> combined`` and ``sanitary <-> combined`` are
+       legitimate — combined is the interface system. A **direct** ``storm <-> sanitary``
+       link is still an ERROR: with no combined pipe between them and no published topology
+       saying otherwise, it is a cross-connection, the fault municipalities run dedicated
+       programmes to find.
+    2. **Outfall reachability by component, not by system.** Every connected hydraulic
+       component must reach some outfall. One outfall may serve a mixed component containing
+       combined pipes — requiring each system to own an outfall would demand a storm outfall
+       for a combined network whose water leaves via an interceptor.
+    """
     node_sys = {j.name: j.system for j in network.junctions}
     node_sys.update({o.name: o.system for o in network.outfalls})
+    outfalls = {o.name for o in network.outfalls}
     problems = []
-    for sysname in sorted(systems):
-        if not any(o.system == sysname for o in network.outfalls):
-            problems.append(f"{sysname}: no outfall")
+
+    # --- rule 1: which system pairs a conduit may join ---
     for c in network.conduits:
         fs, ts = node_sys.get(c.from_node), node_sys.get(c.to_node)
-        if fs is not None and ts is not None and (fs != c.system or ts != c.system):
-            problems.append(f"{c.name}: bridges {fs}->{ts} as {c.system}")
-            if len(problems) > 20:
-                break
+        if fs is None or ts is None or fs == ts:
+            continue
+        pair = {fs, ts}
+        if "combined" in pair and pair <= _COMBINED_ADJACENT:
+            continue  # combined is the legitimate interface
+        problems.append(f"{c.name}: links {fs}->{ts} with no combined pipe between them")
+        if len(problems) > 20:
+            break
+
+    # --- rule 2: every connected component reaches an outfall ---
+    adj = {}
+    for c in network.conduits:
+        adj.setdefault(c.from_node, set()).add(c.to_node)
+        adj.setdefault(c.to_node, set()).add(c.from_node)
+    seen, components = set(), []
+    for start in adj:
+        if start in seen:
+            continue
+        stack, comp = [start], set()
+        seen.add(start)
+        while stack:
+            n = stack.pop()
+            comp.add(n)
+            for m in adj[n]:
+                if m not in seen:
+                    seen.add(m)
+                    stack.append(m)
+        components.append(comp)
+    for comp in components:
+        if not (comp & outfalls):
+            systems = sorted({node_sys.get(n, "?") for n in comp})
+            sample = sorted(comp)[:3]
+            problems.append(
+                f"component of {len(comp)} node(s) ({'/'.join(systems)}) reaches no "
+                f"outfall; e.g. {', '.join(sample)}")
+
     return _result("system_outfalls", schema.ERROR, not problems,
-                   "every system reaches its own outfall; no cross-system links"
+                   "every component reaches an outfall; no storm-sanitary cross-connections"
                    if not problems else f"{len(problems)} system-integrity problem(s)",
                    n_problems=len(problems), sample=problems[:10])

@@ -12,7 +12,11 @@ class JunctionIn:
     x: float
     y: float
     max_depth_m: float = 2.0
-    system: str = "storm_minor"   # drainage system tag (ADR 0011): storm_minor|storm_major|sanitary
+    # Drainage system tag (ADR 0011, extended by ADR 0029 Q3):
+    #   storm_minor | storm_major | sanitary | combined
+    # `combined` is a tag, not a separate model: combined pipes stay wired into the storm
+    # graph and are the one place storm and sanitary legitimately meet.
+    system: str = "storm_minor"
 
 
 @dataclass(frozen=True)
