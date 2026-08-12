@@ -89,6 +89,14 @@ def delineate_junction_subcatchments(
             subs = _build_subcatchments(junction_xy, aoi, network_config, cells=cells)
             subs, service_diag = _apply_service(subs, junction_xy, aoi, None, min_cell_ha)
             service_diag["applied"] = True
+            # Every path answers the same question before returning: did this produce units?
+            # The check used to sit inside the terrain branch, and the frontage split walked
+            # straight past it.
+            gate["noise_cell_share"] = _noise_share(subs)
+            if cells_are_mostly_noise(subs):
+                gate["decision"] = "noise_cell_fallback"
+                return _voronoi(junction_xy, aoi, network_config, gate,
+                                service_mask=None, min_cell_ha=min_cell_ha)
             return subs, {"method": METHOD_VORONOI, "n_subcatchments": len(subs),
                           "gate": gate, "service": service_diag,
                           "split": "nearest street segment, midpoint gutter divides"}
@@ -175,12 +183,10 @@ def delineate_junction_subcatchments(
 
     # Coverage can be perfect while the cells are useless: the area is all there, gathered
     # into a few basins with slivers around the rest of the inlets. Nothing else notices.
+    gate["noise_cell_share"] = _noise_share(subs)
     if cells_are_mostly_noise(subs):
-        from swmmcanada.network.service_area import MIN_CELL_HA
-
-        noise = sum(1 for s in subs if s.area_ha < MIN_CELL_HA)
         gate["decision"] = "noise_cell_fallback"
-        gate["noise_cell_share"] = round(noise / len(subs), 3)
+        gate["noise_cell_share"] = _noise_share(subs)
         return _voronoi(junction_xy, aoi, network_config, gate,
                         service_mask=service_mask, min_cell_ha=min_cell_ha)
 
@@ -201,6 +207,17 @@ def delineate_junction_subcatchments(
 #: rule rather than a tuned number: if most of what came back is too small to be a
 #: subcatchment, the method did not work here whatever its coverage looks like.
 NOISE_CELL_MAJORITY = 0.5
+
+
+def _noise_share(subs) -> float:
+    """Share of cells below the size the repo calls noise. Reported on every path so the
+    number is visible even when it passes."""
+    from swmmcanada.network.service_area import MIN_CELL_HA
+
+    if not subs:
+        return 0.0
+    return round(sum(1 for s in subs if getattr(s, "area_ha", 0.0) < MIN_CELL_HA)
+                 / len(subs), 3)
 
 
 def cells_are_mostly_noise(subs) -> bool:

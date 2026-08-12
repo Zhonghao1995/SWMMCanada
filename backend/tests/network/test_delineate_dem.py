@@ -96,13 +96,16 @@ def test_valley_dem_delineates_basins(tmp_path):
         assert 0 < s.width_m < (s.area_ha * 1e4) ** 0.5
 
 
-def test_dem_width_uses_flow_length_voronoi_keeps_sqrt(tmp_path):
+def test_width_is_a_flow_length_on_every_path(tmp_path):
+    """SWMM width is area over the distance water travels, and `sqrt(area)` is that only for
+    a square. The DEM path measures the length off the raster; every other path estimates it
+    from the cell's own shape. Neither assumes a square, including the Voronoi floor — its
+    cells are real polygons and get the same treatment."""
     dem = _write_dem(tmp_path, _valley_dem())
     dem_subs, _ = delineate_junction_subcatchments(_valley_junctions(), AOI, dem_path=dem, config=CFG)
     vor_subs, _ = delineate_junction_subcatchments(_valley_junctions(), AOI, dem_path=None, config=CFG)
-    for s in vor_subs:
-        assert s.width_m == pytest.approx((s.area_ha * 1e4) ** 0.5)   # voronoi contract intact
-    assert all(s.width_m != pytest.approx((s.area_ha * 1e4) ** 0.5) for s in dem_subs)
+    for s in dem_subs + vor_subs:
+        assert s.width_m != pytest.approx((s.area_ha * 1e4) ** 0.5)
 
 
 def test_dem_cells_cover_aoi_without_gross_overlap(tmp_path):

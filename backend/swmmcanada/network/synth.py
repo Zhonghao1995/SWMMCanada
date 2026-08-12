@@ -190,6 +190,30 @@ def _select_sinks(g: nx.Graph, *, aoi, water, config: NetworkConfig):
     return [min(g.nodes, key=lambda n: g.nodes[n]["elev"])], "lowest node (no water layer)"
 
 
+def _width_from_shape(cell) -> float:
+    """SWMM width = area / overland flow length, estimated from the cell's own geometry."""
+    from swmmcanada.geo.crs import lonlat_projector, utm_crs_for
+    from shapely.ops import transform as _tf
+
+    from swmmcanada.sources.cities.base import characteristic_flow_length_m
+
+    poly = getattr(cell, "polygon_4326", None)
+    if poly is None or poly.is_empty:
+        return math.sqrt(cell.area_m2)
+    try:
+        rep = poly.representative_point()
+        poly_m = _tf(lonlat_projector(utm_crs_for_point(rep.x, rep.y)), poly)
+        return cell.area_m2 / characteristic_flow_length_m(poly_m, (rep.x, rep.y))
+    except Exception:  # noqa: BLE001 — a shape we cannot project falls back, never fails
+        return math.sqrt(cell.area_m2)
+
+
+def utm_crs_for_point(lon: float, lat: float) -> str:
+    """UTM zone for a lon/lat, so a single cell can be projected without an AOI."""
+    zone = int((lon + 180.0) // 6) + 1
+    return f"EPSG:{32600 + zone if lat >= 0 else 32700 + zone}"
+
+
 def _build_subcatchments(junction_xy, aoi, config: NetworkConfig, cells=None,
                          widths=None, clip_poly=None) -> List[SurfaceCatchment]:
     """Cells → one SurfaceCatchment per junction (missing cell → nominal placeholder; %imperv
@@ -215,7 +239,12 @@ def _build_subcatchments(junction_xy, aoi, config: NetworkConfig, cells=None,
         cell = cells.get(jname)
         if cell is not None and cell.area_m2 > 0:
             area_ha = cell.area_m2 / 10_000.0
-            width = (widths or {}).get(jname) or math.sqrt(cell.area_m2)
+            # A measured flow length (the DEM path reads one off the raster) always wins.
+            # Otherwise estimate it from the cell's own shape: `sqrt(area)` is the answer
+            # for a square and frontage cells are strips, which is exactly where it is
+            # wrong. This used to live only in the inlet path, so the frontage default
+            # quietly went back to assuming squares.
+            width = (widths or {}).get(jname) or _width_from_shape(cell)
             polygon = cell.exterior
         elif measured:
             continue        # nothing was measured here; do not invent it
