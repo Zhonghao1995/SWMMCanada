@@ -26,7 +26,10 @@ from swmmcanada.acquire.landcover import acquire_landcover
 from swmmcanada.acquire.soil import acquire_soil
 from swmmcanada.build import BuildConfig, BuildResult
 from swmmcanada.datastore import build_from_datastore, write_datastore
+from swmmcanada.build.models import filter_system
 from swmmcanada.delineation import DelineationPlan, Evidence, resolve
+from swmmcanada.delineation.service_area import derive_service_areas
+from swmmcanada.loading import load_service_areas
 from swmmcanada import result_package
 from swmmcanada.derive.core import derive_parameters
 from swmmcanada.geo.crs import utm_crs_for
@@ -267,7 +270,7 @@ def _finish_build(
     ws: Path, aoi, network, subcatchments, *, start: date, end: date, method,
     config: BuildConfig, extra_provenance: dict, climate_client, climate_buffer_deg: float,
     report=None, sub_diag: Optional[dict] = None, dem=None, water=None, served=None,
-    design_storm=None, network_kind: str = "synthesis",
+    design_storm=None, network_kind: str = "synthesis", service_areas=None,
 ) -> BuildResult:
     """The build spine (CONTEXT "Build spine") — the single shared tail of every build path.
 
@@ -373,6 +376,7 @@ def _finish_build(
     write_datastore(
         ws / result_package.DATASTORE_DIR, network=network, subcatchments=subcatchments, rain=rain,
         config=config, evaporation=evaporation, temperature=temperature, tide=tide,
+        service_areas=service_areas,
         provenance={
             "aoi_bbox": list(aoi.bbox), "crs": "EPSG:4326",
             "start": start.isoformat(), "end": end.isoformat(),
@@ -644,6 +648,7 @@ def build_city(
     # as a tagged, disconnected subgraph — AFTER subcatchments (they are storm-seeded) and
     # with graceful degradation (a sanitary fetch failure never blocks the storm build).
     san_diag = {"included": False, "reason": "not_published"}
+    service_areas: list = []
     if spec.sanitary is not None:
         _r("SANITARY", 78)
         try:
@@ -657,8 +662,19 @@ def build_city(
             san_diag = {"included": True,
                         "n_junctions": len(sanres.network.junctions),
                         "n_conduits": len(sanres.network.conduits)}
+            # ADR 0031: a sanitary network with no inflow is a drawing, not a model. Derive
+            # the service areas and load them, on the SAN_-prefixed subgraph so the areas
+            # address the grafted node names rather than the pre-merge ones.
+            service_areas, sa_diag = derive_service_areas(
+                filter_system(network, "sanitary"), land.get("parcels") or [], aoi,
+                laterals=land.get("sanitary_laterals") or land.get("laterals"),
+                crs=spec.sub_crs, buildings=land.get("buildings"))
+            loaded = load_service_areas(service_areas)
+            service_areas = loaded.areas
+            san_diag["service_areas"] = {**sa_diag, **loaded.diagnostics}
         except Exception as exc:  # noqa: BLE001 — additive system, degrade with a note
             san_diag = {"included": False, "reason": f"{type(exc).__name__}: {exc}"}
+            service_areas = []
 
     # Head done (network producer = the city adapter); the shared build spine does the rest.
     method = _method_descriptor(sub_diag)
@@ -677,6 +693,7 @@ def build_city(
         },
         climate_client=climate_client, climate_buffer_deg=climate_buffer_deg, report=report,
         sub_diag=sub_diag, dem=dem, water=water, design_storm=design_storm, network_kind="city",
+        service_areas=service_areas,
     )
 
 

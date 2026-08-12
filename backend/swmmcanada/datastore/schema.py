@@ -31,6 +31,10 @@ LAYER_JUNCTIONS = "junctions"
 LAYER_OUTFALLS = "outfalls"
 LAYER_CONDUITS = "conduits"
 LAYER_SUBCATCHMENTS = "subcatchments"
+#: Sewer service areas (ADR 0029/0031). A separate layer, not a flavour of the
+#: subcatchment layer: they carry wastewater loading to a node and must never be
+#: readable back as something the [SUBCATCHMENTS] writer would accept.
+LAYER_SERVICE_AREAS = "service_areas"
 
 # Non-geometry attribute columns per layer (geometry is carried separately by the GPKG).
 JUNCTION_FIELDS = ["name", "invert_m", "max_depth_m", "system"]
@@ -47,6 +51,16 @@ SUBCATCHMENT_FIELDS = [
     # switching method is a re-export, not a rebuild.
     "horton_f0_mm_h", "horton_fc_mm_h", "horton_decay_1_h",
     "ga_psi_mm", "ga_ksat_mm_h", "ga_imd",
+]
+
+SERVICE_AREA_FIELDS = [
+    "name", "node", "area_ha", "system",
+    # Loading evidence travels with the flow (ADR 0031) so a reader can tell a population
+    # count from an assumed density long after the build.
+    "population", "dwelling_units", "dwf_lps", "dwf_pattern",
+    # Geometry provenance and loading provenance are separate on purpose: an official
+    # boundary must not lend its authority to a handbook coefficient.
+    "geometry_source", "loading_source",
 ]
 
 # netCDF (CF) names. Rainfall, temperature, and evaporation are the climate-forcing triad

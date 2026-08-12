@@ -407,12 +407,13 @@ def build_model(
     tide: Optional["TideSeries"] = None,
     observed=None,
     aoi=None,
+    service_areas: Optional[List] = None,
 ) -> BuildResult:
     out_dir = Path(config.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     inp = assemble_inp(network, subcatchments, rain, config, evaporation=evaporation, tide=tide,
-                       temperature=temperature)
+                       temperature=temperature, service_areas=service_areas)
     inp_path = out_dir / "model.inp"
     inp.write_file(str(inp_path))
 

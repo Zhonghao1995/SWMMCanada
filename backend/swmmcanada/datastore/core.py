@@ -14,7 +14,7 @@ name ordering of junctions/conduits/subcatchments are preserved). ``build_from_d
 then proves the datastore is *sufficient* to build a model — it reads the datastore back
 and feeds it straight into ``build_model``.
 """
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import List, Optional
@@ -55,6 +55,9 @@ class ModelReadyDatastore:
     evaporation: Optional[EvaporationSeries] = None
     temperature: Optional[TemperatureSeries] = None
     tide: Optional[TideSeries] = None
+    #: Sewer service areas (ADR 0029/0031). Empty for storm-only builds and for every
+    #: datastore written before the layer existed.
+    service_areas: List = field(default_factory=list)
 
 
 # --------------------------------------------------------------------------- #
@@ -71,6 +74,7 @@ def write_datastore(
     evaporation: Optional[EvaporationSeries] = None,
     temperature: Optional[TemperatureSeries] = None,
     tide: Optional[TideSeries] = None,
+    service_areas: Optional[List] = None,
 ) -> Path:
     """Write the three carrier files into ``out_dir`` and return ``out_dir``.
 
@@ -81,7 +85,8 @@ def write_datastore(
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
 
-    _write_network_gpkg(out / schema.NETWORK_GPKG, network, subcatchments)
+    _write_network_gpkg(out / schema.NETWORK_GPKG, network, subcatchments,
+                        service_areas)
     _write_forcing_nc(out / schema.FORCING_NC, rain, evaporation, temperature, tide)
     _write_datastore_json(
         out / schema.DATASTORE_JSON, config, _with_forcing_provenance(provenance or {}, evaporation, temperature)
@@ -117,7 +122,8 @@ def _node_coords(network: NetworkIn) -> dict:
 
 
 def _write_network_gpkg(
-    path: Path, network: NetworkIn, subcatchments: List[SubcatchmentIn]
+    path: Path, network: NetworkIn, subcatchments: List[SubcatchmentIn],
+    service_areas: Optional[List] = None,
 ) -> None:
     coords = _node_coords(network)
 
@@ -187,6 +193,33 @@ def _write_network_gpkg(
     outfalls.to_file(path, layer=schema.LAYER_OUTFALLS, driver="GPKG")
     conduits.to_file(path, layer=schema.LAYER_CONDUITS, driver="GPKG")
     subs.to_file(path, layer=schema.LAYER_SUBCATCHMENTS, driver="GPKG")
+    _write_service_areas(path, service_areas)
+
+
+def _write_service_areas(path: Path, service_areas) -> None:
+    """Append the service-area layer (ADR 0029/0031).
+
+    Written only when there are any, so a storm-only datastore keeps exactly the layers it
+    had and older readers are unaffected — the same additive-read contract the `system`
+    column follows.
+    """
+    import geopandas as gpd
+    from shapely.geometry import Polygon
+
+    if not service_areas:
+        return
+    geoms = []
+    for a in service_areas:
+        if a.polygon and len(a.polygon) >= 4:
+            geoms.append(Polygon([(float(x), float(y)) for x, y in a.polygon],
+                                 holes=[[(float(x), float(y)) for x, y in h]
+                                        for h in (a.holes or [])]))
+        else:
+            geoms.append(None)
+    gdf = gpd.GeoDataFrame(
+        {f: [getattr(a, f) for a in service_areas] for f in schema.SERVICE_AREA_FIELDS},
+        geometry=geoms, crs=schema.CRS)
+    gdf.to_file(path, layer=schema.LAYER_SERVICE_AREAS, driver="GPKG")
 
 
 def _write_forcing_nc(
@@ -277,6 +310,7 @@ def read_datastore(path) -> ModelReadyDatastore:
                 f"({schema.DATASTORE_VERSION}); refusing to blind-read")
     network = _read_network(base / schema.NETWORK_GPKG)
     subcatchments = _read_subcatchments(base / schema.NETWORK_GPKG)
+    service_areas = _read_service_areas(base / schema.NETWORK_GPKG)
     rain = _read_forcing(base / schema.FORCING_NC)
     evaporation = _read_evaporation(base / schema.FORCING_NC)
     temperature = _read_temperature(base / schema.FORCING_NC)
@@ -291,6 +325,7 @@ def read_datastore(path) -> ModelReadyDatastore:
         evaporation=evaporation,
         temperature=temperature,
         tide=tide,
+        service_areas=service_areas,
     )
 
 
@@ -396,6 +431,50 @@ def _polygon_from_geometry(geom) -> Optional[List[tuple]]:
     return [(float(x), float(y)) for x, y in coords]
 
 
+def _opt_num(row, key):
+    """NaN-safe optional float from a GeoDataFrame row (GPKG stores missing as NaN)."""
+    v = row.get(key)
+    return float(v) if v is not None and v == v else None
+
+
+def _read_service_areas(gpkg: Path) -> List:
+    """Read back the service-area layer, or an empty list when a datastore predates it.
+
+    Absence is normal, not an error: storm-only builds never write the layer, and every
+    datastore written before ADR 0031 lacks it. Returning [] keeps those readable, which is
+    the same additive contract the `system` column follows.
+    """
+    from swmmcanada.build.models import SewerServiceArea
+
+    try:
+        names = set(gpd.list_layers(gpkg)["name"])
+    except Exception:  # noqa: BLE001 — an unreadable layer list is "no layer"
+        return []
+    if schema.LAYER_SERVICE_AREAS not in names:
+        return []
+    gdf = gpd.read_file(gpkg, layer=schema.LAYER_SERVICE_AREAS)
+    out = []
+    for _, r in gdf.iterrows():
+        geom = r.geometry
+        polygon = ([(float(x), float(y)) for x, y in geom.exterior.coords]
+                   if geom is not None and not geom.is_empty else None)
+        holes = ([[(float(x), float(y)) for x, y in ring.coords]
+                  for ring in geom.interiors] if polygon else None) or None
+        out.append(SewerServiceArea(
+            name=str(r["name"]), node=str(r["node"]), area_ha=float(r["area_ha"]),
+            system=str(r["system"]), polygon=polygon, holes=holes,
+            population=_opt_num(r, "population"),
+            dwelling_units=(int(r["dwelling_units"])
+                            if r.get("dwelling_units") is not None
+                            and not pd.isna(r["dwelling_units"]) else None),
+            dwf_lps=_opt_num(r, "dwf_lps"),
+            dwf_pattern=(str(r["dwf_pattern"]) if r.get("dwf_pattern") is not None
+                         and not pd.isna(r["dwf_pattern"]) else None),
+            geometry_source=str(r["geometry_source"]),
+            loading_source=str(r["loading_source"])))
+    return out
+
+
 def _read_forcing(nc: Path) -> RainfallSeries:
     ds = xr.open_dataset(nc)
     try:
@@ -483,6 +562,7 @@ def build_from_datastore(datastore_dir, out_dir) -> BuildResult:
     return build_model(
         network=ds.network,
         subcatchments=ds.subcatchments,
+        service_areas=ds.service_areas,
         rain=ds.rain,
         config=config,
         evaporation=ds.evaporation,
