@@ -12,6 +12,7 @@ from swmmcanada.network import synth as SY
 from swmmcanada.network.water import (
     WATER_CLASS, nodes_near_water, subtract_water, thin_by_spacing, water_union,
 )
+from swmmcanada.validate import schema
 
 
 class _Aoi:
@@ -154,7 +155,7 @@ def test_validation_coverage_discounts_water(tmp_path):
         outfalls=[OutfallIn("O", 9, -123.39, 48.42)],
         conduits=[ConduitIn("C1", "JW", "O", 10.0), ConduitIn("C2", "JE", "JW", 10.0)],
     )
-    method = MethodDescriptor("junction_voronoi", "nearest node service area", "low")
+    method = MethodDescriptor(schema.METHOD_JUNCTION_VORONOI, "nearest node service area", "low")
 
     without = validate_model(net, subs, aoi, method=method)
     with_water = validate_model(net, subs, aoi, method=method, water=water)

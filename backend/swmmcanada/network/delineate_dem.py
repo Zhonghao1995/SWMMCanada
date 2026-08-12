@@ -26,7 +26,7 @@ from swmmcanada.network.subcatchments import _AREA_CRS, SubcatchmentCell, _large
 from swmmcanada.network.synth import NetworkConfig, _build_subcatchments
 
 METHOD_DEM = "junction_dem"
-METHOD_VORONOI = "junction_voronoi"
+from swmmcanada.validate.schema import METHOD_JUNCTION_VORONOI as METHOD_VORONOI
 
 
 @dataclass(frozen=True)

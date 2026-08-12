@@ -65,10 +65,12 @@ def _method_descriptor(sub_diag: Optional[dict]) -> MethodDescriptor:
     if "parcel-shaped" in method:
         return MethodDescriptor("catchbasin_parcel", "nearest inlet service area", "medium")
     if "voronoi-shaped" in method:
-        return MethodDescriptor("catchbasin_voronoi", "nearest inlet service area", "low")
+        return MethodDescriptor(vschema.METHOD_CATCHBASIN_VORONOI,
+                                "nearest inlet service area", "low")
     if method == "junction_dem":
         return MethodDescriptor("junction_dem", "DEM D8 basins to manholes", "medium")
-    return MethodDescriptor("junction_voronoi", "nearest node service area", "low")
+    return MethodDescriptor(vschema.METHOD_JUNCTION_VORONOI,
+                            "nearest node service area", "low")
 
 
 def _infiltration_kwargs(infiltration) -> dict:
@@ -575,7 +577,8 @@ def _plan_delineation(spec, bbox, client, network, derive: bool, subcatchment_me
         # decision, so it is recorded in the same shape. The land fetch is skipped: the plan
         # is already fixed, and paying for evidence nobody will read is waste.
         return {}, DelineationPlan(
-            method="junction_voronoi", boundary="aoi", anchors="junction",
+            method=vschema.METHOD_JUNCTION_VORONOI, boundary="aoi",
+            anchors="junction",
             shaping="voronoi", confidence="low",
             reason=f"caller override subcatchment_method={subcatchment_method!r}",
             gates={"caller_override": True}, evidence={})

@@ -29,6 +29,9 @@ omission: only paths with data get built.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+
+from swmmcanada.validate.schema import (METHOD_CATCHBASIN_VORONOI,
+                                        METHOD_JUNCTION_VORONOI)
 from typing import Dict, Optional
 
 #: Shaping strategies, coarsest last. Names are the honest, controlled vocabulary that
@@ -116,7 +119,7 @@ def resolve(evidence: Evidence) -> DelineationPlan:
                     f"real inlets"))
     if has_inlets:
         return DelineationPlan(
-            method="catchbasin_voronoi", boundary=boundary, anchors=CATCH_BASIN,
+            method=METHOD_CATCHBASIN_VORONOI, boundary=boundary, anchors=CATCH_BASIN,
             shaping=VORONOI, gates=gates, evidence=ev, confidence="low",
             reason=(f"{evidence.n_catchbasins} inlets but no parcels or buildings "
                     f"published for this AOI: seeds are real, the division between them "
@@ -128,7 +131,8 @@ def resolve(evidence: Evidence) -> DelineationPlan:
             reason=("no inlet data for this AOI; a DEM is available, so basins follow "
                     "terrain to the manholes (subject to the terrain honesty gate)"))
     return DelineationPlan(
-        method="junction_voronoi", boundary=boundary, anchors=JUNCTION, shaping=VORONOI,
+        method=METHOD_JUNCTION_VORONOI, boundary=boundary, anchors=JUNCTION,
+        shaping=VORONOI,
         gates=gates, evidence=ev, confidence="low",
         reason=("no inlet data and no DEM for this AOI: land is assigned to the nearest "
                 "node. Geometric, not hydrological — the honest floor, not a delineation"))

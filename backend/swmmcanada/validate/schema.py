@@ -15,8 +15,12 @@ WARNING = "warning"    # runs, but the user should know it's approximate
 # --- controlled method vocabulary (honest labelling) --------------------------
 # Produced today:
 METHOD_CATCHBASIN_PARCEL = "catchbasin_parcel"      # real inlets, parcel-shaped (Victoria)
-METHOD_CATCHBASIN_VORONOI = "catchbasin_voronoi"    # real inlets, Voronoi (Ottawa)
-METHOD_JUNCTION_VORONOI = "junction_voronoi"        # synthesized / fallback
+# The two Voronoi entries are named as fallbacks on purpose (规划书 §3 Level 5). This label
+# travels into provenance and the result package, where someone decides how much to trust
+# the model, and "voronoi" reads to a hydrologist as a technique. It is not one: assigning
+# land to whichever node is nearest is what happens when there is nothing to delineate with.
+METHOD_CATCHBASIN_VORONOI = "fallback_voronoi_catchbasin"  # real inlets, geometric division
+METHOD_JUNCTION_VORONOI = "fallback_voronoi_junction"      # no inlets, no DEM
 METHOD_JUNCTION_DEM = "junction_dem"                # DEM D8 basins to manholes (ADR 0010)
 # Reserved for future methods (not produced yet):
 METHOD_MUNICIPAL_POLYGON = "municipal_polygon"      # city-published catchment polygons

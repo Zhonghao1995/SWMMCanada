@@ -2,6 +2,7 @@
 import pytest
 
 from swmmcanada.delineation import DelineationPlan, Evidence, resolve
+from swmmcanada.validate import schema
 
 
 class TestChoices:
@@ -11,7 +12,7 @@ class TestChoices:
 
     def test_inlets_without_land_stay_seeded_but_geometric(self):
         p = resolve(Evidence(n_catchbasins=1200))
-        assert p.method == "catchbasin_voronoi" and p.anchors == "catch_basin"
+        assert p.method == schema.METHOD_CATCHBASIN_VORONOI and p.anchors == "catch_basin"
 
     def test_no_inlets_with_a_dem_goes_to_terrain(self):
         p = resolve(Evidence(n_junctions=400, dem_available=True))
@@ -19,7 +20,7 @@ class TestChoices:
 
     def test_no_inlets_no_dem_is_the_honest_floor(self):
         p = resolve(Evidence(n_junctions=400))
-        assert p.method == "junction_voronoi" and p.confidence == "low"
+        assert p.method == schema.METHOD_JUNCTION_VORONOI and p.confidence == "low"
 
     def test_buildings_alone_count_as_land(self):
         """Ottawa publishes buildings but no parcels; that is still real land evidence."""
@@ -27,7 +28,7 @@ class TestChoices:
         assert p.method == "catchbasin_parcel"
 
     def test_resolve_is_total(self):
-        assert resolve(Evidence()).method == "junction_voronoi"
+        assert resolve(Evidence()).method == schema.METHOD_JUNCTION_VORONOI
 
 
 class TestEvidenceIsRuntimeNotCityLevel:
@@ -129,4 +130,4 @@ class TestPipelineSeam:
         _, plan = _plan_delineation(spec, (0, 0, 1, 1), None, self.FakeNetwork(),
                                     derive=False, subcatchment_method="parcel")
         assert plan.evidence["n_junctions"] == 42
-        assert plan.method == "junction_voronoi"
+        assert plan.method == schema.METHOD_JUNCTION_VORONOI

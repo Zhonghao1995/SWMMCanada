@@ -15,6 +15,7 @@ from swmmcanada.network.delineate_dem import (
     _burn_streets,
     delineate_junction_subcatchments,
 )
+from swmmcanada.validate import schema
 
 DEM_CRS = "EPSG:32618"
 RES = 10.0
@@ -137,7 +138,7 @@ def test_flat_dem_falls_back_to_voronoi_with_reading(tmp_path):
     subs, diag = delineate_junction_subcatchments(
         _valley_junctions(), AOI, dem_path=dem, config=CFG)
 
-    assert diag["method"] == "junction_voronoi"
+    assert diag["method"] == schema.METHOD_JUNCTION_VORONOI
     assert diag["gate"]["decision"] == "below_slope_gate"
     assert diag["gate"]["median_slope_pct"] < 1.0        # the reading is recorded
     assert diag["gate"]["threshold_pct"] == 3.0
@@ -146,7 +147,7 @@ def test_flat_dem_falls_back_to_voronoi_with_reading(tmp_path):
 
 def test_no_dem_falls_back_with_reason():
     subs, diag = delineate_junction_subcatchments(_valley_junctions(), AOI, dem_path=None, config=CFG)
-    assert diag["method"] == "junction_voronoi"
+    assert diag["method"] == schema.METHOD_JUNCTION_VORONOI
     assert diag["gate"]["decision"] == "no_dem"
     assert len(subs) == 2
 
@@ -159,7 +160,7 @@ def test_partial_dem_trips_posterior_gate(tmp_path):
         {"JW": _valley_junctions()["JW"]} | {"JE": _valley_junctions()["JE"]},
         AOI, dem_path=dem, config=CFG)
 
-    assert diag["method"] == "junction_voronoi"
+    assert diag["method"] == schema.METHOD_JUNCTION_VORONOI
     assert diag["gate"]["decision"] in ("posterior_fallback", "dem_degenerate")
     if diag["gate"]["decision"] == "posterior_fallback":
         assert "aoi_coverage" in diag["gate"]["posterior_errors"]
@@ -249,7 +250,7 @@ def test_fine_posting_still_gates_flat_ground(tmp_path):
     subs, diag = delineate_junction_subcatchments(_junctions_1m(), _aoi_1m(), dem_path=dem)
     assert diag["gate"]["threshold_pct"] == 1.0
     assert diag["gate"]["decision"] == "below_slope_gate"
-    assert diag["method"] == "junction_voronoi"
+    assert diag["method"] == schema.METHOD_JUNCTION_VORONOI
 
 
 def test_coarse_posting_keeps_calibrated_threshold(tmp_path):

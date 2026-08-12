@@ -19,6 +19,7 @@ from swmmcanada.geo import aoi_from_geojson
 from swmmcanada.sources.cities import base
 from swmmcanada.sources.cities.regina import build_regina_network
 from swmmcanada.validate import MethodDescriptor, validate_model
+from swmmcanada.validate import schema
 
 FIX = Path(__file__).resolve().parent / "fixtures" / "regina"
 
@@ -83,7 +84,7 @@ def test_validation_scopes_node_checks_to_storm():
                            polygon=[(-104.625, 50.435), (-104.605, 50.435),
                                     (-104.605, 50.445), (-104.625, 50.445)])]
     r = validate_model(_merged(), subs, aoi,
-                       method=MethodDescriptor("junction_voronoi", "x", "low"))
+                       method=MethodDescriptor(schema.METHOD_JUNCTION_VORONOI, "x", "low"))
     node_cov = {c.id: c for c in r.checks}["node_coverage"]
     assert not any("SAN_" in n for n in node_cov.metrics.get("sample", []))
     d = r.to_dict()

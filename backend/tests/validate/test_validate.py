@@ -6,6 +6,7 @@ hand-built models, not the internal merge steps.
 from swmmcanada.build.models import ConduitIn, JunctionIn, NetworkIn, OutfallIn, SurfaceCatchment
 from swmmcanada.geo import aoi_from_geojson
 from swmmcanada.validate import MethodDescriptor, validate_model
+from swmmcanada.validate import schema
 
 # ~0.13 km² box (under the AOI cap), split by lon -123.370 into a left/right half.
 AOI = aoi_from_geojson({"type": "Polygon", "coordinates": [[
@@ -13,7 +14,7 @@ AOI = aoi_from_geojson({"type": "Polygon", "coordinates": [[
 NET = NetworkIn(
     junctions=[JunctionIn("J1", 10.0, -123.371, 48.420), JunctionIn("J2", 9.0, -123.369, 48.420)],
     outfalls=[], conduits=[])
-METHOD = MethodDescriptor("catchbasin_voronoi", "nearest inlet service area", "low")
+METHOD = MethodDescriptor(schema.METHOD_CATCHBASIN_VORONOI, "nearest inlet service area", "low")
 HALF_HA = AOI.area_km2 * 1e6 / 2 / 1e4          # area of one half, in hectares
 
 
@@ -176,7 +177,7 @@ def test_adverse_conduit_with_a_falling_sibling_is_not_a_pit():
 
 def test_to_dict_shape():
     d = validate_model(NET, _clean_subs(), AOI, method=METHOD).to_dict()
-    assert d["validation_version"] and d["subcatchment_method"] == "catchbasin_voronoi"
+    assert d["validation_version"] and d["subcatchment_method"] == schema.METHOD_CATCHBASIN_VORONOI
     assert d["ok"] is True
     assert d["summary"]["n_subcatchments"] == 2
     assert {"id", "severity", "passed", "message", "metrics"} <= set(d["checks"][0])

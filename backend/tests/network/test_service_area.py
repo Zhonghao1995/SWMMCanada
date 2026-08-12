@@ -9,6 +9,7 @@ from swmmcanada.network.delineate_dem import delineate_junction_subcatchments
 from swmmcanada.network.service_area import (
     block_aware_service_area, merge_slivers, street_service_corridor,
 )
+from swmmcanada.validate import schema
 
 
 class _Aoi:
@@ -55,7 +56,7 @@ def test_voronoi_cells_confined_to_corridor():
     corridor = street_service_corridor(streets, aoi)
     jxy = {str(n): (d["x"], d["y"]) for n, d in streets.nodes(data=True)}
     subs, diag = delineate_junction_subcatchments(jxy, aoi, service_mask=corridor)
-    assert diag["method"] == "junction_voronoi" and diag["service"]["applied"]
+    assert diag["method"] == schema.METHOD_JUNCTION_VORONOI and diag["service"]["applied"]
     for s in subs:
         if not s.polygon:
             continue

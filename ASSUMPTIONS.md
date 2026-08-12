@@ -125,6 +125,25 @@ Outside these cities, the network itself is 🟠 synthesized from OpenStreetMap 
 > auto-built model, however real its inputs. Calibrate against gauged flow (e.g. ECCC HYDAT)
 > before using results for design or decisions.
 
+## What a method label is telling you
+
+The delineation method travels with every model, and it is the shortest honest answer to
+"how much should I trust these boundaries". Two of the labels were misleading and have been
+renamed:
+
+| Label | What produced the boundaries |
+|---|---|
+| `catchbasin_parcel` | real inlets, real lot lines and roofs |
+| `junction_dem` | terrain, D8 flow paths to manholes |
+| `fallback_voronoi_catchbasin` | real inlets, **geometric** division between them |
+| `fallback_voronoi_junction` | **nothing** to delineate with: land goes to the nearest node |
+
+"Voronoi" reads to a hydrologist as a technique. It is not one here. Assigning land to
+whichever node happens to be nearest is what the code does when it has no inlets, no lot
+lines and no usable terrain, and the name now says so rather than dressing an absence of
+data as a method. The two renamed entries keep their `low` confidence — this is a
+relabelling, not a demotion, because they were always the floor.
+
 ## Subcatchment width: a flow length, not a square root
 
 SWMM's width is area divided by the distance water travels overland. `sqrt(area)` is that
