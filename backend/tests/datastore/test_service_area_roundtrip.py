@@ -93,3 +93,29 @@ class TestReachesTheModel:
         path = _write(tmp_path, [])
         result = build_from_datastore(path, tmp_path / "out")
         assert "[DWF]" not in (tmp_path / "out" / result.inp_path.name).read_text()
+
+
+class TestSynthesisedOutfallMarkerSurvives:
+    """ADR 0007: the .inp is built from the datastore, so a marker that does not round-trip
+    never reaches anything downstream. Victoria's sanitary system is 19 invented outfalls
+    out of 19 — losing the marker there would present every one of them as published."""
+
+    def _net_with_marked_outfall(self):
+        return NetworkIn(
+            junctions=[JunctionIn("J1", 10.0, -123.365, 48.425)],
+            outfalls=[OutfallIn("REAL", 8.0, -123.361, 48.428),
+                      OutfallIn("OUT_J1", 7.0, -123.362, 48.429, synthesised=True)],
+            conduits=[ConduitIn("C1", "J1", "REAL", 50.0),
+                      ConduitIn("C2", "J1", "OUT_J1", 50.0)])
+
+    def test_the_marker_round_trips(self, tmp_path):
+        from datetime import date, datetime, timedelta
+
+        t0 = datetime(2024, 6, 1)
+        rain = RainfallSeries([t0 + timedelta(hours=i) for i in range(6)], [0.0] * 6)
+        cfg = BuildConfig(out_dir=tmp_path / "b", start=date(2024, 6, 1), end=date(2024, 6, 2))
+        write_datastore(tmp_path / "ds", network=self._net_with_marked_outfall(),
+                        subcatchments=[], rain=rain, config=cfg)
+        back = {o.name: o for o in read_datastore(tmp_path / "ds").network.outfalls}
+        assert back["OUT_J1"].synthesised is True
+        assert back["REAL"].synthesised is False

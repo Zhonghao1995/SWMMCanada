@@ -25,8 +25,13 @@ class OutfallIn:
     invert_m: float
     x: float
     y: float
-    kind: str = "FREE"
+    kind: str = "FREE"     # SWMM boundary condition: FREE | NORMAL | FIXED | TIDAL
     system: str = "storm_minor"
+    #: True when this outfall is a modelling boundary we invented because the city
+    #: published none for that component — not a structure that exists. Kept separate from
+    #: `kind`, which is the hydraulic boundary condition SWMM applies. An invented outfall
+    #: that looks published passes validation quietly and then gets used.
+    synthesised: bool = False
 
 
 @dataclass(frozen=True)

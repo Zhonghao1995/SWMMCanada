@@ -509,11 +509,16 @@ def assemble_network(
         ))
 
     outfalls = [OutfallIn(name=nid(k), invert_m=node_inv[k], x=node_xy[k][0], y=node_xy[k][1]) for k in direct]
+    # A component the city published no outfall for still needs somewhere to drain, so its
+    # lowest node is promoted into one. That outfall is a MODELLING BOUNDARY, not a
+    # structure that exists, and it is marked as such: Victoria's sanitary fixture gets 19
+    # of these and every "outfall" in that system is invented. An invented outfall that
+    # looks published passes validation quietly and is then used as if it were real.
     for k in dedicated:
         oname = f"OUT_{nid(k)}"
         outfalls.append(OutfallIn(
             name=oname, invert_m=node_inv[k] - config.min_slope * config.outfall_link_len_m,
-            x=node_xy[k][0] + 1e-4, y=node_xy[k][1]))
+            x=node_xy[k][0] + 1e-4, y=node_xy[k][1], synthesised=True))
         conduits.append(ConduitIn(
             name=f"C_{oname}", from_node=nid(k), to_node=oname,
             length_m=config.outfall_link_len_m, diameter_m=config.default_diameter_m,

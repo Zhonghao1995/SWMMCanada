@@ -231,6 +231,22 @@ empty. Without measured wet-weather sewer flow the RTK unit-hydrograph parameter
 be invented, and an invented wet-weather response is a worse failure than an honest gap —
 it would look like the answer to the question combined and I&I studies actually ask.
 
+## Invented outfalls: how many of a model's destinations are real
+
+Where a city publishes no outfall for a drainage component, the assembler promotes that
+component's lowest node into one so the water has somewhere to go. This has always
+happened, for every city and every system; what is new is that those outfalls now **say so**
+(`synthesised = true`) instead of being indistinguishable from published structures.
+
+The scale is easy to underestimate. Victoria publishes **zero** sanitary outfalls, so all
+**19** destinations in its sanitary system are modelling boundaries. A missing destination
+fails validation loudly; an invented one that looks published passes quietly and is then
+used as if it were real. That is the failure this marker exists to prevent.
+
+Reading a result: an outfall marked synthesised is a place where water leaves the model, not
+a structure you can go and look at. Its invert is the component's lowest node minus a
+nominal drop, and it carries no boundary behaviour beyond free discharge.
+
 ## Wastewater terminal outlets (ADR 0029 Q4)
 
 A combined sewer has two real destinations: dry weather leaves through an interceptor to

@@ -38,7 +38,11 @@ LAYER_SERVICE_AREAS = "service_areas"
 
 # Non-geometry attribute columns per layer (geometry is carried separately by the GPKG).
 JUNCTION_FIELDS = ["name", "invert_m", "max_depth_m", "system"]
-OUTFALL_FIELDS = ["name", "invert_m", "kind", "system"]
+#: `synthesised` marks an outfall the assembler invented for a component the city
+#: published none for. Build-consumed (ADR 0007 parity applies): a marker that does
+#: not round-trip never reaches the model, and Victoria's sanitary system is 19
+#: invented outfalls out of 19 — losing it there presents every one as published.
+OUTFALL_FIELDS = ["name", "invert_m", "kind", "system", "synthesised"]
 CONDUIT_FIELDS = [
     "name", "from_node", "to_node", "length_m", "diameter_m", "roughness_n", "system",
     # 1.1 (#130): drop-structure offsets + real cross-sections

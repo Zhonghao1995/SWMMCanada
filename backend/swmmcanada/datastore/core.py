@@ -143,6 +143,7 @@ def _write_network_gpkg(
             "name": [o.name for o in network.outfalls],
             "invert_m": [float(o.invert_m) for o in network.outfalls],
             "kind": [o.kind for o in network.outfalls],
+            "synthesised": [bool(o.synthesised) for o in network.outfalls],
             "system": [o.system for o in network.outfalls],
         },
         geometry=[Point(float(o.x), float(o.y)) for o in network.outfalls],
@@ -352,6 +353,9 @@ def _read_network(gpkg: Path) -> NetworkIn:
             y=float(geom.y),
             kind=str(r["kind"]),
             system=str(r.get("system") or "storm_minor"),
+            # Older datastores predate the marker; absent means "not known to be invented",
+            # which is the safe reading — it never upgrades a boundary to published.
+            synthesised=bool(r.get("synthesised") or False),
         )
         for geom, r in zip(odf.geometry, odf.to_dict("records"))
     ]
