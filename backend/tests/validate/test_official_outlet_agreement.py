@@ -124,3 +124,49 @@ class TestDownstreamTracing:
                                             outlet_field="OUTLET")
         assert diag["n_reaches_no_outfall"] == 1
         assert diag["n_comparable"] == 0
+
+
+class TestUnitsLeavingTheExtractAreNotScored:
+    """Measured on the Victoria fixture the raw rate came out at 3.8%, and every
+    disagreement pointed at an `OUT_`-prefixed boundary the assembler invented. That is not
+    bad routing: a synthesised outfall means the network left the extract before reaching
+    its real destination, so the comparison never happened. Reporting it as 3.8% correct
+    would be badly misleading — the number would look like a quality measure and be an
+    artefact of the clip.
+    """
+
+    def _net_with_boundary(self):
+        return NetworkIn(
+            junctions=[JunctionIn("J1", 9.0, -123.3675, 48.425)],
+            outfalls=[OutfallIn("OUT_J1", 8.0, -123.368, 48.425, synthesised=True)],
+            conduits=[ConduitIn("C1", "J1", "OUT_J1", 50.0)])
+
+    def test_reaching_an_invented_boundary_is_excluded_not_a_disagreement(self):
+        rate, diag = official_outlet_agreement(
+            [_unit("S1", "J1", RING_W)], self._net_with_boundary(),
+            [_official(RING_W, "DOF007020")], outlet_field="OUTLET")
+        assert diag["n_left_extract"] == 1
+        assert diag["n_disagree"] == 0
+        assert rate is None, "nothing was comparable, so there is no rate to report"
+
+    def test_a_real_outfall_is_still_scored(self):
+        rate, diag = official_outlet_agreement(
+            [_unit("S1", "J1", RING_W)], _network(),
+            [_official(RING_W, "OUT_WEST")], outlet_field="OUTLET")
+        assert diag["n_left_extract"] == 0 and rate == 1.0
+
+    def test_the_diagnostics_say_the_rate_covers_only_part_of_the_model(self):
+        """A rate computed on a fraction of the units must carry that fraction with it."""
+        units = [_unit("S1", "J1", RING_W), _unit("S2", "J2", RING_E)]
+        net = NetworkIn(
+            junctions=[JunctionIn("J1", 9.0, -123.3675, 48.425),
+                       JunctionIn("J2", 9.0, -123.3625, 48.425)],
+            outfalls=[OutfallIn("OUT_WEST", 5.0, -123.3695, 48.425),
+                      OutfallIn("OUT_J2", 5.0, -123.3605, 48.425, synthesised=True)],
+            conduits=[ConduitIn("C1", "J1", "OUT_WEST", 100.0),
+                      ConduitIn("C2", "J2", "OUT_J2", 100.0)])
+        rate, diag = official_outlet_agreement(
+            units, net, [_official(RING_W, "OUT_WEST"), _official(RING_E, "OUT_J2")],
+            outlet_field="OUTLET")
+        assert rate == 1.0
+        assert diag["pct_of_units_scored"] == pytest.approx(50.0)

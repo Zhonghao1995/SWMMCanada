@@ -231,6 +231,28 @@ empty. Without measured wet-weather sewer flow the RTK unit-hydrograph parameter
 be invented, and an invented wet-weather response is a worse failure than an honest gap —
 it would look like the answer to the question combined and I&I studies actually ask.
 
+## How well our outlet resolution matches the city's own (Victoria, 2026-08-12)
+
+Municipal catchment polygons declare which outfall each area drains to. We do not read that
+field — it lives in the city's id space and most of the fleet infers topology geometrically
+— so we resolve outlets ourselves and use the declaration as a yardstick.
+
+**Victoria: 80.3% agreement over 1,185 comparable units, 62.9% of the model.** Every
+disagreement lands on an *adjacent* published outfall rather than somewhere unrelated, which
+is the residual this method is expected to have: two neighbouring drainage areas differ near
+their shared boundary, not wholesale.
+
+The coverage figure matters as much as the rate. Units are excluded, and counted separately,
+when they drain to an invented boundary (357 — their real destination is outside the AOI),
+reach no outfall at all (237 — a connectivity fault reported in its own right), fall outside
+every official polygon (63), or are sent to an outfall outside the extract (8). Without that
+exclusion the same method reported 3.8% on a clipped extract, with every "disagreement"
+pointing at a boundary we had invented ourselves — a number that looks like a quality measure
+and is an artefact of the clip.
+
+Only Victoria publishes both the polygons and a joinable outlet key, so this is one city's
+number, not the fleet's.
+
 ## Invented outfalls: how many of a model's destinations are real
 
 Where a city publishes no outfall for a drainage component, the assembler promotes that

@@ -75,3 +75,21 @@ class TestFleetFacts:
 
     def test_the_lateral_city_count_is_quoted(self, doc):
         assert "16 of the fleet" in doc
+
+
+class TestOutletAgreementResult:
+    """The published rate is a measurement, so the document must carry the sample size with
+    it. A rate without its coverage reads as a whole-model figure."""
+
+    def test_the_rate_and_its_coverage_are_both_stated(self, doc):
+        assert "80.3% agreement" in doc
+        assert "1,185 comparable units" in doc
+        assert "62.9% of the model" in doc
+
+    def test_the_misleading_first_reading_is_recorded(self, doc):
+        """Keeping the 3.8% in the document is the point: it shows why the exclusion exists
+        rather than leaving it as an unexplained rule."""
+        assert "3.8%" in doc and "artefact of the clip" in doc
+
+    def test_it_is_scoped_to_one_city(self, doc):
+        assert "one city's number, not the fleet's" in doc

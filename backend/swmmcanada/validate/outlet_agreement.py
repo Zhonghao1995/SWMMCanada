@@ -76,7 +76,11 @@ def official_outlet_agreement(
             continue
 
     known_outfalls = {o.name for o in network.outfalls}
-    n_agree = n_outside = n_no_geom = n_unknown = n_no_outfall = 0
+    # Outfalls the assembler invented because the real one lies outside this extract. A unit
+    # ending at one has not been routed wrongly — it has not been routed all the way, and
+    # comparing it against a declared destination scores the clip, not the model.
+    invented = {o.name for o in network.outfalls if getattr(o, "synthesised", False)}
+    n_agree = n_outside = n_no_geom = n_unknown = n_no_outfall = n_left = 0
     disagreements: List[Dict] = []
 
     for sub in subcatchments:
@@ -98,6 +102,9 @@ def official_outlet_agreement(
         if ours is None:
             n_no_outfall += 1
             continue
+        if ours in invented:
+            n_left += 1
+            continue
         if match not in known_outfalls:
             n_unknown += 1
             continue
@@ -108,8 +115,12 @@ def official_outlet_agreement(
 
     n_comparable = n_agree + len(disagreements)
     rate = (n_agree / n_comparable) if n_comparable else None
+    n_units = len(subcatchments)
     return rate, {
         "n_comparable": n_comparable,
+        # A rate computed on a fraction of the model must carry that fraction with it,
+        # or a high number on three units reads like a high number on the whole city.
+        "pct_of_units_scored": (round(100.0 * n_comparable / n_units, 1) if n_units else 0.0),
         "n_agree": n_agree,
         "n_disagree": len(disagreements),
         "disagreements": disagreements[:20],
@@ -119,8 +130,11 @@ def official_outlet_agreement(
         "n_no_geometry": n_no_geom,
         "n_declared_outlet_unknown": n_unknown,
         "n_reaches_no_outfall": n_no_outfall,
+        "n_left_extract": n_left,
         "outlet_field": outlet_field,
         "reason": ("" if n_comparable else
                    "no unit could be compared: the official polygons cover none of them, "
-                   "or the outfalls they name are outside this extract"),
+                   "the outfalls they name are outside this extract, or every unit drains "
+                   "to a boundary the assembler invented because its real destination lies "
+                   "outside the AOI"),
     }
