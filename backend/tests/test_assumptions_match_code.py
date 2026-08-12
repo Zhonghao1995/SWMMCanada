@@ -92,4 +92,7 @@ class TestOutletAgreementResult:
         assert "3.8%" in doc and "artefact of the clip" in doc
 
     def test_it_is_scoped_to_one_city(self, doc):
-        assert "one city's number, not the fleet's" in doc
+        # Whitespace-normalised: the sentence wraps, and a line break must not be able to
+        # make a claim about scope silently untestable.
+        flat = " ".join(doc.split())
+        assert "one city's number, not the fleet's" in flat
