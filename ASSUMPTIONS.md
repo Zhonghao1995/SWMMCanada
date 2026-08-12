@@ -195,3 +195,77 @@ pipeline uses, now stated explicitly rather than left implicit in the code:
   snaps to it. That erases in-chamber falls at 85% of its structures; peer cities that
   publish per-end inverts put the erased fall at a median 0.02–0.11 m (p75 0.13–0.53 m).
   Reykjavík profiles are smooth by construction.
+
+## Wastewater loading: dry-weather flow (ADR 0031, #12)
+
+The sanitary system carried pipes and manholes and no water until now. It carries flow
+because a service area was drawn and a coefficient was applied to it — and **the coefficient
+is the accuracy ceiling, not the drawing**. Splitting a city into thousands of service areas
+and multiplying each by a handbook number does not make the answer more accurate; it makes a
+very fine polygon times a guess. Every number below is 🟠 until a city's measured plant
+influent replaces it.
+
+- **280 L per person per day** — average-day domestic sanitary flow, Canadian municipal
+  design practice. Carries roughly ±50 % until calibrated.
+- **2.4 persons per dwelling** — StatCan 2021 average household size, used where a city
+  publishes address points or dwelling counts.
+- **45 persons per hectare** — medium-density urban residential, used only where neither a
+  population nor a dwelling count is available. This is the floor of the ladder and every
+  build reports what share of its areas rest on it.
+- **Diurnal pattern** — a standard municipal 24-hour shape (overnight minimum ~0.28,
+  morning peak ~1.61), mean exactly 1.0 so it redistributes the average day without
+  changing its volume. A handbook shape until a city's own flow record replaces it.
+
+**Population is estimated on a ladder, and which rung answered is recorded**: published
+population → dwelling count × household size → area × assumed density. An area resting on
+assumed density stays distinguishable from one resting on a census count, the same
+discipline the invert gap-fill uses.
+
+**Geometry provenance and loading provenance are separate.** A service area can be taken
+verbatim from a municipal polygon (`geometry_source = official`) while the coefficient
+applied to it is a handbook number (`loading_source = synthetic`). One must not lend its
+authority to the other.
+
+**Wet-weather sewer response (RDII) is deliberately absent.** The interface exists and is
+empty. Without measured wet-weather sewer flow the RTK unit-hydrograph parameters can only
+be invented, and an invented wet-weather response is a worse failure than an honest gap —
+it would look like the answer to the question combined and I&I studies actually ask.
+
+## Wastewater terminal outlets (ADR 0029 Q4)
+
+A combined sewer has two real destinations: dry weather leaves through an interceptor to
+the treatment plant, storm weather overflows to a watercourse through a CSO.
+
+The fleet scan (2026-08-12) measured what is published: **no supported city publishes a CSO
+structure**, and two publish interceptors. So in nearly every build the wastewater system is
+terminated by a **synthetic interceptor / treatment-plant boundary outfall** — a node we
+invented, 0.5 m below the lowest node of its component, carrying no overflow behaviour and
+labelled `synthetic` in provenance.
+
+Two consequences to be aware of:
+
+- **CSO discharge is identically zero** in these models. There is no overflow structure, so
+  there is nothing to overflow through. A combined model here answers questions about
+  conveyance, not about overflow volumes.
+- **A wastewater system is never given a storm outfall.** Ottawa publishes 13 outfalls and
+  not one of them takes combined flow; reusing one would fabricate a destination the city
+  does not have and let the model answer questions about it.
+
+## Sewer service areas: what they are and are not (ADR 0029 Q1)
+
+A service area is **not a watershed**. Sewage reaches a pipe through a lateral connection,
+not by flowing over the ground, so a service-area boundary follows parcels and connections
+and may cross a topographic divide without anything being wrong. It never becomes a SWMM
+subcatchment; it becomes node loading.
+
+Seeds are chosen by evidence, best first, and the choice is recorded:
+
+- **Lateral endpoints** where a city publishes laterals (16 of the fleet do) — a lateral
+  states which property feeds which main. An endpoint more than 60 m from any node is
+  not treated as a connection to it: beyond a block width the pairing is a guess, and a
+  guessed connection routes a household to the wrong sewer.
+- **Manholes** otherwise — these say only where the network is, which is a weaker claim,
+  and the diagnostics say so.
+- Laterals that are published but never snap are reported **differently** from laterals that
+  were never published. The first usually means a city's lateral and main layers disagree
+  about where its network is.
