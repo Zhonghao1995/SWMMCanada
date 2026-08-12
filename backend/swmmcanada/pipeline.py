@@ -26,6 +26,7 @@ from swmmcanada.acquire.landcover import acquire_landcover
 from swmmcanada.acquire.soil import acquire_soil
 from swmmcanada.build import BuildConfig, BuildResult
 from swmmcanada.datastore import build_from_datastore, write_datastore
+from swmmcanada.delineation import DelineationPlan, Evidence, resolve
 from swmmcanada import result_package
 from swmmcanada.derive.core import derive_parameters
 from swmmcanada.geo.crs import utm_crs_for
@@ -455,6 +456,12 @@ def build_from_aoi(
     # mask keeps the nearest-street-segment frontage split shaping the cells; open water is
     # still carved out afterwards (ADR 0016 — lakes are receiving waters, not land).
     junction_xy = {j.name: (j.x, j.y) for j in synth.network.junctions}
+    # Synthesis has one family of options, but it goes through the resolver anyway
+    # (ADR 0029 Q11): a second place that picks a method is a second place the recorded
+    # reason can drift from the real one, and provenance must have the same shape on both
+    # build paths so a reader never has to know which one produced the model.
+    plan = resolve(Evidence(n_junctions=len(junction_xy), dem_available=dem is not None,
+                            system="storm"))
     subcatchments, sub_diag = delineate_junction_subcatchments(
         junction_xy, aoi, dem_path=dem.path, streets=streets,
         service_mask=aoi.geometry, min_cell_ha=MIN_CELL_HA)
@@ -507,6 +514,7 @@ def build_from_aoi(
         ws, aoi, network, subcatchments,
         start=start, end=end, method=method, config=config,
         extra_provenance={
+            "delineation_plan": plan.as_dict(),
             "sources": {
                 "dem": type(dem_source).__name__,
                 "climate": type(climate_client).__name__,
@@ -518,6 +526,33 @@ def build_from_aoi(
         climate_client=climate_client, climate_buffer_deg=climate_buffer_deg, report=report,
         sub_diag=sub_diag, dem=dem, water=water, served=None, design_storm=design_storm,
     )
+
+
+def _plan_delineation(spec, bbox, client, network, derive: bool, subcatchment_method: str):
+    """Fetch the land evidence and let the resolver choose. Returns ``(land, plan)``.
+
+    Extracted so the decision is testable without a full offline build: this is the seam
+    where ADR 0029 Q11 is either honoured or quietly broken, and it needs coverage that does
+    not depend on a DEM, a climate service and four open-data hosts being reachable.
+    """
+    if subcatchment_method != "parcel":
+        # An explicit caller override short-circuits the resolver — but it is still a
+        # decision, so it is recorded in the same shape. The land fetch is skipped: the plan
+        # is already fixed, and paying for evidence nobody will read is waste.
+        return {}, DelineationPlan(
+            method="junction_voronoi", boundary="aoi", anchors="junction",
+            shaping="voronoi", confidence="low",
+            reason=f"caller override subcatchment_method={subcatchment_method!r}",
+            gates={"caller_override": True}, evidence={})
+    land = spec.land(bbox, client)
+    return land, resolve(Evidence(
+        n_catchbasins=len(land.get("catchbasins") or []),
+        n_parcels=len(land.get("parcels") or []),
+        n_buildings=len(land.get("buildings") or []),
+        n_junctions=len(network.junctions),
+        dem_available=bool(derive),
+        city=spec.key, system="storm",
+    ))
 
 
 def build_city(
@@ -557,21 +592,25 @@ def build_city(
         base.SURFACE_SAMPLER.reset(_tok)
     network = netres.network
 
-    # Subcatchments: catch-basin + parcel/building (ADR 0005), else Voronoi-of-nodes fallback.
+    # Subcatchments. The RESOLVER is the sole method-selection entry point (ADR 0029
+    # Q10/Q11): it is handed what this AOI actually contains and returns a plan carrying the
+    # reason, gates and evidence. This function only executes that plan — it must not branch
+    # on data availability itself, or the decision splits across two places and the recorded
+    # reason stops being the real one.
     _r("SUBCATCHMENTS", 35)
     imperv_map: dict = {}
     sub_diag: dict = {}
-    if subcatchment_method == "parcel":
-        land = spec.land(bbox, client)
+    land, plan = _plan_delineation(spec, bbox, client, network, derive, subcatchment_method)
+
+    subcatchments = []
+    if plan.anchors == "catch_basin":
         subcatchments, imperv_map, sub_diag = base.delineate_catchbasin_subcatchments(
             network, land["catchbasins"], land["parcels"], land["buildings"], aoi, crs=spec.sub_crs
         )
-    else:
-        subcatchments = []
     dem = None
     water = None
     landcover = None
-    if not subcatchments:  # no catch-basin data -> junction delineation (DEM-gated, ADR 0010)
+    if not subcatchments:  # plan said junctions, or the inlet pass yielded nothing
         junction_xy = {j.name: (j.x, j.y) for j in network.junctions}
         if derive:  # the DEM is needed for derive anyway; without derive there is none → "no_dem"
             _r("ACQUIRING_DEM", 40)
@@ -633,6 +672,7 @@ def build_city(
             "city": spec.key, "network_source": spec.network_source,
             "network_diagnostics": netres.diagnostics,
             "subcatchment_diagnostics": sub_diag,
+            "delineation_plan": plan.as_dict(),
             "sanitary": san_diag,
         },
         climate_client=climate_client, climate_buffer_deg=climate_buffer_deg, report=report,
