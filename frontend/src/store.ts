@@ -23,6 +23,7 @@ interface AppState {
   infiltration: InfiltrationMethod // ADR 0013: pervious-area loss model for the build
   designStorm: DesignStormChoice | null // ADR 0018: null = historical observed rain (default)
   systems: DrainageSystem[] // ADR 0029: which systems the build includes
+  subcatchmentLayer: File | null // the user's own boundaries; overrides ours
   job: JobProgress
   preview: FeatureCollection | null // model geometry (network + subcatchments)
   forcing: ForcingInfo | null // rain tier/station the build actually used (ADR 0014/0015)
@@ -41,6 +42,7 @@ interface AppState {
   setInfiltration: (method: InfiltrationMethod) => void
   setDesignStorm: (choice: DesignStormChoice | null) => void
   setSystems: (systems: DrainageSystem[]) => void
+  setSubcatchmentLayer: (file: File | null) => void
   toggleLayer: (key: LayerKey) => void
   checkRainfall: () => Promise<void>
   submit: () => Promise<void>
@@ -103,6 +105,7 @@ export const useStore = create<AppState>((set, get) => ({
   infiltration: 'HORTON', // engineering-practice default (ADR 0013)
   designStorm: null, // historical observed rain unless the user opts in (ADR 0018)
   systems: ['storm'], // widened to whatever the AOI offers once preview answers
+  subcatchmentLayer: null,
   job: { status: 'idle' },
   preview: null,
   forcing: null,
@@ -179,6 +182,7 @@ export const useStore = create<AppState>((set, get) => ({
   setInfiltration: (infiltration) => set({ infiltration }),
   setDesignStorm: (designStorm) => set({ designStorm }),
   setSystems: (systems) => set({ systems }),
+  setSubcatchmentLayer: (subcatchmentLayer) => set({ subcatchmentLayer }),
   toggleLayer: (key) => set((s) => ({ layers: { ...s.layers, [key]: !s.layers[key] } })),
 
   checkRainfall: async () => {
@@ -213,11 +217,13 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   submit: async () => {
-    const { aoi, startDate, endDate, infiltration, designStorm, systems } = get()
+    const { aoi, startDate, endDate, infiltration, designStorm, systems,
+            subcatchmentLayer } = get()
     if (!aoi) return
     set({ job: { status: 'queued' }, preview: null, forcing: null })
     try {
-      const { taskId } = await submitTask({ aoi, startDate, endDate, infiltration, designStorm, systems })
+      const { taskId } = await submitTask({ aoi, startDate, endDate, infiltration,
+                                            designStorm, systems, subcatchmentLayer })
       for (;;) {
         const p = await pollTask(taskId)
         set({ job: p })

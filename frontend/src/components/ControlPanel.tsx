@@ -7,6 +7,7 @@ import logoMark from '../assets/logo-mark.png'
 
 export default function ControlPanel() {
   const fileRef = useRef<HTMLInputElement>(null)
+  const layerRef = useRef<HTMLInputElement>(null)
   const aoi = useStore((s) => s.aoi)
   const drawing = useStore((s) => s.drawing)
   const draft = useStore((s) => s.draft)
@@ -23,6 +24,8 @@ export default function ControlPanel() {
   const setInfiltration = useStore((s) => s.setInfiltration)
   const systems = useStore((s) => s.systems)
   const setSystems = useStore((s) => s.setSystems)
+  const subcatchmentLayer = useStore((s) => s.subcatchmentLayer)
+  const setSubcatchmentLayer = useStore((s) => s.setSubcatchmentLayer)
   const designStorm = useStore((s) => s.designStorm)
   const setDesignStorm = useStore((s) => s.setDesignStorm)
   const rainfall = useStore((s) => s.rainfall)
@@ -329,6 +332,47 @@ export default function ControlPanel() {
             </p>
           )}
         </fieldset>
+
+        <div className="block text-sm text-slate-600">
+          <span className="mb-1 block text-[11px] text-slate-400">Subcatchment boundaries</span>
+          {/* Every choice the delineator makes is a judgement call under uncertainty. Where
+              someone has their own boundaries, theirs are used verbatim and override all of
+              it — so the control says what it replaces, not just what it accepts. */}
+          {subcatchmentLayer ? (
+            <div className="flex items-center justify-between gap-2 rounded-md border border-slate-300 px-2 py-1">
+              <span className="truncate">{subcatchmentLayer.name}</span>
+              <button
+                onClick={() => setSubcatchmentLayer(null)}
+                className="shrink-0 text-slate-500 hover:text-slate-800"
+                aria-label="Remove uploaded subcatchment layer"
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
+          ) : (
+            <>
+              <input
+                ref={layerRef}
+                type="file"
+                accept=".geojson,.json"
+                className="hidden"
+                onChange={(e) => setSubcatchmentLayer(e.target.files?.[0] ?? null)}
+              />
+              <button
+                onClick={() => layerRef.current?.click()}
+                className="flex w-full items-center justify-center gap-2 rounded-md border border-slate-300 px-2 py-1 hover:bg-slate-50"
+              >
+                <Upload size={14} />
+                Upload your own (GeoJSON)
+              </button>
+            </>
+          )}
+          <p className="mt-1 text-[11px] text-slate-500">
+            {subcatchmentLayer
+              ? 'These boundaries will be used as given, in place of the ones this tool would derive.'
+              : 'Leave empty to have the boundaries derived from the published network and terrain.'}
+          </p>
+        </div>
 
         <label className="block text-sm text-slate-600">
           <span className="mb-1 block text-[11px] text-slate-400">Infiltration method</span>

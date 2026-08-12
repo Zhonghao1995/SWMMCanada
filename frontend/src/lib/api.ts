@@ -17,6 +17,10 @@ export interface SubmitParams {
   infiltration: InfiltrationMethod
   designStorm: DesignStormChoice | null // null = historical observed rain (default)
   systems: DrainageSystem[] // ADR 0029: which systems to include; all available by default
+  //: The user's own subcatchment boundaries, if they have some. Highest priority — every
+  //: choice the delineator makes is a judgement call, and theirs is the one with local
+  //: knowledge behind it.
+  subcatchmentLayer: File | null
 }
 
 // ADR 0029: the model carries every system at once; a selection is a view of it, not a
@@ -134,6 +138,11 @@ export async function submitTask(params: SubmitParams): Promise<{ taskId: string
   }
   if (params.aoi.source === 'upload') body.append('file', params.aoi.file)
   else body.append('polygon', JSON.stringify(params.aoi.polygon))
+  if (params.subcatchmentLayer) {
+    // Sent as text rather than a file part: the backend reads GeoJSON either way, and
+    // reading it here means a malformed file is caught before a build starts.
+    body.append('subcatchment_layer', await params.subcatchmentLayer.text())
+  }
 
   const r = await fetch(`${API}/tasks`, { method: 'POST', body })
   if (!r.ok) throw new Error(`submit failed: HTTP ${r.status}`)

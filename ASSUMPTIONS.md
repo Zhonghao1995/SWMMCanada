@@ -125,6 +125,26 @@ Outside these cities, the network itself is 🟠 synthesized from OpenStreetMap 
 > auto-built model, however real its inputs. Calibrate against gauged flow (e.g. ECCC HYDAT)
 > before using results for design or decisions.
 
+## Bringing your own subcatchment boundaries
+
+Everything in the sections that follow is a judgement call: which method the data supports,
+what an overland flow length is, how much of a road reserve is paved, whether kerb lines are
+fine enough to use. They are defensible and they are still judgements.
+
+So an uploaded layer overrides all of it. Upload a GeoJSON of polygons and those boundaries
+are used **verbatim** — no reshaping, no merging, no sliver discipline — ahead of the city's
+own catchment layer and ahead of anything derived here. A municipal layer is authoritative
+about the municipality; yours is authoritative about what you want modelled.
+
+What is still derived: outlets, unless a feature names one this network contains (a polygon
+file rarely carries our node ids, and naming one we do not have is not a reason to reject
+the upload); and imperviousness, slope and curve number, from terrain, land cover and soil
+exactly as for any other cell. Only the boundary is yours.
+
+Its confidence is recorded as **unrated** rather than high or low. We did not draw these and
+cannot vouch for them — calling them high would be endorsing someone else's work, low would
+be dismissing it.
+
 ## Telling the terrain what it cannot see
 
 At 1 m LiDAR posting a 150 mm kerb is one pixel of a smooth cross-slope, so D8 routes street

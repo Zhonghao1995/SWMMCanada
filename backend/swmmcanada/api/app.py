@@ -19,6 +19,8 @@ from functools import partial
 from pathlib import Path
 from typing import Optional
 
+import json
+
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
@@ -30,6 +32,35 @@ from swmmcanada.acquire.design_storm import DesignStormChoice
 #: offers a subset of these; the API validates against the vocabulary, and the
 #: registry decides what each city actually has.
 KNOWN_SYSTEMS = frozenset({"storm", "sanitary", "combined"})
+
+
+def _parse_subcatchment_layer(raw: Optional[str]):
+    """A user's own subcatchment boundaries (resolver priority 0), or ``None``.
+
+    Accepts a FeatureCollection or a bare feature list, because not everyone exports the
+    former. Rejected at the door rather than three minutes into a build: a file of points is
+    a mistake worth catching while the user is still looking at the screen.
+    """
+    if raw is None or not raw.strip():
+        return None
+    try:
+        parsed = json.loads(raw)
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(422, f"Could not read the subcatchment layer: {exc}")
+
+    features = parsed.get("features") if isinstance(parsed, dict) else parsed
+    if not isinstance(features, list) or not features:
+        raise HTTPException(
+            422, "The subcatchment layer contains no features — expected a GeoJSON "
+                 "FeatureCollection of polygons.")
+    polygons = [f for f in features
+                if isinstance(f, dict)
+                and ((f.get("geometry") or {}).get("type") in ("Polygon", "MultiPolygon"))]
+    if not polygons:
+        raise HTTPException(
+            422, "The subcatchment layer contains no polygons — subcatchments are areas, "
+                 "so a layer of points or lines cannot be used as one.")
+    return polygons
 from swmmcanada.api.tasks import TaskStore, run_task
 from swmmcanada.build.config import InfiltrationModel
 from swmmcanada.geo import aoi_from_geojson, aoi_from_shapefile
@@ -149,6 +180,7 @@ def create_app(*, pipeline=None, workdir=None, run_inline: bool = False) -> Fast
         design_storm_yr: Optional[int] = Form(None),
         design_storm_h: int = Form(24),
         systems: Optional[str] = Form(None),
+        subcatchment_layer: Optional[str] = Form(None),
     ):
         aoi = await _aoi_from_request(polygon, file)
         try:
@@ -179,6 +211,8 @@ def create_app(*, pipeline=None, workdir=None, run_inline: bool = False) -> Fast
                 raise HTTPException(
                     422, f"Unknown infiltration method {infiltration!r} — "
                          f"one of: {', '.join(m.value for m in InfiltrationModel)}")
+        user_layer = _parse_subcatchment_layer(subcatchment_layer)
+
         selected_systems = None
         if systems is not None:                    # ADR 0029 Q3: which systems to include
             selected_systems = [s.strip() for s in systems.split(",") if s.strip()]
@@ -215,6 +249,8 @@ def create_app(*, pipeline=None, workdir=None, run_inline: bool = False) -> Fast
             build_fn = partial(build_fn, design_storm=design_storm)
         if selected_systems is not None:           # same contract again (ADR 0029 Q3)
             build_fn = partial(build_fn, systems=selected_systems)
+        if user_layer is not None:                 # resolver priority 0
+            build_fn = partial(build_fn, subcatchment_layer=user_layer)
         args = (task_id, aoi, start, end, store, work_root, build_fn, mode)
         if run_inline:
             run_task(*args)
