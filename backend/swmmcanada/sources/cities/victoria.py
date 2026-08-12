@@ -35,6 +35,11 @@ _VICTORIA_CRS = "EPSG:32610"
 # --- ArcGIS layers (see fixtures/victoria/README.md) ----------------------------
 BASE = "https://maps.victoria.ca/server/rest/services/OpenData/OpenData_StormDrain/MapServer"
 MAINS, MANHOLES, FITTINGS, OUTFALLS, CATCHBASINS = 10, 4, 3, 5, 1
+#: Storm Drain Catchment Areas — the city's OWN catchments. Measured at 64 polygons
+#: city-wide against 7,864 catch basins (Phase 0), i.e. one per outfall: far too
+#: coarse to be model units. Used as the yardstick our outlet resolution is scored
+#: against instead, via `OUTLET` (an outfall AssetID) — see #129 / ADR 0029 Q2.
+STORM_CATCHMENTS = 12
 LAND_BASE = "https://maps.victoria.ca/server/rest/services/OpenData/OpenData_Land/MapServer"
 LAND_PARCELS, LAND_BUILDINGS = 5, 1            # Parcels (Folio based), Buildings
 SEWER_BASE = "https://maps.victoria.ca/server/rest/services/OpenData/OpenData_Sewer/MapServer"
@@ -134,6 +139,19 @@ def fetch_victoria_sanitary(bbox, *, client=None) -> dict:
         result[key] = _fetch_nodes_by_assetid(layer, by_layer.get(layer, []), client,
                                               base_url=SEWER_BASE)
     return result
+
+
+def fetch_victoria_official_catchments(bbox, *, client=None) -> list:
+    """The city's published storm catchments intersecting ``bbox`` (GeoJSON Features).
+
+    Boundaries and a declared outlet, not model units. `OUTLET` joins the outfalls layer's
+    AssetID, which is what makes official-outlet agreement computable here at all — most of
+    the fleet publishes no such key.
+    """
+    if hasattr(bbox, "bbox"):
+        bbox = bbox.bbox
+    client = client or VicMapClient()
+    return _fetch_layer_bbox(BASE, STORM_CATCHMENTS, bbox, client)
 
 
 def fetch_victoria_land(bbox, *, client=None) -> dict:
