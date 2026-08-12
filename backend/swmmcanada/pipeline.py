@@ -659,6 +659,17 @@ def _plan_delineation(spec, bbox, client, network, derive: bool, subcatchment_me
             reason=f"caller override subcatchment_method={subcatchment_method!r}",
             gates={"caller_override": True}, evidence={})
     land = spec.land(bbox, client)
+    # Phase 0 measured every published catchment layer in the fleet as macro, so a city that
+    # publishes one publishes a Level 2 boundary. Additive: a municipal server being down
+    # must not fail a model, it just means no hard edge.
+    official_level = None
+    if getattr(spec, "official_catchments", None) is not None:
+        try:
+            if spec.official_catchments(bbox, client):
+                official_level = "level_2"
+        except Exception:  # noqa: BLE001 — the boundary is a bonus, never a blocker
+            official_level = None
+
     return land, resolve(Evidence(
         n_catchbasins=len(land.get("catchbasins") or []),
         n_parcels=len(land.get("parcels") or []),
@@ -667,6 +678,7 @@ def _plan_delineation(spec, bbox, client, network, derive: bool, subcatchment_me
         n_junctions=len(network.junctions),
         dem_available=bool(derive),
         dem_resolution_m=dem_resolution_m,
+        official_basin_level=official_level,
         city=spec.key, system="storm",
     ))
 

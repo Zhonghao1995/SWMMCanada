@@ -206,3 +206,66 @@ class TestTerrainPlanningNeedsTheSurfaceFirst:
         _l, plan = _plan_delineation(Spec(), (0, 0, 1, 1), None, Net(), derive=True,
                                      subcatchment_method="parcel", dem_resolution_m=1.0)
         assert plan.evidence["n_kerbs"] == 2189
+
+
+class TestOfficialBasinsReachThePlan:
+    """Same trap as the DEM posting: the resolver records `boundary=official_basin` and
+    nothing ever set the level, so the branch could not be reached."""
+
+    def test_a_city_publishing_catchments_gets_the_boundary(self):
+        from swmmcanada.pipeline import _plan_delineation
+
+        class Spec:
+            key = "victoria"
+            official_catchments = staticmethod(lambda bbox, client: [{"x": 1}] * 37)
+
+            @staticmethod
+            def land(bbox, client):
+                return {"catchbasins": [1] * 700, "parcels": [1] * 4000}
+
+        class Net:
+            junctions = [object()] * 100
+
+        _l, plan = _plan_delineation(Spec(), (0, 0, 1, 1), None, Net(), derive=True,
+                                     subcatchment_method="parcel", dem_resolution_m=None)
+        assert plan.boundary == "official_basin"
+
+    def test_a_city_without_them_bounds_on_the_aoi(self):
+        from swmmcanada.pipeline import _plan_delineation
+
+        class Spec:
+            key = "ottawa"
+            official_catchments = None
+
+            @staticmethod
+            def land(bbox, client):
+                return {"catchbasins": [1] * 700, "parcels": [1] * 4000}
+
+        class Net:
+            junctions = [object()] * 100
+
+        _l, plan = _plan_delineation(Spec(), (0, 0, 1, 1), None, Net(), derive=True,
+                                     subcatchment_method="parcel", dem_resolution_m=None)
+        assert plan.boundary == "aoi"
+
+    def test_a_failing_fetch_does_not_block_the_build(self):
+        """The boundary is additive. A municipal server being down must not fail a model."""
+        from swmmcanada.pipeline import _plan_delineation
+
+        def boom(bbox, client):
+            raise RuntimeError("503")
+
+        class Spec:
+            key = "victoria"
+            official_catchments = staticmethod(boom)
+
+            @staticmethod
+            def land(bbox, client):
+                return {"catchbasins": [1] * 700, "parcels": [1] * 4000}
+
+        class Net:
+            junctions = [object()] * 100
+
+        _l, plan = _plan_delineation(Spec(), (0, 0, 1, 1), None, Net(), derive=True,
+                                     subcatchment_method="parcel", dem_resolution_m=None)
+        assert plan.boundary == "aoi"
