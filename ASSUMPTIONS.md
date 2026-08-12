@@ -125,6 +125,25 @@ Outside these cities, the network itself is 🟠 synthesized from OpenStreetMap 
 > auto-built model, however real its inputs. Calibrate against gauged flow (e.g. ECCC HYDAT)
 > before using results for design or decisions.
 
+## How much of a road reserve is pavement
+
+Imperviousness counts roofs in full plus the paved share of the road reserve — the land in a
+cell that falls outside every parcel.
+
+That share was an implicit, undocumented **1.0**: every square metre outside a parcel was
+counted as pavement. Downtown that is close enough, because carriageway plus sidewalk fills
+the reserve. In a suburb it is not — a 20 m reserve carries an 8 m carriageway between grass
+boulevards, and counting all of it inflates a residential cell.
+
+It is now a stated **0.85**, and configurable. A stated number can be argued with; a silent
+one cannot. Measured on live downtown Victoria the median cell moves from 100% to 95.6% and
+the lower quartile from 56.3% to 52.9% — small downtown, which is exactly where the old
+assumption was nearly right, and larger where it was not.
+
+Roofs are never discounted by it: the allowance applies to the reserve, and a roof is a
+roof. Where kerb lines are published the paved area can be measured instead of assumed, and
+that replaces this number rather than tuning it.
+
 ## What a method label is telling you
 
 The delineation method travels with every model, and it is the shortest honest answer to

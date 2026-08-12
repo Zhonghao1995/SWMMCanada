@@ -562,6 +562,14 @@ class CatchbasinSubcatchmentConfig:
     default_slope_pct: float = 1.0
     min_imperv: float = 1.0
     max_imperv: float = 100.0
+    #: Share of the road reserve (the land outside every parcel) that is actually paved
+    #: (规划书 §5). Downtown, carriageway plus sidewalk fills the reserve and 1.0 is close
+    #: enough; in a suburb a 20 m reserve carries an 8 m carriageway between grass
+    #: boulevards, and counting the whole reserve inflates a residential cell by a third.
+    #: The old behaviour was an implicit, undocumented 1.0 — a stated 0.85 can be argued
+    #: with, a silent 1.0 cannot. Measured pavement replaces this wherever kerb lines are
+    #: published.
+    road_reserve_impervious_frac: float = 0.85
 
 
 @dataclass
@@ -844,9 +852,15 @@ def _impervious_fraction(cell_poly, parcels_gdf, parcels_sidx, buildings_gdf, bu
     if (roofs is None or roofs.is_empty
             or roofs.area / cell_poly.area < MIN_ROOF_EVIDENCE_FRAC):
         return config.max_imperv, False
-    roads = cell_poly.difference(par_local)
-    parts = [g for g in (roofs, roads) if g is not None and not g.is_empty]
-    area = unary_union(parts).area if parts else 0.0
+    # Roofs count in full; the reserve counts at its paved share. Union first so a roof
+    # overhanging the reserve is not counted twice, then discount only what the roofs did
+    # not already claim.
+    reserve = cell_poly.difference(par_local)
+    if reserve is not None and not reserve.is_empty and roofs is not None:
+        reserve = reserve.difference(roofs)
+    reserve_area = (reserve.area if reserve is not None and not reserve.is_empty else 0.0)
+    area = (roofs.area if roofs is not None and not roofs.is_empty else 0.0)
+    area += reserve_area * config.road_reserve_impervious_frac
     return max(config.min_imperv, min(config.max_imperv, 100.0 * area / cell_poly.area)), True
 
 
