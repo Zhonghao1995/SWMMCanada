@@ -31,6 +31,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from swmmcanada.validate.schema import (METHOD_CATCHBASIN_DEM,
+                                        METHOD_USER_SUPPLIED,
                                         METHOD_CATCHBASIN_VORONOI,
                                         METHOD_JUNCTION_VORONOI)
 from typing import Dict, Optional
@@ -47,6 +48,7 @@ JUNCTION = "junction"
 
 AOI = "aoi"
 OFFICIAL_BASIN = "official_basin"
+USER = "user"
 
 #: Coarsest posting on which a kerb is worth encoding. A 150 mm face is far below the
 #: vertical noise of a 30 m DEM; at 1–2 m LiDAR it is a real, decisive feature.
@@ -69,6 +71,9 @@ class Evidence:
     #: Kerb lines published for this AOI. A kerb decides where street runoff goes, and a
     #: bare DEM at LiDAR posting usually cannot see it (规划书 §4 priority 2).
     n_kerbs: int = 0
+    #: Units in a subcatchment layer the user uploaded. Every choice this module makes is a
+    #: judgement call under uncertainty; where someone has local knowledge, theirs wins.
+    n_user_units: int = 0
     dem_available: bool = False
     dem_resolution_m: Optional[float] = None
     official_basin_level: Optional[str] = None   # capability table verdict, if any
@@ -78,7 +83,7 @@ class Evidence:
     def as_dict(self) -> Dict:
         return {"n_catchbasins": self.n_catchbasins, "n_parcels": self.n_parcels,
                 "n_buildings": self.n_buildings, "n_junctions": self.n_junctions,
-                "n_kerbs": self.n_kerbs,
+                "n_kerbs": self.n_kerbs, "n_user_units": self.n_user_units,
                 "dem_available": self.dem_available,
                 "dem_resolution_m": self.dem_resolution_m,
                 "official_basin_level": self.official_basin_level}
@@ -108,6 +113,15 @@ def resolve(evidence: Evidence) -> DelineationPlan:
     """Choose the delineation plan for one AOI. Total function: it always returns a plan,
     because the coarsest option (Voronoi of junctions) needs nothing but nodes."""
     ev = evidence.as_dict()
+    # Priority 0 (规划书 §4, extended): an explicit choice outranks anything we would infer
+    # AND anything the city published. Nothing below is even consulted.
+    if evidence.n_user_units:
+        return DelineationPlan(
+            method=METHOD_USER_SUPPLIED, boundary=USER, anchors=USER, shaping=USER,
+            gates={"user_layer": True}, evidence=ev, confidence="unrated",
+            reason=(f"{evidence.n_user_units} subcatchments supplied by the user: these "
+                    f"boundaries are theirs, not ours, and override every method here"))
+
     # An official basin never *selects* a method — it only bounds one (Phase 0: every
     # official layer measured is a macro basin). Recorded so the choice is visible.
     boundary = (OFFICIAL_BASIN if evidence.official_basin_level in ("level_2", "level_1")

@@ -14,6 +14,11 @@ WARNING = "warning"    # runs, but the user should know it's approximate
 
 # --- controlled method vocabulary (honest labelling) --------------------------
 # Produced today:
+#: Boundaries the USER supplied. Priority 0 — above the city's own polygons, because a
+#: municipal layer is authoritative about the municipality while an uploaded one is
+#: authoritative about what this user wants modelled.
+METHOD_USER_SUPPLIED = "user_supplied"
+
 METHOD_CATCHBASIN_PARCEL = "catchbasin_parcel"      # real inlets, parcel-shaped (Victoria)
 # The two Voronoi entries are named as fallbacks on purpose (规划书 §3 Level 5). This label
 # travels into provenance and the result package, where someone decides how much to trust
