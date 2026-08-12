@@ -125,6 +125,30 @@ Outside these cities, the network itself is 🟠 synthesized from OpenStreetMap 
 > auto-built model, however real its inputs. Calibrate against gauged flow (e.g. ECCC HYDAT)
 > before using results for design or decisions.
 
+## Subcatchment width: a flow length, not a square root
+
+SWMM's width is area divided by the distance water travels overland. `sqrt(area)` is that
+distance for a square cell and only for a square cell.
+
+Municipal cells are street-frontage strips, and water does **not** run along the gutter to
+the inlet as overland flow — it crosses the lot perpendicular to the street, reaches the
+gutter, and travels the rest as channel flow. So the length that matters is the depth of the
+strip, and the width is its frontage.
+
+Width is now `area / (area / frontage)`, with frontage taken as the long side of the cell's
+minimum rotated rectangle. Measured on live downtown Victoria (3,387 cells): the median
+width is **1.58x** what the square assumption gave, the 95th percentile **2.67x**, and 58%
+of cells widened by more than half. Only 2% are within 10% of where they were — square-ish
+cells stay put, elongated ones move, which is the intent.
+
+This changes hydrographs, not just a number: a wider subcatchment has a shorter flow length
+and responds faster and more sharply. Models built before this ran their street strips as if
+water crossed four times the distance it does.
+
+The frontage estimate is geometric and does not know where the street is. It is the honest
+approximation available without a flow-direction raster; the DEM path computes the same
+quantity properly from raster flow paths.
+
 ## Physical imperviousness (ADR 0023 cut 1, #138)
 
 Where OSM maps buildings inside a synthesis cell, `pct_imperv` is the physical estimate

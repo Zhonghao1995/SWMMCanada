@@ -633,6 +633,42 @@ def _drop_remainder_donuts(parcels):
     return kept, n_dropped
 
 
+def characteristic_flow_length_m(poly_m, seed_xy=None) -> float:
+    """Overland flow length for a cell, in metres (规划书 §5).
+
+    SWMM's width is area divided by the distance water travels overland, and `sqrt(area)` is
+    that distance only for a square. Municipal cells are street-frontage strips, and water
+    does **not** run along the gutter to the inlet as overland flow — it crosses the lot
+    perpendicular to the street, reaches the gutter, and travels the rest as channel flow.
+    So the length that matters is the depth of the strip, not the distance to the inlet.
+
+    Estimated as ``area / frontage``, with the frontage taken as the long side of the cell's
+    minimum rotated rectangle — the edge a street-fronting cell drains along. A 400 x 25 m
+    strip gives 25 m; a square gives its own side length, so square-ish cells stay where
+    `sqrt(area)` had them and only elongated cells move.
+
+    ``seed_xy`` is accepted and unused: the inlet's position does not change how far water
+    crosses the lot to reach the gutter. It is kept so callers read naturally and so a
+    future flow-direction-aware version can use it.
+    """
+    area = poly_m.area
+    # A degenerate sliver makes `minimum_rotated_rectangle` divide by zero (noisily) before
+    # returning something useless, so it never gets asked.
+    if area <= 1.0:
+        return max(area ** 0.5, 1.0)
+    try:
+        rect = poly_m.minimum_rotated_rectangle
+        xs, ys = rect.exterior.coords.xy
+        sides = [((xs[i + 1] - xs[i]) ** 2 + (ys[i + 1] - ys[i]) ** 2) ** 0.5
+                 for i in range(len(xs) - 1)]
+        frontage = max(sides) if sides else 0.0
+    except Exception:  # noqa: BLE001 — a degenerate cell falls back, never divides by zero
+        frontage = 0.0
+    if frontage <= 0:
+        return max(area ** 0.5, 1.0)
+    return max(area / frontage, 1.0)
+
+
 def repair_polygons(series):
     """Make a projected GeoSeries safe to intersect, and say how many needed it.
 
@@ -976,9 +1012,13 @@ def delineate_catchbasin_subcatchments(
             n_parcel += 1
         subs.append(SurfaceCatchment(
             name=name, outlet_node=outlet_of(seeds[cb_id]), area_ha=area_m2 / 1e4,
-            pct_imperv=imperv, width_m=math.sqrt(area_m2),
+            # Width = area / overland flow length (规划书 §5). `sqrt(area)` is the answer
+            # for a square cell only, and municipal cells are street-frontage strips.
+            pct_imperv=imperv,
+            width_m=area_m2 / characteristic_flow_length_m(poly_m, seeds[cb_id]),
             pct_slope=config.default_slope_pct, polygon=exterior, holes=holes or None))
     diag = {"method": f"catchbasin+parcel/building ({shape_method}-shaped)",
+            "width_method": "area_over_flow_length",
             "n_parcels_repaired": n_repaired, "n_catchbasins": len(seeds),
             "n_subcatchments": len(subs), "n_split_pieces": n_split, "n_dropped_invalid": n_dropped,
             "n_parcel_based_imperv": n_parcel,

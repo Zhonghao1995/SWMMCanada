@@ -96,3 +96,14 @@ class TestOutletAgreementResult:
         # make a claim about scope silently untestable.
         flat = " ".join(doc.split())
         assert "one city's number, not the fleet's" in flat
+
+
+class TestWidthMethod:
+    def test_the_measured_width_change_is_stated(self, doc):
+        """A change that moves every hydrograph must say how far it moved them."""
+        flat = " ".join(doc.split())
+        assert "median width is **1.58x**" in flat
+        assert "3,387 cells" in flat
+
+    def test_the_consequence_is_stated_not_just_the_ratio(self, doc):
+        assert "responds faster" in doc
