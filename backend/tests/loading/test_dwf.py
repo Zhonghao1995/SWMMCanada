@@ -150,3 +150,40 @@ class TestWriting:
         txt = _model(areas).to_string()
         subcat_block = txt[txt.index("[SUBCATCHMENTS]"):txt.index("[SUBAREAS]")]
         assert "A" not in subcat_block.split()
+
+
+class TestGuardIsWiredIn:
+    """Unit-testing `_reject_service_areas` proves the function works, not that anything
+    calls it. Deleting the call from `assemble_inp` left the whole suite green — found by
+    reverting the fix and watching nothing fail, which is the check a test-after workflow
+    owes itself."""
+
+    def test_a_service_area_passed_as_a_subcatchment_is_refused_by_assemble(self):
+        bad = SewerServiceArea(name="SSA_smuggled", node="SAN_M1", area_ha=1.0)
+        net = NetworkIn(
+            junctions=[JunctionIn("J1", 10.0, 3.0, 0.0)],
+            outfalls=[OutfallIn("O1", 8.0, 0.0, 0.0)],
+            conduits=[ConduitIn("C1", "J1", "O1", 50.0)])
+        t0 = datetime(2024, 6, 1)
+        rain = RainfallSeries([t0 + timedelta(hours=i) for i in range(6)], [0.0] * 6)
+        cfg = BuildConfig(out_dir="/tmp", start=date(2024, 6, 1), end=date(2024, 6, 2))
+        with pytest.raises(TypeError, match="SSA_smuggled"):
+            assemble_inp(net, [SurfaceCatchment("S1", "J1", 1.0, 50.0, 100.0, 1.0), bad],
+                         rain, cfg)
+
+    def test_the_guard_also_holds_through_build_model(self):
+        """The datastore path calls build_model, not assemble_inp — the guard must cover
+        the route the pipeline actually takes."""
+        from swmmcanada.build.assemble import build_model
+
+        bad = SewerServiceArea(name="SSA_smuggled2", node="SAN_M1", area_ha=1.0)
+        net = NetworkIn(
+            junctions=[JunctionIn("J1", 10.0, 3.0, 0.0)],
+            outfalls=[OutfallIn("O1", 8.0, 0.0, 0.0)],
+            conduits=[ConduitIn("C1", "J1", "O1", 50.0)])
+        t0 = datetime(2024, 6, 1)
+        rain = RainfallSeries([t0 + timedelta(hours=i) for i in range(6)], [0.0] * 6)
+        cfg = BuildConfig(out_dir="/tmp/guard-check", start=date(2024, 6, 1),
+                          end=date(2024, 6, 2))
+        with pytest.raises(TypeError, match="SSA_smuggled2"):
+            build_model(network=net, subcatchments=[bad], rain=rain, config=cfg)
