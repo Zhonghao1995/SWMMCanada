@@ -62,3 +62,6 @@ docs/
 # (docs/agents/ is already covered by the docs/ rule above.)
 /AGENTS.md
 /CLAUDE.md
+
+# Phase 0 capability audit HTTP cache (regenerable; thousands of small JSON files)
+.audit-cache/
