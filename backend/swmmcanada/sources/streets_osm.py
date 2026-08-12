@@ -43,7 +43,15 @@ def fetch_street_graph(bbox_wgs84) -> nx.Graph:
 
         g = _graph_from_bbox(ox, bbox_wgs84, use_cache=True)
         if g.number_of_nodes() < MIN_PLAUSIBLE_NODES:
-            fresh = _graph_from_bbox(ox, bbox_wgs84, use_cache=False)
+            try:
+                fresh = _graph_from_bbox(ox, bbox_wgs84, use_cache=False)
+            except Exception:
+                # Overpass is unreachable. The recheck exists to improve on what we have, so
+                # it must never be a second way to lose it: a small graph beats no graph,
+                # because no streets means the plan falls back to a coarser unit than the
+                # one a municipality would draw. A genuinely poisoned cache stays poisoned
+                # until Overpass answers again, which the node-count guard will catch then.
+                fresh = g
             if fresh.number_of_nodes() > g.number_of_nodes():
                 # The cached answer was poisoned (partial Overpass response): trust the
                 # live one and drop the cache so future builds re-cache good data.

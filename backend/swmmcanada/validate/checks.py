@@ -282,11 +282,17 @@ def check_forcing_consistency(forcing: dict):
     """Hourly-vs-daily rain total sanity (ADR 0014). Passes when no mismatch was computed
     (daily tier, or no daily reference) or the mismatch is within tolerance; a failure is
     Warning-tier — the model runs, but the raingage source deserves a look."""
+    from swmmcanada.acquire.climate import rain_totals_disagree
+
     mismatch = forcing.get("mismatch_pct")
     if forcing.get("rainfall_resolution") != "hourly" or mismatch is None:
         return _result("forcing_consistency", schema.WARNING, True,
                        f"rainfall tier: {forcing.get('rainfall_resolution', 'daily')}")
-    ok = mismatch <= 15.0
+    # Same verdict the acquirer used, from the same function: a percentage alone cannot tell
+    # a real disagreement from arithmetic on two dry feeds, and two copies of the rule drift.
+    h, d = forcing.get("hourly_total_mm"), forcing.get("daily_total_mm")
+    ok = (not rain_totals_disagree(h, d)) if (h is not None and d is not None) \
+        else mismatch <= 15.0
     msg = (f"hourly vs daily rain totals within {mismatch}%" if ok else
            forcing.get("mismatch_warning", f"hourly vs daily rain totals differ by {mismatch}%"))
     return _result("forcing_consistency", schema.WARNING, ok, msg, mismatch_pct=mismatch)

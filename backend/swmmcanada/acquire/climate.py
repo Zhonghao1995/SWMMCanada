@@ -36,6 +36,26 @@ DAILY_MAX_GAP_D = 3
 HOURLY_MAX_GAP_H = 24      # ADR 0024 §2: hourly usability needs bounded gaps, not just coverage
 _MAX_PAGES = 50            # runaway-pagination guard (upstream ignoring startindex)
 MISMATCH_WARN_PCT = 15.0
+#: Below this total the two feeds are both reporting a dry window, and a percentage between
+#: them is arithmetic on noise. Meteorology calls anything under a couple of tenths of a
+#: millimetre a trace; a millimetre over the whole run produces no runoff worth the warning.
+#: Without this floor a build over three dry June days reported "differs by 100.0% — review
+#: the raingage source" for a 0.2 mm gap, and a check that cries wolf stops being read.
+TRACE_TOTAL_MM = 1.0
+
+
+def rain_totals_disagree(hourly_mm: float, daily_mm: float,
+                         tol_pct: float = MISMATCH_WARN_PCT) -> bool:
+    """Whether the hourly feed and the daily station really disagree about the rain.
+
+    Relative once there is rain to be relative about; below the trace floor the question does
+    not arise, unless one feed saw a storm the other missed entirely.
+    """
+    if max(hourly_mm, daily_mm) < TRACE_TOTAL_MM:
+        return False
+    if daily_mm <= 0:
+        return hourly_mm > 0
+    return abs(hourly_mm - daily_mm) / daily_mm * 100.0 > tol_pct
 
 
 class ClimateHttpClient(Protocol):
@@ -191,7 +211,7 @@ def _hourly_tier(client, candidates, start: date, end: date, *, daily_series):
                 mismatch = (abs(h - daily_total) / daily_total * 100.0) if daily_total > 0 else (
                     0.0 if h == 0 else 100.0)
                 forcing["mismatch_pct"] = round(mismatch, 1)
-                if mismatch > MISMATCH_WARN_PCT:
+                if rain_totals_disagree(h, daily_total):
                     forcing["mismatch_warning"] = (
                         f"hourly rain total ({h} mm, {s.climate_id}) differs from the daily "
                         f"station total ({forcing['daily_total_mm']} mm) by {forcing['mismatch_pct']}% "
