@@ -98,3 +98,55 @@ class TestRefusals:
 
 def test_threshold_band_is_ordered():
     assert 0 < RATIO_LEVEL_2 < RATIO_LEVEL_1_CANDIDATE < 1
+
+
+class TestLevel1IsGrantedAtRuntimeOrNotAtAll:
+    """ADR 0030: Phase 0 can only nominate. Promotion needs official-outlet agreement,
+    which needs a build, and the same evidence can take it away again."""
+
+    def _candidate(self):
+        return judge(HAMILTON_COMBINED, "combined")
+
+    def test_a_candidate_with_good_agreement_is_promoted(self):
+        from swmmcanada.audit.measure import confirm_level_1
+
+        v = confirm_level_1(self._candidate(), agreement_rate=0.97, n_comparable=800)
+        assert v.level is Level.LEVEL_1
+        assert "0.97" in v.reason or "97" in v.reason
+
+    def test_a_candidate_with_poor_agreement_is_demoted_to_boundary_use(self):
+        from swmmcanada.audit.measure import confirm_level_1
+
+        v = confirm_level_1(self._candidate(), agreement_rate=0.62, n_comparable=800)
+        assert v.level is Level.LEVEL_2
+        assert "agreement" in v.reason.lower()
+        assert v.gates["outlet_agreement"] is False
+
+    def test_too_small_a_sample_cannot_promote(self):
+        """100% over one unit is not evidence — the Victoria fixture produced exactly that."""
+        from swmmcanada.audit.measure import confirm_level_1
+
+        v = confirm_level_1(self._candidate(), agreement_rate=1.0, n_comparable=1)
+        assert v.level is Level.LEVEL_2_REVIEW
+        assert "sample" in v.reason.lower()
+
+    def test_no_measurement_leaves_the_candidate_where_it_was(self):
+        from swmmcanada.audit.measure import confirm_level_1
+
+        v = confirm_level_1(self._candidate(), agreement_rate=None, n_comparable=0)
+        assert v.level is Level.LEVEL_1_CANDIDATE
+
+    def test_a_non_candidate_is_never_promoted_by_a_good_rate(self):
+        """Victoria scores 80.3% and is Level 2 on granularity. Agreement is not a way in."""
+        from swmmcanada.audit.measure import confirm_level_1
+
+        v = confirm_level_1(judge(VICTORIA_STORM, "storm"), agreement_rate=0.99,
+                            n_comparable=900)
+        assert v.level is Level.LEVEL_2
+
+    def test_the_evidence_is_kept_on_the_verdict(self):
+        from swmmcanada.audit.measure import confirm_level_1
+
+        v = confirm_level_1(self._candidate(), agreement_rate=0.97, n_comparable=800)
+        assert v.evidence["outlet_agreement"] == 0.97
+        assert v.evidence["outlet_agreement_n"] == 800

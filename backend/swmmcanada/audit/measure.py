@@ -29,6 +29,18 @@ from swmmcanada.sources.cities.capability import (ANCHOR_ROLES,
 RATIO_LEVEL_2 = 0.05
 RATIO_LEVEL_1_CANDIDATE = 0.5
 
+#: Agreement a candidate must reach for its polygons to be adopted as model units. Set high
+#: on purpose: at Level 1 the city's polygons ARE the units, so their declared outlet should
+#: almost always be the one we resolve. Like the ratio threshold above it has **no positive
+#: example** — no source has ever reached candidacy — so it is a stated intent, not a
+#: calibrated number, and the first real candidate should re-derive it.
+AGREEMENT_TO_CONFIRM = 0.95
+
+#: Below this many comparable units the rate is not evidence either way. Measured on the
+#: Victoria fixture the method returned 100% over a single unit; a threshold that accepted
+#: it would promote a source on one comparison.
+MIN_AGREEMENT_SAMPLE = 30
+
 
 class Level(Enum):
     LEVEL_1 = "level_1"                      # confirmed authoritative — runtime-granted only
@@ -148,3 +160,46 @@ def judge(rows: Sequence[dict], system: str, *, polygon_role: Role = Role.SUBCAT
     return LevelVerdict(Level.LEVEL_1_CANDIDATE,
                         f"ratio {ratio:.4f} >= {RATIO_LEVEL_1_CANDIDATE} and static gates "
                         f"pass; awaiting official-outlet agreement to confirm", **base)
+
+
+def confirm_level_1(verdict: LevelVerdict, *, agreement_rate: Optional[float],
+                    n_comparable: int) -> LevelVerdict:
+    """The second beat of the Level 1 decision (ADR 0030).
+
+    Phase 0 can only nominate: it measures how fine a layer is, not whether the outlets it
+    declares are the ones we resolve. That needs a build. This applies the result — and the
+    same evidence can take candidacy away, which is why Level 1 is described as revocable
+    rather than earned once.
+
+    Agreement is not an alternative route in: a layer that is too coarse to be model units
+    stays too coarse however well its outlets match. Victoria scores 80.3% and is Level 2.
+    """
+    from dataclasses import replace as _replace
+
+    if verdict.level is not Level.LEVEL_1_CANDIDATE:
+        return verdict
+
+    evidence = {**verdict.evidence, "outlet_agreement": agreement_rate,
+                "outlet_agreement_n": n_comparable}
+
+    if agreement_rate is None or n_comparable <= 0:
+        return _replace(verdict, evidence=evidence,
+                        reason=verdict.reason + "; no outlet agreement measured yet")
+    if n_comparable < MIN_AGREEMENT_SAMPLE:
+        return _replace(
+            verdict, level=Level.LEVEL_2_REVIEW, evidence=evidence,
+            gates={**verdict.gates, "outlet_agreement": False},
+            reason=(f"agreement {agreement_rate:.2f} but sample of {n_comparable} is below "
+                    f"{MIN_AGREEMENT_SAMPLE}: not evidence either way"))
+    if agreement_rate < AGREEMENT_TO_CONFIRM:
+        return _replace(
+            verdict, level=Level.LEVEL_2, evidence=evidence,
+            gates={**verdict.gates, "outlet_agreement": False},
+            reason=(f"outlet agreement {agreement_rate:.2f} over {n_comparable} units is "
+                    f"below {AGREEMENT_TO_CONFIRM}: the polygons stay a boundary and a "
+                    f"reference, not model units"))
+    return _replace(
+        verdict, level=Level.LEVEL_1, evidence=evidence,
+        gates={**verdict.gates, "outlet_agreement": True},
+        reason=(f"outlet agreement {agreement_rate:.2f} over {n_comparable} units meets "
+                f"{AGREEMENT_TO_CONFIRM}: confirmed authoritative"))
