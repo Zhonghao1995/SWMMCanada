@@ -61,7 +61,17 @@ from swmmcanada.sources.cities.registry import CitySpec, city_for_point, city_sp
 
 def _method_descriptor(sub_diag: Optional[dict]) -> MethodDescriptor:
     """Map a delineation's diagnostics to the honest controlled-vocabulary method label."""
-    method = (sub_diag or {}).get("method", "")
+    diag = sub_diag or {}
+    method = diag.get("method", "")
+    # The DEM delineator reports `junction_dem` whatever it was seeded on. Seeded on real
+    # inlets it is a different claim, and the label a reader sees must say which
+    # (规划书 §4 priorities 2-3).
+    if method == vschema.METHOD_JUNCTION_DEM and diag.get("seeded_on") == "catch_basin":
+        kerbed = (diag.get("urban_conditioning") or {}).get("applied")
+        return MethodDescriptor(
+            vschema.METHOD_CATCHBASIN_DEM,
+            "terrain routed to real inlets" + (" over kerb-aware ground" if kerbed else ""),
+            "high" if kerbed else "medium")
     if "parcel-shaped" in method:
         return MethodDescriptor("catchbasin_parcel", "nearest inlet service area", "medium")
     if "voronoi-shaped" in method:
@@ -565,7 +575,73 @@ def _outlet_agreement_provenance(spec, bbox, client, subcatchments, network) -> 
     return {"rate_pct": (round(rate * 100, 1) if rate is not None else None), **diag}
 
 
-def _plan_delineation(spec, bbox, client, network, derive: bool, subcatchment_method: str):
+def _delineate_to_inlets(land, aoi, dem, spec, plan, network):
+    """Inlet-seeded D8 over a kerb-conditioned surface (规划书 §4 priorities 2-3).
+
+    Returns ``(subcatchments, diagnostics)``, or ``([], diag)`` when the terrain path cannot
+    produce a usable result — the caller then falls back to inlet tessellation, which is the
+    behaviour the posterior gate already provides inside the delineator.
+    """
+    from shapely.geometry import shape as shp_shape
+
+    inlets = {}
+    for i, f in enumerate(land.get("catchbasins") or []):
+        c = ((f.get("geometry") or {}).get("coordinates") or [])
+        if len(c) >= 2:
+            props = f.get("properties") or {}
+            key = str(props.get("AssetID") or props.get("InfrastructureID")
+                      or props.get("OBJECTID") or f"CB{i}")
+            inlets[key] = (float(c[0]), float(c[1]))
+    if len(inlets) < 2 or dem is None:
+        return [], {"reason": "not enough inlets or no surface for the terrain path"}
+
+    def _geoms(key):
+        out = []
+        for f in land.get(key) or []:
+            g = f.get("geometry")
+            if g:
+                try:
+                    out.append(shp_shape(g))
+                except Exception:  # noqa: BLE001 — a broken feature is not a build failure
+                    continue
+        return out
+
+    # Kerb geometry arrives in EPSG:4326 and the conditioner works in the DEM's own grid.
+    import rasterio
+    from shapely.ops import transform as shp_transform
+
+    from swmmcanada.geo.crs import lonlat_projector
+
+    with rasterio.open(dem.path) as src:
+        to_dem = lonlat_projector(str(src.crs))
+    reproject = lambda gs: [shp_transform(to_dem, g) for g in gs]
+
+    subs, diag = delineate_junction_subcatchments(
+        inlets, aoi, dem_path=dem.path,
+        kerbs=reproject(_geoms("kerbs")),
+        openings=reproject(_geoms("kerb_openings")),
+        buildings=reproject(_geoms("buildings")),
+        snap_pour_points=True,
+    )
+
+    # The delineator names each cell's outlet after its pour point, which here is an INLET
+    # id, not a node. Resolve it the same way the tessellation path does — through the lead
+    # where one is published — so both paths agree about which pipe a cell drains to.
+    from dataclasses import replace as _replace
+
+    outlet_of = base._outlet_resolver(network, spec.sub_crs, land.get("laterals"))
+    resolved = []
+    for sub in subs:
+        seed = inlets.get(sub.outlet_node)
+        resolved.append(_replace(sub, outlet_node=outlet_of(seed)) if seed else sub)
+
+    diag = {**(diag or {}), "seeded_on": "catch_basin", "plan_method": plan.method,
+            "outlets_resolved_to_nodes": sum(1 for s in subs if s.outlet_node in inlets)}
+    return resolved, diag
+
+
+def _plan_delineation(spec, bbox, client, network, derive: bool, subcatchment_method: str,
+                      dem_resolution_m=None):
     """Fetch the land evidence and let the resolver choose. Returns ``(land, plan)``.
 
     Extracted so the decision is testable without a full offline build: this is the seam
@@ -587,8 +663,10 @@ def _plan_delineation(spec, bbox, client, network, derive: bool, subcatchment_me
         n_catchbasins=len(land.get("catchbasins") or []),
         n_parcels=len(land.get("parcels") or []),
         n_buildings=len(land.get("buildings") or []),
+        n_kerbs=len(land.get("kerbs") or []),
         n_junctions=len(network.junctions),
         dem_available=bool(derive),
+        dem_resolution_m=dem_resolution_m,
         city=spec.key, system="storm",
     ))
 
@@ -635,25 +713,38 @@ def build_city(
     # reason, gates and evidence. This function only executes that plan — it must not branch
     # on data availability itself, or the decision splits across two places and the recorded
     # reason stops being the real one.
+    # The surface is acquired BEFORE planning (规划书 §4): a plan that prefers terrain has
+    # to know the terrain's posting, and acquiring it afterwards left the resolver choosing
+    # between methods with `dem_resolution_m=None` — the terrain path existed and was
+    # unreachable, which is worse than not having it.
+    dem = None
+    if derive:
+        _r("ACQUIRING_DEM", 30)
+        dem = acquire_dem(tuple(aoi.bbox), ws, source=dem_source)
+
     _r("SUBCATCHMENTS", 35)
     imperv_map: dict = {}
     sub_diag: dict = {}
-    land, plan = _plan_delineation(spec, bbox, client, network, derive, subcatchment_method)
+    land, plan = _plan_delineation(spec, bbox, client, network, derive, subcatchment_method,
+                                   dem_resolution_m=(dem.resolution_m if dem else None))
 
     subcatchments = []
-    if plan.anchors == "catch_basin":
+    if plan.anchors == "catch_basin" and plan.shaping == "dem_d8":
+        # 规划书 §4 priorities 2-3: route runoff over the terrain TO the inlets, rather
+        # than dividing land by proximity to them. Same delineator the junction path uses,
+        # with inlets as pour points and the city's kerb geometry as an extra input — one
+        # pipeline, different inputs (ADR 0029 Q10).
+        subcatchments, sub_diag = _delineate_to_inlets(
+            land, aoi, dem, spec, plan, network)
+    if not subcatchments and plan.anchors == "catch_basin":
         subcatchments, imperv_map, sub_diag = base.delineate_catchbasin_subcatchments(
             network, land["catchbasins"], land["parcels"], land["buildings"], aoi,
             crs=spec.sub_crs, laterals=land.get("laterals"),
         )
-    dem = None
     water = None
     landcover = None
     if not subcatchments:  # plan said junctions, or the inlet pass yielded nothing
         junction_xy = {j.name: (j.x, j.y) for j in network.junctions}
-        if derive:  # the DEM is needed for derive anyway; without derive there is none → "no_dem"
-            _r("ACQUIRING_DEM", 40)
-            dem = acquire_dem(tuple(aoi.bbox), ws, source=dem_source)
         subcatchments, sub_diag = delineate_junction_subcatchments(
             junction_xy, aoi, dem_path=(dem.path if dem else None))
         imperv_map = {}

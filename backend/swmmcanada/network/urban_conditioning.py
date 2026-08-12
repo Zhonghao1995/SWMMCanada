@@ -139,7 +139,13 @@ def snap_to_local_low(points, dem, transform, *, search_radius_m: float = DEFAUL
             continue
         r1, r2 = max(r0 - reach, 0), min(r0 + reach + 1, h)
         c1, c2 = max(c0 - reach, 0), min(c0 + reach + 1, w)
-        window = band[r1:r2, c1:c2]
+        window = band[r1:r2, c1:c2].copy()
+        # The window is square; its diagonal reaches ~1.4x further than its side. Mask the
+        # corners so the radius a reader is given actually bounds the move.
+        rr_idx = np.arange(r1, r2)[:, None]
+        cc_idx = np.arange(c1, c2)[None, :]
+        dist = np.hypot((rr_idx - r0) * px, (cc_idx - c0) * px)
+        window[dist > search_radius_m] = np.nan
         if np.all(np.isnan(window)):
             continue
         lowest = float(np.nanmin(window))

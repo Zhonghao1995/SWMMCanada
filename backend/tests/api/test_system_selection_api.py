@@ -134,3 +134,75 @@ class TestPreviewOffersTheChoice:
         body = client.post("/api/v1/aoi/preview", data={"polygon": json.dumps(remote)}).json()
         assert body["city"] is None
         assert body["systems"] == ["storm"]
+
+
+class TestTerrainPlanningNeedsTheSurfaceFirst:
+    """规划书 §4: the plan can only prefer terrain if it knows the terrain's posting.
+
+    The DEM used to be acquired after delineation, so the resolver was handed
+    `dem_resolution_m=None` and could never choose the terrain path — the method existed
+    and was unreachable, which is worse than not having it.
+    """
+
+    def test_the_seam_accepts_a_dem_resolution(self):
+        import inspect
+
+        from swmmcanada.pipeline import _plan_delineation
+
+        assert "dem_resolution_m" in inspect.signature(_plan_delineation).parameters
+
+    def test_a_fine_surface_reaches_the_plan(self):
+        from swmmcanada.pipeline import _plan_delineation
+        from swmmcanada.validate import schema
+
+        class Spec:
+            key = "victoria"
+
+            @staticmethod
+            def land(bbox, client):
+                return {"catchbasins": [1] * 700, "parcels": [1] * 4000,
+                        "buildings": [1] * 400, "kerbs": [1] * 2000}
+
+        class Net:
+            junctions = [object()] * 100
+
+        _land, plan = _plan_delineation(Spec(), (0, 0, 1, 1), None, Net(), derive=True,
+                                        subcatchment_method="parcel",
+                                        dem_resolution_m=1.0)
+        assert plan.method == schema.METHOD_CATCHBASIN_DEM
+        assert plan.evidence["dem_resolution_m"] == 1.0
+
+    def test_a_coarse_surface_keeps_the_parcel_method(self):
+        from swmmcanada.pipeline import _plan_delineation
+
+        class Spec:
+            key = "regina"
+
+            @staticmethod
+            def land(bbox, client):
+                return {"catchbasins": [1] * 700, "parcels": [1] * 4000}
+
+        class Net:
+            junctions = [object()] * 100
+
+        _land, plan = _plan_delineation(Spec(), (0, 0, 1, 1), None, Net(), derive=True,
+                                        subcatchment_method="parcel",
+                                        dem_resolution_m=30.0)
+        assert plan.method == "catchbasin_parcel"
+
+    def test_kerbs_are_counted_from_the_land_fetch(self):
+        from swmmcanada.pipeline import _plan_delineation
+
+        class Spec:
+            key = "victoria"
+
+            @staticmethod
+            def land(bbox, client):
+                return {"catchbasins": [1] * 10, "kerbs": [1] * 2189}
+
+        class Net:
+            junctions = [object()] * 10
+
+        _l, plan = _plan_delineation(Spec(), (0, 0, 1, 1), None, Net(), derive=True,
+                                     subcatchment_method="parcel", dem_resolution_m=1.0)
+        assert plan.evidence["n_kerbs"] == 2189

@@ -120,16 +120,27 @@ def resolve(evidence: Evidence) -> DelineationPlan:
     fine_enough = (evidence.dem_resolution_m is not None
                    and evidence.dem_resolution_m <= KERB_MAX_DEM_RES_M)
     kerbs_usable = bool(evidence.n_kerbs) and evidence.dem_available and fine_enough
+    terrain_usable = evidence.dem_available and fine_enough
     gates = {"inlets_present": has_inlets, "land_present": has_land,
-             "dem_present": evidence.dem_available, "kerb_usable": kerbs_usable}
+             "dem_present": evidence.dem_available, "kerb_usable": kerbs_usable,
+             "terrain_usable": terrain_usable}
 
-    if has_inlets and kerbs_usable:
+    # 规划书 §4 priorities 2 and 3 are the SAME pipeline: inlets as drainage targets over a
+    # conditioned surface. Kerbs are one more input, not another algorithm — they change how
+    # much the answer is worth, not how it is produced.
+    if has_inlets and terrain_usable:
         return DelineationPlan(
             method=METHOD_CATCHBASIN_DEM, boundary=boundary, anchors=CATCH_BASIN,
-            shaping=DEM_D8, gates=gates, evidence=ev, confidence="medium",
-            reason=(f"{evidence.n_catchbasins} inlets, {evidence.n_kerbs} kerb lines and a "
-                    f"{evidence.dem_resolution_m:g} m surface: runoff is routed to the "
-                    f"inlets over terrain that knows where the kerbs are"))
+            shaping=DEM_D8, gates=gates, evidence=ev,
+            confidence="high" if kerbs_usable else "medium",
+            reason=(
+                f"{evidence.n_catchbasins} inlets, {evidence.n_kerbs} kerb lines and a "
+                f"{evidence.dem_resolution_m:g} m surface: runoff is routed to the inlets "
+                f"over terrain that knows where the kerbs are"
+                if kerbs_usable else
+                f"{evidence.n_catchbasins} inlets and a {evidence.dem_resolution_m:g} m "
+                f"surface, but no kerb lines published: runoff is routed over terrain, "
+                f"which cannot see where a kerb sends it"))
     if has_inlets and has_land:
         return DelineationPlan(
             method="catchbasin_parcel", boundary=boundary, anchors=CATCH_BASIN,

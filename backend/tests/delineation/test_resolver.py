@@ -70,7 +70,7 @@ class TestPlansExplainThemselves:
         p = resolve(ev)
         assert p.reason and p.gates and isinstance(p.evidence, dict)
         assert set(p.gates) == {"inlets_present", "land_present", "dem_present",
-                                "kerb_usable"}
+                                "kerb_usable", "terrain_usable"}
 
     def test_reason_quotes_the_numbers_it_used(self):
         p = resolve(Evidence(n_catchbasins=7864, n_parcels=15728, n_buildings=21969))
@@ -149,11 +149,15 @@ class TestKerbConditionedDemIsAMethod:
         assert p.method == schema.METHOD_CATCHBASIN_DEM
         assert p.anchors == "catch_basin" and p.shaping == "dem_d8"
 
-    def test_without_kerbs_it_stays_on_the_parcel_method(self):
-        """Thirty cities publish none, and must be left where they were."""
+    def test_without_kerbs_but_with_terrain_it_still_routes_over_terrain(self):
+        """规划书 §4 priority 3. Kerbs sharpen the answer; they are not what makes terrain
+        usable. See TestPriorityThreeIsTerrainNotTessellation."""
+        from swmmcanada.validate import schema
+
         p = resolve(Evidence(n_catchbasins=773, n_parcels=4749, n_buildings=499,
                              dem_available=True, dem_resolution_m=1.0))
-        assert p.method == "catchbasin_parcel"
+        assert p.method == schema.METHOD_CATCHBASIN_DEM
+        assert p.confidence == "medium"
 
     def test_kerbs_without_terrain_cannot_use_them(self):
         """A kerb only means something as an edit to a surface."""
@@ -173,3 +177,49 @@ class TestKerbConditionedDemIsAMethod:
         p = resolve(Evidence(n_catchbasins=773, n_parcels=4749, n_kerbs=2189,
                              dem_available=True, dem_resolution_m=1.0))
         assert "2189" in p.reason and "kerb" in p.reason.lower()
+
+
+class TestPriorityThreeIsTerrainNotTessellation:
+    """规划书 §4 priority 3: inlets and a fine surface, without kerbs.
+
+    The plan ranks terrain above geometry wherever a usable surface exists. Parcel shaping
+    draws real lot lines but divides land by proximity to an inlet; D8 divides it by where
+    water actually goes. Where a fine DEM exists, the plan says use it.
+    """
+
+    def test_inlets_and_a_fine_surface_route_over_terrain(self):
+        from swmmcanada.validate import schema
+
+        p = resolve(Evidence(n_catchbasins=773, n_parcels=4749, n_buildings=499,
+                             dem_available=True, dem_resolution_m=1.0))
+        assert p.method == schema.METHOD_CATCHBASIN_DEM
+        assert p.shaping == "dem_d8"
+
+    def test_a_coarse_surface_is_not_a_usable_one(self):
+        """30 m posting cannot resolve a city block; the plan's own gate (ADR 0010) says
+        the same thing about noise."""
+        p = resolve(Evidence(n_catchbasins=773, n_parcels=4749, dem_available=True,
+                             dem_resolution_m=30.0))
+        assert p.method == "catchbasin_parcel"
+
+    def test_no_surface_at_all_keeps_the_parcel_method(self):
+        p = resolve(Evidence(n_catchbasins=773, n_parcels=4749, dem_available=False))
+        assert p.method == "catchbasin_parcel"
+
+    def test_kerbs_raise_the_confidence_without_changing_the_method(self):
+        """Priorities 2 and 3 are the same pipeline with one more input, not two
+        algorithms (ADR 0029 Q10). What differs is how much the result is worth."""
+        from swmmcanada.validate import schema
+
+        without = resolve(Evidence(n_catchbasins=773, n_parcels=4749,
+                                   dem_available=True, dem_resolution_m=1.0))
+        with_kerbs = resolve(Evidence(n_catchbasins=773, n_parcels=4749, n_kerbs=2189,
+                                      dem_available=True, dem_resolution_m=1.0))
+        assert without.method == with_kerbs.method == schema.METHOD_CATCHBASIN_DEM
+        assert with_kerbs.confidence == "high"
+        assert without.confidence == "medium"
+
+    def test_the_reason_distinguishes_them(self):
+        without = resolve(Evidence(n_catchbasins=773, dem_available=True,
+                                   dem_resolution_m=1.0))
+        assert "kerb" in without.reason.lower(), "must say what it is missing"

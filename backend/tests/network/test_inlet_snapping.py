@@ -83,3 +83,17 @@ class TestDegenerate:
     def test_no_inlets_is_not_an_error(self):
         moved, diag = snap_to_local_low({}, _gutter_dem(), TRANSFORM, search_radius_m=5.0)
         assert moved == {} and diag["n_moved"] == 0
+
+
+def test_no_inlet_moves_further_than_the_stated_radius():
+    """The window is square, so its diagonal reaches further than its side. A move of
+    6.3 m under a stated 4 m radius was measured on live Victoria — the number a reader
+    is given has to bound what actually happened."""
+    dem = _gutter_dem()
+    starts = {f"CB{c}": _xy(c, 17) for c in range(5, 35)}
+    moved, diag = snap_to_local_low(dem=dem, points=starts, transform=TRANSFORM,
+                                    search_radius_m=4.0)
+    for name, (x, y) in moved.items():
+        x0, y0 = starts[name]
+        assert ((x - x0) ** 2 + (y - y0) ** 2) ** 0.5 <= 4.0 + 1e-9, name
+    assert diag["max_move_m"] <= 4.0
