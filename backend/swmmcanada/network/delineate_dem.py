@@ -173,6 +173,17 @@ def delineate_junction_subcatchments(
         return _voronoi(junction_xy, aoi, network_config, gate,
                         service_mask=service_mask, min_cell_ha=min_cell_ha)
 
+    # Coverage can be perfect while the cells are useless: the area is all there, gathered
+    # into a few basins with slivers around the rest of the inlets. Nothing else notices.
+    if cells_are_mostly_noise(subs):
+        from swmmcanada.network.service_area import MIN_CELL_HA
+
+        noise = sum(1 for s in subs if s.area_ha < MIN_CELL_HA)
+        gate["decision"] = "noise_cell_fallback"
+        gate["noise_cell_share"] = round(noise / len(subs), 3)
+        return _voronoi(junction_xy, aoi, network_config, gate,
+                        service_mask=service_mask, min_cell_ha=min_cell_ha)
+
     gate["decision"] = "dem"
     diag = {
         "method": METHOD_DEM,
@@ -184,6 +195,33 @@ def delineate_junction_subcatchments(
         **dem_diag,
     }
     return subs, diag
+
+
+#: Share of noise-scale cells above which a delineation has not produced units. A majority
+#: rule rather than a tuned number: if most of what came back is too small to be a
+#: subcatchment, the method did not work here whatever its coverage looks like.
+NOISE_CELL_MAJORITY = 0.5
+
+
+def cells_are_mostly_noise(subs) -> bool:
+    """True when most cells are below the size the repo already calls noise.
+
+    D8 to many pour points assigns each cell to the FIRST one downstream, so on a gutter
+    with several inlets the downstream one collects the block and those above it get
+    slivers. `MIN_CELL_HA` is documented as exactly this: "noise from adjacent pour points
+    on one flow path".
+
+    Coverage does not catch it — the area is all there, just concentrated in a few cells —
+    so a result like this passes every existing check and ships as the default silently.
+    Measured on live Victoria: 59% noise-scale from the terrain path against 36% from inlet
+    tessellation.
+    """
+    from swmmcanada.network.service_area import MIN_CELL_HA
+
+    if not subs:
+        return False
+    noise = sum(1 for s in subs if getattr(s, "area_ha", 0.0) < MIN_CELL_HA)
+    return noise / len(subs) > NOISE_CELL_MAJORITY
 
 
 def _apply_service(subs, junction_xy, aoi, service_mask, min_cell_ha):
