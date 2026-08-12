@@ -420,6 +420,11 @@ def build_from_aoi(
     climate_client=None,
     climate_buffer_deg: float = 0.3,
     derive: bool = True,
+    # ADR 0029 Q3: accepted for interface symmetry with build_city — the API does not know
+    # which pathway an AOI will take. Synthesis produces a storm network only, so a
+    # selection cannot change what is built; it is recorded in provenance so a package that
+    # was asked for sanitary and could not supply it says so rather than looking complete.
+    systems=None,
     landcover_source=None,
     soil_source=None,
     infiltration=None,
@@ -520,6 +525,10 @@ def build_from_aoi(
         start=start, end=end, method=method, config=config,
         extra_provenance={
             "delineation_plan": plan.as_dict(),
+            "systems": {"requested": list(systems) if systems else None,
+                        "produced": ["storm"],
+                        "note": ("synthesis builds a storm network only; any other system "
+                                 "requested was not available from open data for this AOI")},
             "sources": {
                 "dem": type(dem_source).__name__,
                 "climate": type(climate_client).__name__,
@@ -565,7 +574,7 @@ def build_city(
     client=None,
     dem_source=None, climate_client=None, climate_buffer_deg: float = 0.3, derive: bool = True,
     landcover_source=None, soil_source=None, subcatchment_method: str = "parcel",
-    infiltration=None, design_storm=None, report=None,
+    infiltration=None, design_storm=None, report=None, systems=None,
 ) -> BuildResult:
     """Build a SWMM model from a real municipal network (ADR 0004/0005/0006). ``city`` is a
     registry key ("victoria") or a ``CitySpec``; the spec supplies the city's fetch/build
@@ -650,7 +659,12 @@ def build_city(
     # with graceful degradation (a sanitary fetch failure never blocks the storm build).
     san_diag = {"included": False, "reason": "not_published"}
     service_areas: list = []
-    if spec.sanitary is not None:
+    # ADR 0029 Q3: a selection the user made is honoured at BUILD time, not just at export.
+    # Grafting a system nobody asked for and filtering it out later would still pay for the
+    # fetch and still put it in the datastore.
+    if systems is not None and "sanitary" not in systems:
+        san_diag = {"included": False, "reason": "not selected"}
+    elif spec.sanitary is not None:
         _r("SANITARY", 78)
         try:
             _tok = base.SURFACE_SAMPLER.set(surface_sampler)  # same DEM tier as storm

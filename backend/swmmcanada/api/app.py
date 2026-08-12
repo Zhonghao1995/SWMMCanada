@@ -25,6 +25,11 @@ from fastapi.responses import FileResponse
 from shapely.geometry import mapping as shp_mapping
 
 from swmmcanada.acquire.design_storm import DesignStormChoice
+
+#: The drainage systems a build may be asked to include (ADR 0029 Q3). A city
+#: offers a subset of these; the API validates against the vocabulary, and the
+#: registry decides what each city actually has.
+KNOWN_SYSTEMS = frozenset({"storm", "sanitary", "combined"})
 from swmmcanada.api.tasks import TaskStore, run_task
 from swmmcanada.build.config import InfiltrationModel
 from swmmcanada.geo import aoi_from_geojson, aoi_from_shapefile
@@ -137,6 +142,7 @@ def create_app(*, pipeline=None, workdir=None, run_inline: bool = False) -> Fast
         infiltration: Optional[str] = Form(None),
         design_storm_yr: Optional[int] = Form(None),
         design_storm_h: int = Form(24),
+        systems: Optional[str] = Form(None),
     ):
         aoi = await _aoi_from_request(polygon, file)
         try:
@@ -167,6 +173,19 @@ def create_app(*, pipeline=None, workdir=None, run_inline: bool = False) -> Fast
                 raise HTTPException(
                     422, f"Unknown infiltration method {infiltration!r} — "
                          f"one of: {', '.join(m.value for m in InfiltrationModel)}")
+        selected_systems = None
+        if systems is not None:                    # ADR 0029 Q3: which systems to include
+            selected_systems = [s.strip() for s in systems.split(",") if s.strip()]
+            if not selected_systems:
+                raise HTTPException(
+                    422, "Empty system selection — omit the field to include every system "
+                         f"the city has, or name some of {sorted(KNOWN_SYSTEMS)}.")
+            unknown = [s for s in selected_systems if s not in KNOWN_SYSTEMS]
+            if unknown:
+                raise HTTPException(
+                    422, f"Unknown drainage system(s) {unknown} — "
+                         f"expected any of {sorted(KNOWN_SYSTEMS)}.")
+
         design_storm = None
         if design_storm_yr is not None:            # ADR 0018: presence of a return period
             if design_storm_yr not in IDF_RETURN_PERIODS:   # IS the mode selection
@@ -188,6 +207,8 @@ def create_app(*, pipeline=None, workdir=None, run_inline: bool = False) -> Fast
             build_fn = partial(build_fn, infiltration=infiltration)  # pipelines stay as-is
         if design_storm is not None:               # same contract as infiltration (ADR 0018)
             build_fn = partial(build_fn, design_storm=design_storm)
+        if selected_systems is not None:           # same contract again (ADR 0029 Q3)
+            build_fn = partial(build_fn, systems=selected_systems)
         args = (task_id, aoi, start, end, store, work_root, build_fn, mode)
         if run_inline:
             run_task(*args)
