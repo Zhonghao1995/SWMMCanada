@@ -640,8 +640,142 @@ def _delineate_to_inlets(land, aoi, dem, spec, plan, network):
     return resolved, diag
 
 
+def _subcatchments_from_user_layer(features, network, crs, laterals=None):
+    """Turn an uploaded layer into subcatchments (resolver priority 0).
+
+    The boundaries are the user's and are used verbatim — no reshaping, no merging, no
+    sliver discipline. Outlets are resolved the way every other path resolves them unless
+    the layer names one, because a polygon file rarely carries our node ids.
+
+    Geometry is repaired if invalid, since a broken ring would crash downstream exactly as
+    a broken parcel did, and repairs are counted rather than hidden.
+    """
+    from shapely.geometry import shape as shp_shape
+    from shapely.ops import transform as _tf
+
+    from swmmcanada.build.models import SurfaceCatchment
+    from swmmcanada.geo.crs import lonlat_projector
+
+    to_m = lonlat_projector(crs)
+    outlet_of = base._outlet_resolver(network, crs, laterals)
+    known = {n.name for n in list(network.junctions) + list(network.outfalls)}
+
+    subs, n_repaired, n_named_outlet, n_dropped = [], 0, 0, 0
+    for i, f in enumerate(features or []):
+        geom = (f or {}).get("geometry")
+        if not geom:
+            n_dropped += 1
+            continue
+        try:
+            poly = shp_shape(geom)
+        except Exception:  # noqa: BLE001 — one bad feature is not a failed upload
+            n_dropped += 1
+            continue
+        if not poly.is_valid:
+            poly = poly.buffer(0)
+            n_repaired += 1
+        if poly.is_empty or poly.geom_type not in ("Polygon", "MultiPolygon"):
+            n_dropped += 1
+            continue
+        if poly.geom_type == "MultiPolygon":
+            poly = max(poly.geoms, key=lambda g: g.area)
+
+        props = f.get("properties") or {}
+        name = str(props.get("name") or props.get("NAME") or f"U{i + 1}")
+        declared = props.get("outlet") or props.get("OUTLET") or props.get("outlet_node")
+        rep = poly.representative_point()
+        if declared and str(declared) in known:
+            outlet = str(declared)
+            n_named_outlet += 1
+        else:
+            outlet = outlet_of((rep.x, rep.y))
+
+        ring = [(float(x), float(y)) for x, y in poly.exterior.coords]
+        poly_m = _tf(to_m, poly)
+        area_m2 = poly_m.area
+        subs.append(SurfaceCatchment(
+            name=name, outlet_node=outlet, area_ha=area_m2 / 1e4,
+            # Placeholders: `derive` overwrites imperviousness, slope and CN from the DEM,
+            # land cover and soil exactly as it does for cells we drew. Only the boundary
+            # is the user's.
+            pct_imperv=50.0,
+            width_m=area_m2 / base.characteristic_flow_length_m(poly_m, (rep.x, rep.y)),
+            pct_slope=1.0, polygon=ring))
+
+    return subs, {
+        "method": "user_supplied",
+        "n_subcatchments": len(subs),
+        "n_geometry_repaired": n_repaired,
+        "n_dropped_invalid": n_dropped,
+        "n_outlet_declared_by_user": n_named_outlet,
+        "note": ("boundaries are the user's and are used verbatim; outlets are resolved "
+                 "here unless the layer names one this network contains"),
+    }
+
+
+def _apply_official_boundary(subcatchments, official_features, crs):
+    """Trim cells to the published basin they drain to (规划书 §4, ADR 0029 Q2).
+
+    Cells arrive as EPSG:4326 rings and the cut has to happen in metres, so each is
+    projected, clipped, and projected back. Only cells the clip actually changed are
+    rebuilt; the rest are passed through untouched.
+    """
+    from pyproj import Transformer
+    from shapely.geometry import Polygon, shape as shp_shape
+    from shapely.ops import transform as _tf
+
+    from swmmcanada.delineation.boundary import clip_to_official_basins
+    from swmmcanada.geo.crs import lonlat_projector
+
+    if not official_features or not subcatchments:
+        return subcatchments, {"applied": False, "reason": "no official layer or no cells"}
+
+    to_m = lonlat_projector(crs)
+    basins = []
+    for f in official_features:
+        g = (f or {}).get("geometry")
+        if not g:
+            continue
+        try:
+            poly = _tf(to_m, shp_shape(g))
+        except Exception:  # noqa: BLE001 — a broken basin is not a build failure
+            continue
+        if poly.is_valid and not poly.is_empty:
+            basins.append({"geometry": poly,
+                           "outlet": (f.get("properties") or {}).get("OUTLET")})
+
+    class _View:
+        """Mutable stand-in the clipper can rewrite; carries its cell and its original."""
+
+        def __init__(self, polygon, seed, src):
+            self.polygon, self.seed, self.src, self.original = polygon, seed, src, polygon
+
+    views = []
+    for sub in subcatchments:
+        if not sub.polygon or len(sub.polygon) < 4:
+            continue
+        poly_m = _tf(to_m, Polygon(sub.polygon))
+        rep = poly_m.representative_point()
+        views.append(_View(poly_m, (rep.x, rep.y), sub))
+
+    _clipped, diag = clip_to_official_basins(views, basins)
+    back = Transformer.from_crs(crs, "EPSG:4326", always_xy=True).transform
+    rebuilt = {}
+    for v in views:
+        if v.polygon is v.original:
+            continue
+        ring = _tf(back, v.polygon)
+        if ring.is_empty or ring.geom_type != "Polygon":
+            continue
+        rebuilt[id(v.src)] = replace(
+            v.src, area_ha=v.polygon.area / 1e4,
+            polygon=[(float(x), float(y)) for x, y in ring.exterior.coords])
+
+    return [rebuilt.get(id(s), s) for s in subcatchments], diag
+
+
 def _plan_delineation(spec, bbox, client, network, derive: bool, subcatchment_method: str,
-                      dem_resolution_m=None):
+                      dem_resolution_m=None, user_layer=None):
     """Fetch the land evidence and let the resolver choose. Returns ``(land, plan)``.
 
     Extracted so the decision is testable without a full offline build: this is the seam
@@ -675,6 +809,7 @@ def _plan_delineation(spec, bbox, client, network, derive: bool, subcatchment_me
         n_parcels=len(land.get("parcels") or []),
         n_buildings=len(land.get("buildings") or []),
         n_kerbs=len(land.get("kerbs") or []),
+        n_user_units=len(user_layer or []),
         n_junctions=len(network.junctions),
         dem_available=bool(derive),
         dem_resolution_m=dem_resolution_m,
@@ -689,6 +824,10 @@ def build_city(
     dem_source=None, climate_client=None, climate_buffer_deg: float = 0.3, derive: bool = True,
     landcover_source=None, soil_source=None, subcatchment_method: str = "parcel",
     infiltration=None, design_storm=None, report=None, systems=None,
+    #: A subcatchment layer the user uploaded (GeoJSON features). Resolver priority 0 —
+    #: their boundaries override every method here, because every choice this module makes
+    #: is a judgement call and theirs is the one with local knowledge behind it.
+    subcatchment_layer=None,
 ) -> BuildResult:
     """Build a SWMM model from a real municipal network (ADR 0004/0005/0006). ``city`` is a
     registry key ("victoria") or a ``CitySpec``; the spec supplies the city's fetch/build
@@ -738,10 +877,17 @@ def build_city(
     imperv_map: dict = {}
     sub_diag: dict = {}
     land, plan = _plan_delineation(spec, bbox, client, network, derive, subcatchment_method,
-                                   dem_resolution_m=(dem.resolution_m if dem else None))
+                                   dem_resolution_m=(dem.resolution_m if dem else None),
+                                   user_layer=subcatchment_layer)
 
     subcatchments = []
-    if plan.anchors == "catch_basin" and plan.shaping == "dem_d8":
+    if plan.shaping == "user":
+        # Priority 0: used verbatim. Nothing below runs, and the official boundary is not
+        # applied either — clipping someone else's boundaries to our reading of a municipal
+        # layer would be overriding the choice we just said outranks us.
+        subcatchments, sub_diag = _subcatchments_from_user_layer(
+            subcatchment_layer, network, spec.sub_crs, land.get("laterals"))
+    if not subcatchments and plan.anchors == "catch_basin" and plan.shaping == "dem_d8":
         # 规划书 §4 priorities 2-3: route runoff over the terrain TO the inlets, rather
         # than dividing land by proximity to them. Same delineator the junction path uses,
         # with inlets as pour points and the city's kerb geometry as an extra input — one
@@ -765,6 +911,16 @@ def build_city(
             water = water_union(landcover.raster_path, aoi)
             subcatchments, water_diag = subtract_water(subcatchments, water, junction_xy, aoi)
             sub_diag = {**(sub_diag or {}), "water": water_diag}
+
+    # The hard edge the plan asked for. Applied to what WE drew, never to an uploaded layer.
+    boundary_diag = {"applied": False, "reason": "plan did not ask for one"}
+    if plan.boundary == "official_basin" and plan.shaping != "user" and subcatchments:
+        try:
+            subcatchments, boundary_diag = _apply_official_boundary(
+                subcatchments, spec.official_catchments(bbox, client), spec.sub_crs)
+        except Exception as exc:  # noqa: BLE001 — a bonus edge, never a blocker
+            boundary_diag = {"applied": False, "reason": f"{type(exc).__name__}: {exc}"}
+    sub_diag = {**(sub_diag or {}), "official_boundary": boundary_diag}
 
     if derive:
         if dem is None:
