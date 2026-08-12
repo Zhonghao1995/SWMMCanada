@@ -107,6 +107,43 @@ def _coord_projector(crs):
     return lonlat_projector(crs)
 
 
+def _write_dry_weather_flow(inp, service_areas, config) -> None:
+    """Emit ``[DWF]`` and the diurnal ``[PATTERNS]`` entry for sewer service areas (ADR 0031).
+
+    This is where the sanitary system stops being pipes with nothing in them. Areas arrive
+    already loaded (``swmmcanada.loading``), so the writer's only job is to place the flow on
+    the node the area serves — no subcatchment is created, because a separated sanitary
+    network has no surface runoff of its own.
+
+    Several areas may load the same node (many parcels, one manhole); their flows are summed
+    rather than overwriting one another.
+    """
+    from swmm_api.input_file.sections import DryWeatherFlow, Pattern
+
+    loaded = [a for a in (service_areas or []) if getattr(a, "dwf_lps", None)]
+    if not loaded:
+        return
+
+    from swmmcanada.loading.dwf import diurnal_pattern, to_flow_units
+
+    name, factors = diurnal_pattern()
+    patterns = inp.get(SEC.PATTERNS) or Pattern.create_section()
+    patterns.add_obj(Pattern(name, Pattern.CYCLES.HOURLY, factors=list(factors)))
+    inp[SEC.PATTERNS] = patterns
+
+    by_node: dict = {}
+    for a in loaded:
+        by_node[a.node] = by_node.get(a.node, 0.0) + float(a.dwf_lps)
+
+    # SWMM reads the base value in the model's own FLOW_UNITS (this project defaults to
+    # CMS), so litres/second must be converted or every sanitary inflow is 1000x too big.
+    units = config.flow_units.value
+    dwf = inp.get(SEC.DWF) or DryWeatherFlow.create_section()
+    for node, lps in sorted(by_node.items()):
+        dwf.add_obj(DryWeatherFlow(node, "FLOW", round(to_flow_units(lps, units), 8), name))
+    inp[SEC.DWF] = dwf
+
+
 def _reject_service_areas(subcatchments) -> None:
     """Refuse to write a sewer service area as a surface subcatchment (ADR 0029 Q1/Q8).
 
@@ -139,6 +176,7 @@ def assemble_inp(
     evaporation: Optional[EvaporationSeries] = None,
     temperature: Optional[TemperatureSeries] = None,
     tide: Optional["TideSeries"] = None,
+    service_areas: Optional[List] = None,
 ) -> SwmmInput:
     _reject_service_areas(subcatchments)
     inp = SwmmInput()
@@ -236,6 +274,7 @@ def assemble_inp(
             infil.add_obj(InfiltrationCurveNumber(
                 s.name, curve_no=s.cn, hydraulic_conductivity=0.5, time_dry=7
             ))
+    _write_dry_weather_flow(inp, service_areas, config)
     inp[SEC.SUBCATCHMENTS] = subs
     inp[SEC.SUBAREAS] = subareas
     inp[SEC.INFILTRATION] = infil
