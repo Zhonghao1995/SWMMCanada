@@ -40,6 +40,10 @@ MAINS, MANHOLES, FITTINGS, OUTFALLS, CATCHBASINS = 10, 4, 3, 5, 1
 #: coarse to be model units. Used as the yardstick our outlet resolution is scored
 #: against instead, via `OUTLET` (an outfall AssetID) — see #129 / ADR 0029 Q2.
 STORM_CATCHMENTS = 12
+#: Storm Drain Lateral Line — the leads from each inlet to the main it taps.
+#: 11,969 city-wide. A lead states which pipe an inlet actually reaches, which
+#: geometry only approximates where two mains run close together (规划书 §5).
+STORM_LATERALS = 8
 LAND_BASE = "https://maps.victoria.ca/server/rest/services/OpenData/OpenData_Land/MapServer"
 LAND_PARCELS, LAND_BUILDINGS = 5, 1            # Parcels (Folio based), Buildings
 SEWER_BASE = "https://maps.victoria.ca/server/rest/services/OpenData/OpenData_Sewer/MapServer"
@@ -164,6 +168,7 @@ def fetch_victoria_land(bbox, *, client=None) -> dict:
         "catchbasins": _fetch_layer_bbox(BASE, CATCHBASINS, bbox, client),
         "parcels": _fetch_layer_bbox(LAND_BASE, LAND_PARCELS, bbox, client),
         "buildings": _fetch_layer_bbox(LAND_BASE, LAND_BUILDINGS, bbox, client),
+        "laterals": _fetch_layer_bbox(BASE, STORM_LATERALS, bbox, client),
     }
 
 

@@ -633,6 +633,27 @@ def _drop_remainder_donuts(parcels):
     return kept, n_dropped
 
 
+def repair_polygons(series):
+    """Make a projected GeoSeries safe to intersect, and say how many needed it.
+
+    Open cadastral data contains self-intersecting rings. Shapely raises TopologyException
+    from `intersection` on one, and a live downtown AOI took the whole delineation down
+    before any of it reached a model. Repair happens in the **metric** CRS — the one the
+    geometry is actually used in — because validity is not preserved across a projection.
+
+    ``make_valid`` can return lines or collections where a ring degenerates; anything
+    without area is dropped rather than carried as a zero-area parcel.
+    """
+    broken = ~series.is_valid
+    n = int(broken.sum())
+    if n:
+        series = series.copy()
+        series[broken] = series[broken].make_valid()
+        series = series[series.notna() & ~series.is_empty
+                        & series.geom_type.isin(("Polygon", "MultiPolygon"))]
+    return series, n
+
+
 def _parcel_cells(seeds, parcels, aoi, crs):
     """Subcatchment shapes that follow REAL parcel/lot lines: each parcel is assigned whole to
     its nearest catch basin and dissolved (so cell edges fall on lot lines, not a Voronoi
@@ -660,6 +681,7 @@ def _parcel_cells(seeds, parcels, aoi, crs):
 
     par = gpd.GeoSeries(pgeoms, crs="EPSG:4326").to_crs(crs)
     par = par[par.notna() & ~par.is_empty]
+    par, _n = repair_polygons(par)
     par = par[par.intersects(aoi_m)]
     if len(par) < 2:
         return {}
@@ -808,7 +830,48 @@ def merge_secondary_system(primary: NetworkIn, secondary: NetworkIn, *, prefix: 
                      conduits=list(primary.conduits) + cs)
 
 
-def _outlet_resolver(network: NetworkIn, crs: str):
+#: A lateral endpoint further than this from a catch basin is not that basin's lead. A lead
+#: runs from the inlet to the main in the street; beyond that the pairing is a guess, and a
+#: guessed lead re-routes a whole cell onto the wrong pipe.
+LATERAL_SNAP_M = 25.0
+
+
+def _lateral_relocator(laterals, to_m):
+    """``(x, y) -> (x, y)``: move a query point from an inlet to where its lead actually
+    reaches the network, or leave it alone when no lead is near enough.
+
+    This is the whole of the lateral upgrade. A lead states which main an inlet taps, so
+    resolving the outlet from the lead's far end reuses the existing nearest-conduit logic
+    unchanged and simply asks it a better question.
+    """
+    import numpy as np
+
+    ends = []
+    for f in laterals or []:
+        g = (f or {}).get("geometry") or {}
+        c = g.get("coordinates") or []
+        if g.get("type") == "MultiLineString":
+            c = [pt for part in c for pt in part]
+        if len(c) >= 2:
+            a, b = to_m(float(c[0][0]), float(c[0][1])), to_m(float(c[-1][0]), float(c[-1][1]))
+            ends.append((a, b))
+            ends.append((b, a))
+    if not ends:
+        return lambda p: p
+
+    near = np.array([e[0] for e in ends])
+    far = np.array([e[1] for e in ends])
+    limit2 = LATERAL_SNAP_M ** 2
+
+    def relocate(p):
+        d2 = ((near - np.asarray(p)) ** 2).sum(axis=1)
+        k = int(d2.argmin())
+        return tuple(far[k]) if d2[k] <= limit2 else p
+
+    return relocate
+
+
+def _outlet_resolver(network: NetworkIn, crs: str, laterals=None):
     """``(lon, lat) -> node name``: the nearer endpoint of the NEAREST conduit, measured in
     the city's metric CRS. A catch basin's lead taps the closest main, so its outlet must
     sit on that pipe — the globally nearest node can belong to a parallel branch and
@@ -819,6 +882,7 @@ def _outlet_resolver(network: NetworkIn, crs: str):
     from swmmcanada.geo.crs import lonlat_projector
 
     to_m = lonlat_projector(crs)
+    relocate = _lateral_relocator(laterals, to_m)
     nodes = {n.name: to_m(n.x, n.y) for n in list(network.junctions) + list(network.outfalls)}
 
     ends = [(nodes[c.from_node], nodes[c.to_node], c.from_node, c.to_node)
@@ -828,7 +892,7 @@ def _outlet_resolver(network: NetworkIn, crs: str):
         coords = np.array([nodes[n] for n in names])
 
         def nearest_node(xy):
-            p = np.asarray(to_m(*xy))
+            p = np.asarray(relocate(to_m(*xy)))
             return names[int(((coords - p) ** 2).sum(axis=1).argmin())]
 
         return nearest_node
@@ -841,7 +905,7 @@ def _outlet_resolver(network: NetworkIn, crs: str):
     end_names = [(e[2], e[3]) for e in ends]
 
     def resolver(xy):
-        p = np.asarray(to_m(*xy))
+        p = np.asarray(relocate(to_m(*xy)))
         t = np.clip(((p - A) * AB).sum(axis=1) / L2, 0.0, 1.0)
         d2 = ((A + t[:, None] * AB - p) ** 2).sum(axis=1)
         k = int(d2.argmin())
@@ -854,6 +918,7 @@ def _outlet_resolver(network: NetworkIn, crs: str):
 def delineate_catchbasin_subcatchments(
     network: NetworkIn, catchbasins, parcels, buildings, aoi, *, crs: str = "EPSG:32610",
     config: CatchbasinSubcatchmentConfig = CatchbasinSubcatchmentConfig(),
+    laterals=None,
 ):
     """Voronoi seeded by REAL catch basins; impervious = roofs (buildings) + road
     right-of-way (cell - parcels); outlet = nearest network node. Returns
@@ -880,11 +945,19 @@ def delineate_catchbasin_subcatchments(
     parcels, n_remainder = _drop_remainder_donuts(parcels)
     cells, shape_method, n_dropped = _shape_cells(seeds, parcels, aoi, crs)
 
-    outlet_of = _outlet_resolver(network, crs)
+    outlet_of = _outlet_resolver(network, crs, laterals)
+
+    n_repaired = 0
 
     def gdf(geoms):
+        """Projected, index-ready, and repaired. Parcels reach this path independently of
+        the shaping path, so sanitising only there left the crash in place."""
+        nonlocal n_repaired
         s = gpd.GeoSeries(geoms, crs="EPSG:4326") if geoms else gpd.GeoSeries([], crs="EPSG:4326")
-        return gpd.GeoDataFrame(geometry=s).to_crs(crs)
+        s = s.to_crs(crs)
+        s, n = repair_polygons(s) if len(s) else (s, 0)
+        n_repaired += n
+        return gpd.GeoDataFrame(geometry=s)
 
     par = gdf([shape(f["geometry"]) for f in (parcels or []) if f.get("geometry")])
     bld = gdf([shape(f["geometry"]) for f in (buildings or []) if f.get("geometry")])
@@ -905,7 +978,8 @@ def delineate_catchbasin_subcatchments(
             name=name, outlet_node=outlet_of(seeds[cb_id]), area_ha=area_m2 / 1e4,
             pct_imperv=imperv, width_m=math.sqrt(area_m2),
             pct_slope=config.default_slope_pct, polygon=exterior, holes=holes or None))
-    diag = {"method": f"catchbasin+parcel/building ({shape_method}-shaped)", "n_catchbasins": len(seeds),
+    diag = {"method": f"catchbasin+parcel/building ({shape_method}-shaped)",
+            "n_parcels_repaired": n_repaired, "n_catchbasins": len(seeds),
             "n_subcatchments": len(subs), "n_split_pieces": n_split, "n_dropped_invalid": n_dropped,
             "n_parcel_based_imperv": n_parcel,
             "n_parcels": int(len(par)), "n_buildings": int(len(bld)),

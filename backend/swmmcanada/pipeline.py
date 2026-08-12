@@ -640,7 +640,8 @@ def build_city(
     subcatchments = []
     if plan.anchors == "catch_basin":
         subcatchments, imperv_map, sub_diag = base.delineate_catchbasin_subcatchments(
-            network, land["catchbasins"], land["parcels"], land["buildings"], aoi, crs=spec.sub_crs
+            network, land["catchbasins"], land["parcels"], land["buildings"], aoi,
+            crs=spec.sub_crs, laterals=land.get("laterals"),
         )
     dem = None
     water = None
