@@ -156,10 +156,20 @@ Terrain is used here rather than to cut cells. Cutting by terrain was tried and 
 majority of cells at noise scale — the area was all present, gathered into a few basins with
 slivers around the rest of the nodes.
 
-Measured on downtown Victoria (88.9 ha, 391 nodes, 541 inlets): 174 cells, 91% coverage,
-median 0.36 ha, ninetieth percentile 0.86 ha, and no cells at noise scale. For comparison
-the previous inlet tessellation gave a 0.076 ha median with 36% of cells at noise scale, and
-routing terrain to each inlet gave 0.027 ha with 59%.
+Measured on two downtowns with different data behind them:
+
+| | cells | median | 90th pct | coverage | no cell at noise scale |
+|---|---|---|---|---|---|
+| Victoria — parcels, kerbs, 1 m surface | 174 | 0.36 ha | 0.86 ha | 91% | yes |
+| Ottawa — no parcels published, no kerbs | 278 | 0.39 ha | 0.90 ha | 100% | yes |
+
+The two cities publish very different things and land within a few percent of each other,
+which is the property worth having: the unit follows the network's own spacing rather than
+whichever layers a city happens to release.
+
+For comparison, on the same Victoria AOI the previous inlet tessellation gave a 0.076 ha
+median with 36% of cells at noise scale, and routing terrain to each inlet gave 0.027 ha
+with 59%.
 
 Where the streets are not published the shaping falls back — to terrain where the surface is
 fine enough, to lot lines where it is not, and to nearest-node tessellation as the floor. The

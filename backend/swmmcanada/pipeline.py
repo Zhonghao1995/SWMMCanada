@@ -66,6 +66,10 @@ def _method_descriptor(sub_diag: Optional[dict]) -> MethodDescriptor:
     # The DEM delineator reports `junction_dem` whatever it was seeded on. Seeded on real
     # inlets it is a different claim, and the label a reader sees must say which
     # (规划书 §4 priorities 2-3).
+    if method == vschema.METHOD_JUNCTION_STREET:
+        return MethodDescriptor(
+            vschema.METHOD_JUNCTION_STREET,
+            "each node takes the street it fronts", "medium")
     if method == vschema.METHOD_JUNCTION_DEM and diag.get("seeded_on") == "catch_basin":
         kerbed = (diag.get("urban_conditioning") or {}).get("applied")
         return MethodDescriptor(

@@ -26,6 +26,7 @@ from swmmcanada.network.subcatchments import _AREA_CRS, SubcatchmentCell, _large
 from swmmcanada.network.synth import NetworkConfig, _build_subcatchments
 
 METHOD_DEM = "junction_dem"
+from swmmcanada.validate.schema import METHOD_JUNCTION_STREET
 from swmmcanada.validate.schema import METHOD_JUNCTION_VORONOI as METHOD_VORONOI
 
 
@@ -106,9 +107,9 @@ def delineate_junction_subcatchments(
                 gate["decision"] = "noise_cell_fallback"
                 return _voronoi(junction_xy, aoi, network_config, gate,
                                 service_mask=None, min_cell_ha=min_cell_ha)
-            return subs, {"method": METHOD_VORONOI, "n_subcatchments": len(subs),
+            return subs, {"method": METHOD_JUNCTION_STREET, "n_subcatchments": len(subs),
                           "gate": gate, "service": service_diag,
-                          "split": "nearest street segment, midpoint gutter divides"}
+                          "split": "nearest street segment, gutter divides at the crest"}
         gate["decision"] = "corridor_voronoi"
         return _voronoi(junction_xy, aoi, network_config, gate,
                         service_mask=service_mask, min_cell_ha=min_cell_ha)
