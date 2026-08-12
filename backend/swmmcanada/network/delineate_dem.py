@@ -59,6 +59,11 @@ def delineate_junction_subcatchments(
     min_cell_ha=None,      # ADR 0017: sliver-merge threshold; None = no merging (v2)
     config: DemDelineationConfig = DemDelineationConfig(),
     network_config: NetworkConfig = NetworkConfig(),
+    # 规划书 §4 priority 2 — assets the terrain omits, in the DEM's own CRS. Absent for
+    # thirty of the fleet, which must therefore be left exactly where they were.
+    kerbs=None,
+    openings=None,
+    buildings=None,
 ) -> Tuple[List[SurfaceCatchment], dict]:
     """One subcatchment per junction, DEM-delineated when the terrain earns it.
 
@@ -115,6 +120,14 @@ def delineate_junction_subcatchments(
     # trench stubs legitimately refill (they ARE pits).
     burned, n_burned = _burn_streets(dem, transform, dem_crs, streets, config)
     gate["streets_burned_cells"] = n_burned
+    # Kerbs, their gates and buildings go in BEFORE depressions are filled (规划书 §4): a
+    # raised kerb creates ponding behind it that filling then resolves, which is exactly
+    # what happens on a real street. Raising after the fill would leave that water in a pit
+    # the router never drains.
+    from swmmcanada.network.urban_conditioning import condition_urban_dem
+
+    burned, urban_diag = condition_urban_dem(
+        burned, transform, kerbs=kerbs, openings=openings, buildings=buildings)
     conditioned, _ = pyflwdir.dem.fill_depressions(burned, nodata=config.nodata)
     median_slope = _median_slope_pct(conditioned, aoi_mask, transform, config.nodata)
     gate["median_slope_pct"] = round(median_slope, 3)
@@ -148,6 +161,7 @@ def delineate_junction_subcatchments(
         "method": METHOD_DEM,
         "n_subcatchments": len(subs),
         "gate": gate,
+        "urban_conditioning": urban_diag,
         "width_method": "area_over_flow_length",
         **dem_diag,
     }
