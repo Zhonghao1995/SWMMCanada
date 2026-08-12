@@ -32,11 +32,19 @@ from typing import List, Optional
 import geopandas as gpd
 from shapely.geometry import Polygon
 
-from swmmcanada.build.models import filter_system
+from swmmcanada.build.models import filter_system_report
 from swmmcanada.export._shared import node_lookup, placeholder_square, to_crs, write_rain_csv
 from swmmcanada.export.base import ExportResult, LossyMapping
 
 _PI = 3.141592653589793
+
+
+def _systems_present(network) -> list:
+    """Every system tag the model actually carries. The honest default for an export: a
+    user who has not chosen a subset expects the model they built, not a slice of it."""
+    tags = {getattr(e, "system", "storm_minor")
+            for e in list(network.junctions) + list(network.outfalls) + list(network.conduits)}
+    return sorted(tags)
 
 
 class IcmExporter:
@@ -44,12 +52,13 @@ class IcmExporter:
 
     target = "icm"
 
-    def export(self, ds, out_dir) -> ExportResult:
+    def export(self, ds, out_dir, *, systems=None) -> ExportResult:
         out = Path(out_dir)
         out.mkdir(parents=True, exist_ok=True)
 
         crs = ds.config.get("coordinate_crs")  # e.g. "EPSG:32610"; None → keep EPSG:4326
-        network = filter_system(ds.network)    # v1 exports the storm system only (ADR 0011)
+        systems = _systems_present(ds.network) if systems is None else systems
+        network, view_report = filter_system_report(ds.network, systems)
         node_xy = node_lookup(network)
 
         lossy: List[LossyMapping] = _hydrology_lossy(ds)
@@ -62,19 +71,23 @@ class IcmExporter:
                                           crs, lossy, warnings))
         files.append(_write_rain_event(out / "rain_infoworks.csv", ds.rain, warnings))
         files.append(write_rain_csv(out / "rain.csv", ds.rain))
-        files.append(_write_field_mapping(out / "field_mapping.md", lossy))
+        files.append(_write_field_mapping(out / "field_mapping.md", lossy, view_report))
         files.append(_write_readme(out / "README.md"))
 
         return ExportResult(
+            view=view_report,
             target=self.target, out_dir=out, files=files, lossy=lossy, warnings=warnings
         )
 
 
-def export_icm(datastore_dir, out_dir) -> ExportResult:
-    """Read a datastore directory and write its ICM ODIC import package into ``out_dir``."""
+def export_icm(datastore_dir, out_dir, *, systems=None) -> ExportResult:
+    """Read a datastore directory and write its ICM ODIC import package into ``out_dir``.
+
+    ``systems`` selects the tagged systems the package contains (ADR 0029 Q3); ``None``
+    means every system present."""
     from swmmcanada.datastore import read_datastore
 
-    return IcmExporter().export(read_datastore(datastore_dir), out_dir)
+    return IcmExporter().export(read_datastore(datastore_dir), out_dir, systems=systems)
 
 
 # --------------------------------------------------------------------------- #
@@ -294,7 +307,7 @@ def _hydrology_lossy(ds) -> List[LossyMapping]:
     return lossy
 
 
-def _write_field_mapping(path: Path, lossy: List[LossyMapping]) -> Path:
+def _write_field_mapping(path: Path, lossy: List[LossyMapping], view: dict) -> Path:
     rows = [
         ("`nodes.csv` (all columns)", "node fields",
          "**Auto-Map** — names equal the InfoWorks DB fields"),
@@ -319,8 +332,12 @@ def _write_field_mapping(path: Path, lossy: List[LossyMapping]) -> Path:
     ]
     lines: List[str] = []
     lines.append("# InfoWorks ICM field mapping (ODIC import package) — ADR 0012\n")
-    lines.append("> **Storm system only:** models carrying additional tagged systems "
-                 "(e.g. a separated sanitary subgraph) export their storm_minor elements here.\n")
+    lines.append(
+        "> **Systems in this package:** {systems}. Models carry every tagged system in one "
+        "hydraulic model; an export is a filtered view of it (ADR 0029). {orphan}\n".format(
+            systems=", ".join(view.get("systems", [])) or "unknown",
+            orphan=(view.get("note") or
+                    "No element lost its route to an outfall in this view.")))
     lines.append("> `nodes.csv` and `conduits.csv` column names equal the InfoWorks database "
                  "fields — use ODIC's **Auto-Map Fields** button. The subcatchment shapefile "
                  "needs the manual assignments below (DBF names are capped at 10 chars).\n")

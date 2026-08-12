@@ -39,6 +39,10 @@ class ExportResult:
     files: List[Path] = field(default_factory=list)
     lossy: List[LossyMapping] = field(default_factory=list)
     warnings: List[str] = field(default_factory=list)
+    #: Which tagged systems this export contains, and what filtering to them cost
+    #: (ADR 0029 Q3). A package that does not say which systems it holds cannot be
+    #: distinguished from one that holds all of them.
+    view: dict = field(default_factory=dict)
 
 
 @runtime_checkable

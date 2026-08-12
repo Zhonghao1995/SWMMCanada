@@ -91,7 +91,7 @@ def test_validation_scopes_node_checks_to_storm():
     assert d["systems"]["storm_minor"]["conduits"] == 2
 
 
-def test_mikeplus_export_is_storm_only(tmp_path):
+def test_mikeplus_export_honours_a_storm_only_selection(tmp_path):
     from swmmcanada.datastore import ModelReadyDatastore
     from swmmcanada.export.mikeplus import MikePlusExporter
     import geopandas as gpd
@@ -105,9 +105,12 @@ def test_mikeplus_export_is_storm_only(tmp_path):
         config={"start": "2020-06-01", "end": "2020-06-02", "coordinate_crs": "EPSG:32613"},
         provenance={},
     )
-    MikePlusExporter().export(ds, tmp_path)
+    # ADR 0029 Q3: the default is every system present, so a storm-only view is
+    # something the caller asks for. Exporting storm only by default would drop
+    # the combined mains that carry most of a combined city's stormwater.
+    MikePlusExporter().export(ds, tmp_path, systems=["storm_minor"])
     nodes = gpd.read_file(tmp_path / "nodes.shp")
-    assert not nodes["MUID"].str.startswith("SAN_").any()           # sanitary omitted (v1)
+    assert not nodes["MUID"].str.startswith("SAN_").any()  # the selection was honoured
     links = gpd.read_file(tmp_path / "links.shp")
     assert len(links) == 2                                          # storm conduits only
 

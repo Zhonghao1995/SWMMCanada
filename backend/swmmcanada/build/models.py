@@ -141,13 +141,65 @@ class NetworkIn:
     conduits: List[ConduitIn]
 
 
-def filter_system(network: "NetworkIn", system: str = "storm_minor") -> "NetworkIn":
-    """The subgraph of one tagged drainage system (ADR 0011) — the shared per-system view
-    exporters consume (MIKE+, ICM), so no exporter re-implements the tag filter."""
-    keep = lambda e: getattr(e, "system", "storm_minor") == system
-    return NetworkIn(junctions=[j for j in network.junctions if keep(j)],
-                     outfalls=[o for o in network.outfalls if keep(o)],
-                     conduits=[c for c in network.conduits if keep(c)])
+def filter_system(network: "NetworkIn", systems="storm_minor") -> "NetworkIn":
+    """The subgraph of one or more tagged drainage systems (ADR 0011, multi-select ADR 0029
+    Q3) — the shared per-system view exporters consume, so no exporter re-implements it.
+
+    ``systems`` takes a single tag or any iterable of them. A conduit survives only when its
+    own tag is selected **and both of its endpoints survive**: a combined pipe joining a
+    storm node is not exportable without that node, and a view referencing a node it does
+    not contain is not a model.
+
+    This never splits anything. One hydraulic model carries every system; an export is a
+    view of it. The interaction between systems is the reason they share a model at all.
+    """
+    wanted = {systems} if isinstance(systems, str) else set(systems)
+    keep = lambda e: getattr(e, "system", "storm_minor") in wanted
+    junctions = [j for j in network.junctions if keep(j)]
+    outfalls = [o for o in network.outfalls if keep(o)]
+    names = {j.name for j in junctions} | {o.name for o in outfalls}
+    conduits = [c for c in network.conduits
+                if keep(c) and c.from_node in names and c.to_node in names]
+    return NetworkIn(junctions=junctions, outfalls=outfalls, conduits=conduits)
+
+
+def filter_system_report(network: "NetworkIn", systems="storm_minor"):
+    """``filter_system`` plus what the filtering cost. Returns ``(view, report)``.
+
+    Filtering a connected graph by tag can cut a component off from its outfall — storm
+    pipes draining through a combined trunk lose their destination when combined is
+    deselected. Measured across the fleet this is rare (Ottawa's storm and combined networks
+    share one node, Toronto's share none), and rare is exactly when a silent failure
+    survives to production. So the view is always produced and the damage is always
+    reported; the caller decides whether an orphaned view is acceptable.
+    """
+    view = filter_system(network, systems)
+    outfalls = {o.name for o in view.outfalls}
+    adj: dict = {}
+    for c in view.conduits:
+        adj.setdefault(c.from_node, set()).add(c.to_node)
+        adj.setdefault(c.to_node, set()).add(c.from_node)
+
+    reached, stack = set(outfalls), [o for o in outfalls if o in adj]
+    while stack:
+        n = stack.pop()
+        for m in adj.get(n, ()):  # noqa: B023 — adjacency is fixed for this walk
+            if m not in reached:
+                reached.add(m)
+                stack.append(m)
+    orphaned = sorted({j.name for j in view.junctions} - reached)
+
+    wanted = [systems] if isinstance(systems, str) else sorted(systems)
+    return view, {
+        "systems": wanted,
+        "n_junctions": len(view.junctions), "n_outfalls": len(view.outfalls),
+        "n_conduits": len(view.conduits),
+        "n_orphaned_nodes": len(orphaned),
+        "orphaned_sample": orphaned[:10],
+        "note": ("" if not orphaned else
+                 f"{len(orphaned)} node(s) lose their route to an outfall in this view: "
+                 f"they drain through a system that was not selected"),
+    }
 
 
 @dataclass(frozen=True)
