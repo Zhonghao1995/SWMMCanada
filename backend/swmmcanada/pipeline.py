@@ -542,6 +542,27 @@ def build_from_aoi(
     )
 
 
+def _outlet_agreement_provenance(spec, bbox, client, subcatchments, network) -> dict:
+    """Score this build's outlet resolution against the city's own declaration (#129).
+
+    Additive and non-blocking: the yardstick is a nice-to-have, and a municipal server being
+    down must never fail a model. A city that publishes nothing usable says so explicitly —
+    silence would be indistinguishable from "not measured yet".
+    """
+    from swmmcanada.validate.outlet_agreement import official_outlet_agreement
+
+    if getattr(spec, "official_catchments", None) is None:
+        return {"rate_pct": None,
+                "reason": f"{spec.key} publishes no catchment layer with a joinable "
+                          f"outlet key"}
+    try:
+        official = spec.official_catchments(bbox, client)
+        rate, diag = official_outlet_agreement(subcatchments, network, official)
+    except Exception as exc:  # noqa: BLE001 — additive metric, degrade with a note
+        return {"rate_pct": None, "reason": f"{type(exc).__name__}: {exc}"}
+    return {"rate_pct": (round(rate * 100, 1) if rate is not None else None), **diag}
+
+
 def _plan_delineation(spec, bbox, client, network, derive: bool, subcatchment_method: str):
     """Fetch the land evidence and let the resolver choose. Returns ``(land, plan)``.
 
@@ -709,6 +730,8 @@ def build_city(
             "network_diagnostics": netres.diagnostics,
             "subcatchment_diagnostics": sub_diag,
             "delineation_plan": plan.as_dict(),
+            "official_outlet_agreement": _outlet_agreement_provenance(
+                spec, bbox, client, subcatchments, network),
             "sanitary": san_diag,
         },
         climate_client=climate_client, climate_buffer_deg=climate_buffer_deg, report=report,

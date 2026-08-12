@@ -127,7 +127,8 @@ from swmmcanada.sources.cities.whiterock import (
     fetch_whiterock_storm,
 )
 from swmmcanada.sources.cities.victoria import (
-    build_victoria_network, fetch_victoria_land, fetch_victoria_sanitary, fetch_victoria_storm,
+    build_victoria_network, fetch_victoria_land, fetch_victoria_official_catchments,
+    fetch_victoria_sanitary, fetch_victoria_storm,
 )
 
 Bbox = Tuple[float, float, float, float]
@@ -149,6 +150,10 @@ class CitySpec:
     storm: NetworkFn
     land: LandFn
     sanitary: Optional[NetworkFn] = None   # None = city publishes no sanitary layer
+    #: The city's OWN catchment polygons, used only as the yardstick our outlet resolution
+    #: is scored against (#129, ADR 0029 Q2) — never as model units. Requires a joinable
+    #: outlet key, which most of the fleet does not publish, so this is usually None.
+    official_catchments: Optional[LandFn] = None
 
 
 CITIES: Tuple[CitySpec, ...] = (
@@ -160,6 +165,8 @@ CITIES: Tuple[CitySpec, ...] = (
         storm=lambda bbox, client: build_victoria_network(**fetch_victoria_storm(bbox, client=client)),
         land=lambda bbox, client: fetch_victoria_land(bbox, client=client),
         sanitary=lambda bbox, client: build_victoria_network(**fetch_victoria_sanitary(bbox, client=client)),
+        official_catchments=lambda bbox, client: fetch_victoria_official_catchments(
+            bbox, client=client),
     ),
     # Ottawa: geometry-inferred topology; no public parcels/buildings, so subcatchments seed
     # on real catch basins with land-cover imperviousness (no parcel/building override).
