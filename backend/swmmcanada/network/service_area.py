@@ -169,23 +169,32 @@ def edge_split_cells(streets, junction_xy, mask, aoi, *, sample_step_m: float = 
     to_deg = Transformer.from_crs(utm_crs_for(aoi), "EPSG:4326", always_xy=True).transform
     mask_m = shp_transform(to_m, mask)
 
+    # Each street sample belongs to the NEAREST node. In synthesis the nodes sit on the
+    # street graph and this reproduces the midpoint gutter divide exactly; on a published
+    # network the maintenance holes sit wherever the pipes go, and keying off the street
+    # graph's own node ids matched nothing at all — Victoria's 391 real nodes against 121
+    # street edges returned zero cells, and every subcatchment silently took a placeholder
+    # area. Land still goes to the street it faces; only "whose street is this" changed.
+    import numpy as np
+
+    names = list(junction_xy)
+    if not names:
+        return {}
+    node_m = np.array([to_m(*junction_xy[n]) for n in names])
+
     labels: List[str] = []
     pts: List[Point] = []
     for u, v in streets.edges():
-        nu, nv = str(u), str(v)
-        if nu not in junction_xy and nv not in junction_xy:
-            continue
         a = to_m(streets.nodes[u]["x"], streets.nodes[u]["y"])
         b = to_m(streets.nodes[v]["x"], streets.nodes[v]["y"])
         length = ((b[0] - a[0]) ** 2 + (b[1] - a[1]) ** 2) ** 0.5
         n = max(2, int(length // sample_step_m))
         for i in range(n + 1):
             t = i / n
-            name = nu if t < 0.5 else nv          # gutter divide at the segment midpoint
-            if name not in junction_xy:
-                continue
-            labels.append(name)
-            pts.append(Point(a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1])))
+            x, y = a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1])
+            k = int(((node_m[:, 0] - x) ** 2 + (node_m[:, 1] - y) ** 2).argmin())
+            labels.append(names[k])
+            pts.append(Point(x, y))
     if not pts:
         return {}
 

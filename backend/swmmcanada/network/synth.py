@@ -197,6 +197,11 @@ def _build_subcatchments(junction_xy, aoi, config: NetworkConfig, cells=None,
     an AOI polygon is given; the DEM delineator (delineate_dem, ADR 0010) passes its own,
     plus optional per-junction ``widths`` (area / DEM flow length) that beat the √area
     default (SWMM width is a time-of-concentration input, not a shape statistic)."""
+    # A caller that supplied cells has MEASURED the land. A node it found none for has no
+    # frontage, and giving it the nominal area invents half a hectare: Victoria's frontage
+    # split came out at 162% of its own AOI that way. Synthesis, which delineates every node
+    # it creates, keeps the nominal path below.
+    measured = cells is not None
     if cells is None:
         cells = {}
         if aoi is not None and len(junction_xy) >= 2:
@@ -212,6 +217,8 @@ def _build_subcatchments(junction_xy, aoi, config: NetworkConfig, cells=None,
             area_ha = cell.area_m2 / 10_000.0
             width = (widths or {}).get(jname) or math.sqrt(cell.area_m2)
             polygon = cell.exterior
+        elif measured:
+            continue        # nothing was measured here; do not invent it
         else:
             area_ha = config.sub_area_ha
             width = math.sqrt(config.sub_area_ha * 10_000.0)

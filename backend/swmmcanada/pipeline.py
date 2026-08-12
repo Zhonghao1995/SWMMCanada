@@ -775,7 +775,7 @@ def _apply_official_boundary(subcatchments, official_features, crs):
 
 
 def _plan_delineation(spec, bbox, client, network, derive: bool, subcatchment_method: str,
-                      dem_resolution_m=None, user_layer=None):
+                      dem_resolution_m=None, user_layer=None, streets=None):
     """Fetch the land evidence and let the resolver choose. Returns ``(land, plan)``.
 
     Extracted so the decision is testable without a full offline build: this is the seam
@@ -810,6 +810,7 @@ def _plan_delineation(spec, bbox, client, network, derive: bool, subcatchment_me
         n_buildings=len(land.get("buildings") or []),
         n_kerbs=len(land.get("kerbs") or []),
         n_user_units=len(user_layer or []),
+        n_streets=(streets.number_of_edges() if streets is not None else 0),
         n_junctions=len(network.junctions),
         dem_available=bool(derive),
         dem_resolution_m=dem_resolution_m,
@@ -873,12 +874,21 @@ def build_city(
         _r("ACQUIRING_DEM", 30)
         dem = acquire_dem(tuple(aoi.bbox), ws, source=dem_source)
 
+    # Streets, before planning: frontage splitting is the municipal unit and the plan cannot
+    # prefer it without knowing whether the streets are there. Additive — OSM being
+    # unreachable costs the shape, never the build.
+    streets = None
+    try:
+        streets = fetch_street_graph(tuple(aoi.bbox))
+    except Exception:  # noqa: BLE001
+        streets = None
+
     _r("SUBCATCHMENTS", 35)
     imperv_map: dict = {}
     sub_diag: dict = {}
     land, plan = _plan_delineation(spec, bbox, client, network, derive, subcatchment_method,
                                    dem_resolution_m=(dem.resolution_m if dem else None),
-                                   user_layer=subcatchment_layer)
+                                   user_layer=subcatchment_layer, streets=streets)
 
     subcatchments = []
     if plan.shaping == "user":
@@ -887,6 +897,15 @@ def build_city(
         # layer would be overriding the choice we just said outranks us.
         subcatchments, sub_diag = _subcatchments_from_user_layer(
             subcatchment_layer, network, spec.sub_crs, land.get("laterals"))
+    if not subcatchments and plan.shaping == "street_segment":
+        # The municipal unit: each node takes the land draining to its own reach — the
+        # street segment plus the lots fronting it, back to the rear-lot line. Nearest-POINT
+        # assignment carves a block into a triangle fan meeting at its centre, which is
+        # nothing a city would draw.
+        junction_xy = {j.name: (j.x, j.y) for j in network.junctions}
+        subcatchments, sub_diag = delineate_junction_subcatchments(
+            junction_xy, aoi, dem_path=(dem.path if dem else None), streets=streets,
+            service_mask=aoi.geometry, min_cell_ha=MIN_CELL_HA)
     if not subcatchments and plan.anchors == "catch_basin" and plan.shaping == "dem_d8":
         # 规划书 §4 priorities 2-3: route runoff over the terrain TO the inlets, rather
         # than dividing land by proximity to them. Same delineator the junction path uses,

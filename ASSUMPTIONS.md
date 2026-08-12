@@ -125,6 +125,33 @@ Outside these cities, the network itself is 🟠 synthesized from OpenStreetMap 
 > auto-built model, however real its inputs. Calibrate against gauged flow (e.g. ECCC HYDAT)
 > before using results for design or decisions.
 
+## What a storm subcatchment is here
+
+**Land is divided among the model's nodes.** A subcatchment discharges to a node that
+exists, and in a published pipe network those nodes are the maintenance holes. Catch basins
+are surface structures joined by leads; almost none are model nodes, and the reach between
+two nodes has one tributary area however many inlets sit on it. Splitting it per inlet gives
+several subcatchments discharging to the same node — more model objects, no more information
+about the pipe. That level of detail belongs to a dual-drainage model, where inlet capture
+and street flow are the question being asked.
+
+Catch basins keep their real job: their leads say which main a lot taps, which is how a
+cell's outlet is resolved.
+
+**Each node takes the land draining to its own reach** — the street segment plus the lots
+fronting it, back to the rear-lot line, with the divide at the segment midpoint. This is
+what a municipality draws. Assigning land to the nearest node *point* instead carves every
+block into a triangle fan meeting at its centre, which is not a shape anyone surveys.
+
+Measured on downtown Victoria (88.9 ha, 391 nodes): 241 cells, 93% coverage, median 0.25 ha,
+99% of them inside the 0.05–10 ha range municipal subcatchments occupy. For comparison the
+previous inlet-tessellation gave 64% in that range, and routing terrain to each inlet gave
+41% with a majority of cells at noise scale.
+
+Where the streets are not published the shaping falls back — to terrain where the surface is
+fine enough, to lot lines where it is not, and to nearest-node tessellation as the floor. The
+unit does not change; only the edges do.
+
 ## Bringing your own subcatchment boundaries
 
 Everything in the sections that follow is a judgement call: which method the data supports,
