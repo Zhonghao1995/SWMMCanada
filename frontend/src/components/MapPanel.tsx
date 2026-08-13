@@ -41,14 +41,22 @@ const vis = (on: boolean) => ({ visibility: (on ? 'visible' : 'none') as 'visibl
 // Click-to-inspect (ADR 0019): the popup reads only what the preview GeoJSON already
 // carries. Clicks hit the invisible fat "hit" layers (a 1.6px line is not a click
 // target); topmost declared wins: outfall > junction > conduit > subcatchment.
-const INSPECT_LAYERS = ['m-outfall-hit', 'm-junction-hit', 'm-conduit-hit', 'm-sub-fill']
+const INSPECT_LAYERS = ['m-outfall-hit', 'm-junction-hit', 'm-conduit-hit', 'm-sub-fill',
+  'm-sa-fill']
 
 const KIND_COLORS: Record<string, string> = {
   subcatchment: '#22c55e',
+  service_area: '#c2410c',
   conduit: '#2563eb',
   junction: '#1d4ed8',
   outfall: '#ef4444',
 }
+
+// Wastewater land is drawn in the sanitary colour family and never in the storm one: it is
+// divided on a different basis (parcels and service connections, not the ground), and it
+// loads a node rather than producing runoff. Same colour as the sanitary pipes it feeds,
+// as a fill rather than a line, so the two read as one system without being confused.
+export const SERVICE_AREA_COLOR = '#c2410c'
 
 // Two drainage systems, two colours (ADR 0011 tags ride the preview): storm stays the
 // blue family, sanitary goes brick — the classic utility-drawing split.
@@ -88,6 +96,14 @@ const POPUP_ROWS: Record<string, [string, string, string?][]> = {
     ['Width', 'width_m', 'm'],
     ['Outlet node', 'outlet_node'],
   ],
+  service_area: [
+    ['Area', 'area_ha', 'ha'],
+    ['Loads node', 'node'],
+    ['Dry-weather flow', 'dwf_lps', 'L/s'],
+    ['Population', 'population'],
+    ['Dwellings', 'dwelling_units'],
+    ['System', 'system'],
+  ],
   conduit: [
     ['Diameter', 'diameter_m', 'm'],
     ['Length', 'length_m', 'm'],
@@ -116,7 +132,8 @@ interface Picked {
 }
 
 const LAYER_ROWS: [LayerKey, string, string][] = [
-  ['subcatchments', 'Subcatchments', '#22c55e'],
+  ['subcatchments', 'Storm subcatchments', '#22c55e'],
+  ['serviceAreas', 'Sanitary service areas', SERVICE_AREA_COLOR],
   ['storm', 'Storm network', STORM_COLOR],
   ['sanitary', 'Sanitary network', SANITARY_COLOR],
 ]
@@ -158,11 +175,14 @@ export default function MapPanel() {
 
   // Per-layer element counts for the floating Layers card.
   const layerCounts = useMemo(() => {
-    const c: Record<LayerKey, number> = { subcatchments: 0, storm: 0, sanitary: 0 }
+    const c: Record<LayerKey, number> = { subcatchments: 0, serviceAreas: 0, storm: 0, sanitary: 0 }
     preview?.features.forEach((f) => {
       const p = f.properties as { kind?: string; system?: string } | null
       if (!p?.kind) return
+      // Service areas carry system 'sanitary' too, so they are counted before the system
+      // test — otherwise they inflate the sanitary PIPE count and vanish from their own row.
       if (p.kind === 'subcatchment') c.subcatchments++
+      else if (p.kind === 'service_area') c.serviceAreas++
       else if (p.system === 'sanitary') c.sanitary++
       else c.storm++
     })
@@ -300,6 +320,13 @@ export default function MapPanel() {
                    'fill-opacity': expr(hoverCase(0.32, 0.18)) }} />
         <Layer id="m-sub-line" type="line" filter={kindIs('subcatchment')} layout={vis(layers.subcatchments)}
           paint={{ 'line-color': '#16a34a', 'line-width': 0.6, 'line-opacity': 0.55 }} />
+        {/* Wastewater land: hatch-free brick fill, drawn under the pipes it loads. */}
+        <Layer id="m-sa-fill" type="fill" filter={kindIs('service_area')} layout={vis(layers.serviceAreas)}
+          paint={{ 'fill-color': SERVICE_AREA_COLOR,
+                   'fill-opacity': expr(hoverCase(0.28, 0.14)) }} />
+        <Layer id="m-sa-line" type="line" filter={kindIs('service_area')} layout={vis(layers.serviceAreas)}
+          paint={{ 'line-color': SERVICE_AREA_COLOR, 'line-width': 0.8, 'line-opacity': 0.7,
+                   'line-dasharray': [3, 1.5] }} />
         <Layer id="m-conduit" type="line" filter={conduitFilter}
           layout={{ 'line-cap': 'round' }}
           paint={{ 'line-color': exprColor(CONDUIT_COLOR),

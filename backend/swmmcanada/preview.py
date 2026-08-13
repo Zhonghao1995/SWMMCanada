@@ -1,13 +1,22 @@
-"""Build a GeoJSON FeatureCollection of the synthesised model (subcatchments, conduits,
-junctions, outfall) for the frontend map preview. One FeatureCollection; each feature
-carries a `kind` so the map can split it into toggleable layers. Coords are lon/lat (WGS84).
+"""Build a GeoJSON FeatureCollection of the synthesised model (subcatchments, sanitary
+service areas, conduits, junctions, outfall) for the frontend map preview. One
+FeatureCollection; each feature carries a `kind` so the map can split it into toggleable
+layers. Coords are lon/lat (WGS84).
 """
-from typing import List
+from typing import List, Optional
 
-from swmmcanada.build.models import NetworkIn, SurfaceCatchment
+from swmmcanada.build.models import NetworkIn, SewerServiceArea, SurfaceCatchment
 
 
-def network_geojson(network: NetworkIn, subcatchments: List[SurfaceCatchment]) -> dict:
+def _ring(points):
+    ring = [[float(x), float(y)] for x, y in points]
+    if ring[0] != ring[-1]:
+        ring.append(ring[0])
+    return ring
+
+
+def network_geojson(network: NetworkIn, subcatchments: List[SurfaceCatchment],
+                    service_areas: Optional[List[SewerServiceArea]] = None) -> dict:
     coord = {}
     for n in list(network.junctions) + list(network.outfalls):
         coord[n.name] = [float(n.x), float(n.y)]
@@ -17,9 +26,7 @@ def network_geojson(network: NetworkIn, subcatchments: List[SurfaceCatchment]) -
     for s in subcatchments:
         if not s.polygon:
             continue
-        ring = [[float(x), float(y)] for x, y in s.polygon]
-        if ring[0] != ring[-1]:
-            ring.append(ring[0])
+        ring = _ring(s.polygon)
         features.append({
             "type": "Feature",
             "properties": {
@@ -31,6 +38,28 @@ def network_geojson(network: NetworkIn, subcatchments: List[SurfaceCatchment]) -
                 "outlet_node": s.outlet_node, "width_m": round(s.width_m, 1),
             },
             "geometry": {"type": "Polygon", "coordinates": [ring]},
+        })
+
+    # Wastewater land, kept a separate `kind` from a subcatchment on purpose. It is divided
+    # on a different basis — sewage reaches a pipe through a lateral, not by running over
+    # the ground — so the boundary follows parcels and connections and may cross a
+    # topographic divide. Drawing it as a subcatchment would say it produces runoff, which
+    # is the one thing it never does.
+    for a in (service_areas or []):
+        if not a.polygon:
+            continue
+        rings = [_ring(a.polygon)] + [_ring(h) for h in (a.holes or []) if h]
+        features.append({
+            "type": "Feature",
+            "properties": {
+                "kind": "service_area", "id": a.name, "node": a.node,
+                "area_ha": round(a.area_ha, 4), "system": a.system,
+                # The load itself, beside the land it came from: this is what the area is
+                # FOR, and a boundary without its flow cannot be sanity-checked.
+                "dwf_lps": a.dwf_lps, "population": a.population,
+                "dwelling_units": a.dwelling_units,
+            },
+            "geometry": {"type": "Polygon", "coordinates": rings},
         })
 
     for c in network.conduits:
