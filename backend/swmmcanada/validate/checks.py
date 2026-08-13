@@ -224,14 +224,27 @@ def check_aoi_containment(geo: GeoContext):
 
 
 def check_node_coverage(geo: GeoContext, node_coords: Dict[str, tuple]):
+    """Nodes inside the extract that no cell covers — land at that node belongs to nothing.
+
+    Judged against the AOI, because cells stop there and the pipe network does not. Counting
+    nodes beyond it made this fail on every build in the fleet (one downtown: 59 reported,
+    all 59 outside the AOI, none inside), and a check that is always red is one people learn
+    to skip. How many nodes were judged is reported beside the verdict, so a small count
+    cannot quietly stand in for a clean one.
+    """
     if not geo.valid_polys():
         return _na("node_coverage", schema.WARNING)
     union = geo.union()
-    uncovered = [name for name, xy in node_coords.items() if not union.covers(geo.point_m(xy))]
+    inside = {name: geo.point_m(xy) for name, xy in node_coords.items()
+              if geo.aoi_m.covers(geo.point_m(xy))}
+    uncovered = [name for name, p in inside.items() if not union.covers(p)]
     return _result("node_coverage", schema.WARNING, not uncovered,
-                   "every network node is covered by a subcatchment" if not uncovered
-                   else f"{len(uncovered)} network node(s) fall in no subcatchment",
-                   n_uncovered=len(uncovered), n_nodes=len(node_coords), sample=uncovered[:10])
+                   f"every network node in the area is covered by a subcatchment "
+                   f"({len(inside)} judged)" if not uncovered
+                   else f"{len(uncovered)} of {len(inside)} network node(s) inside the area "
+                        f"fall in no subcatchment",
+                   n_uncovered=len(uncovered), n_nodes=len(node_coords),
+                   n_nodes_in_aoi=len(inside), sample=uncovered[:10])
 
 
 def check_outlet_distance(geo: GeoContext, node_coords: Dict[str, tuple]):

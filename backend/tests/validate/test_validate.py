@@ -181,3 +181,44 @@ def test_to_dict_shape():
     assert d["ok"] is True
     assert d["summary"]["n_subcatchments"] == 2
     assert {"id", "severity", "passed", "message", "metrics"} <= set(d["checks"][0])
+
+
+class TestNodeCoverageJudgesOnlyTheAreaWeDrew:
+    """A node outside the extract cannot be covered by cells clipped to it.
+
+    Cells stop at the AOI; the pipe network does not. Judging every node against them made
+    this check fail on every build in the fleet — measured on one downtown: 59 nodes
+    reported uncovered, all 59 outside the AOI and none inside it. A check that is red on
+    every run carries no signal, and teaches people to skip the report, which is how a
+    defect that deleted land stayed hidden behind warnings nobody opened.
+    """
+
+    def _model(self, junctions):
+        return NetworkIn(junctions=junctions, outfalls=[], conduits=[])
+
+    def test_a_node_beyond_the_extract_is_not_counted(self):
+        far = JunctionIn("J_FAR", 8.0, -123.300, 48.500)      # well outside AOI
+        report = validate_model(self._model([JunctionIn("J1", 10.0, -123.371, 48.420), far]),
+                                [_sub("S1", "J1", LEFT), _sub("S2", "J1", RIGHT)],
+                                AOI, method=METHOD)
+        check = next(c for c in report.checks if c.id == "node_coverage")
+        assert check.passed, check.message
+
+    def test_a_node_inside_the_extract_with_no_cell_still_fails(self):
+        """The real finding must survive: land at that node belongs to nothing."""
+        report = validate_model(self._model([JunctionIn("J1", 10.0, -123.371, 48.420),
+                                             JunctionIn("J2", 9.0, -123.369, 48.420)]),
+                                [_sub("S1", "J1", LEFT)],      # right half left undrawn
+                                AOI, method=METHOD)
+        check = next(c for c in report.checks if c.id == "node_coverage")
+        assert not check.passed
+        assert check.metrics["n_uncovered"] == 1
+
+    def test_how_many_nodes_were_judged_is_reported(self):
+        far = JunctionIn("J_FAR", 8.0, -123.300, 48.500)
+        report = validate_model(self._model([JunctionIn("J1", 10.0, -123.371, 48.420), far]),
+                                [_sub("S1", "J1", LEFT), _sub("S2", "J1", RIGHT)],
+                                AOI, method=METHOD)
+        check = next(c for c in report.checks if c.id == "node_coverage")
+        assert check.metrics["n_nodes_in_aoi"] == 1
+        assert check.metrics["n_nodes"] == 2
