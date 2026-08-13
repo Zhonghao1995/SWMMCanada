@@ -109,3 +109,59 @@ class TestAnOutageMustNotCostUsTheCachedStreets:
         monkeypatch.setattr(streets_osm, "_graph_from_bbox", fake)
         with pytest.raises(ConnectionError):
             streets_osm.fetch_street_graph((-123.01, 48.39, -123.0, 48.4))
+
+
+class TestOneHostIsNotTheWholeOfOSM:
+    """The frontage split is the municipal unit; it must not hinge on one server being up.
+
+    Overpass is a public volunteer service with several interchangeable mirrors serving the
+    same OSM data. Pointing at exactly one of them meant an outage there removed the primary
+    delineation method fleet-wide and silently substituted a coarser fallback — observed
+    live: overpass-api.de refused connections and every city dropped to Voronoi cells.
+    """
+
+    def test_the_next_mirror_is_tried_when_the_first_is_unreachable(self, monkeypatch):
+        seen = []
+        good = nx.Graph()
+        for i in range(40):
+            good.add_node(i, x=-123.0, y=48.4)
+
+        def fake(_ox, _bbox, *, use_cache):
+            seen.append(_ox.settings.overpass_url)
+            if len(seen) == 1:
+                raise ConnectionError("Max retries exceeded")
+            return good
+
+        monkeypatch.setattr(streets_osm, "_graph_from_bbox", fake)
+        got = streets_osm.fetch_street_graph((-123.01, 48.39, -123.0, 48.4))
+        assert got.number_of_nodes() == 40
+        assert len(seen) == 2 and seen[0] != seen[1], f"same endpoint retried: {seen}"
+
+    def test_the_endpoint_is_left_as_we_found_it(self, monkeypatch):
+        """osmnx settings are process-global; a build that reaches a mirror must not
+        redirect every later build in the worker."""
+        import osmnx as ox
+
+        before = ox.settings.overpass_url
+        good = nx.Graph()
+        for i in range(40):
+            good.add_node(i, x=-123.0, y=48.4)
+        calls = []
+
+        def fake(_ox, _bbox, *, use_cache):
+            calls.append(1)
+            if len(calls) == 1:
+                raise ConnectionError("Max retries exceeded")
+            return good
+
+        monkeypatch.setattr(streets_osm, "_graph_from_bbox", fake)
+        streets_osm.fetch_street_graph((-123.01, 48.39, -123.0, 48.4))
+        assert ox.settings.overpass_url == before
+
+    def test_every_mirror_failing_still_raises(self, monkeypatch):
+        def fake(_ox, _bbox, *, use_cache):
+            raise ConnectionError("Max retries exceeded")
+
+        monkeypatch.setattr(streets_osm, "_graph_from_bbox", fake)
+        with pytest.raises(ConnectionError):
+            streets_osm.fetch_street_graph((-123.01, 48.39, -123.0, 48.4))

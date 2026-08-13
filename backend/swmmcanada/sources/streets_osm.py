@@ -21,6 +21,23 @@ from swmmcanada.network.errors import NetworkError
 # tiny rural boxes just pay one extra Overpass call.
 MIN_PLAUSIBLE_NODES = 16
 
+# Overpass is a volunteer service with several interchangeable mirrors serving the same OSM
+# data. Naming one of them made it a single point of failure for the primary delineation
+# method: when overpass-api.de refused connections, every city in the fleet lost its streets
+# and dropped to a coarser fallback. Tried in order, first answer wins. Whatever the process
+# already has configured goes first, so an operator override still takes precedence.
+OVERPASS_MIRRORS = (
+    "https://overpass-api.de/api",
+    "https://overpass.kumi.systems/api",
+    "https://overpass.osm.ch/api",
+)
+
+
+def _endpoints(configured):
+    """The configured endpoint first, then the mirrors it is not."""
+    rest = [u for u in OVERPASS_MIRRORS if u != configured]
+    return [configured, *rest] if configured else list(OVERPASS_MIRRORS)
+
 
 def fetch_street_graph(bbox_wgs84) -> nx.Graph:
     """bbox = (minlon, minlat, maxlon, maxlat). Returns an undirected graph with node x/y
@@ -41,7 +58,25 @@ def fetch_street_graph(bbox_wgs84) -> nx.Graph:
         cache.mkdir(parents=True, exist_ok=True)
         ox.settings.cache_folder = str(cache)
 
-        g = _graph_from_bbox(ox, bbox_wgs84, use_cache=True)
+        prior_url = getattr(ox.settings, "overpass_url", None)
+        g, unreachable = None, None
+        try:
+            for url in _endpoints(prior_url):
+                ox.settings.overpass_url = url
+                try:
+                    # A cached answer is keyed on the query URL, so the configured endpoint
+                    # going first is also what keeps earlier builds' cache reachable.
+                    g = _graph_from_bbox(ox, bbox_wgs84, use_cache=True)
+                    break
+                except Exception as exc:
+                    unreachable = exc
+        finally:
+            # osmnx settings are process-global: a mirror reached here must not redirect
+            # every later build in this worker.
+            ox.settings.overpass_url = prior_url
+        if g is None:
+            raise unreachable
+
         if g.number_of_nodes() < MIN_PLAUSIBLE_NODES:
             try:
                 fresh = _graph_from_bbox(ox, bbox_wgs84, use_cache=False)
