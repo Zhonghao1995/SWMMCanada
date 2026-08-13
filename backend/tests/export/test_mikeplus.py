@@ -16,7 +16,7 @@ from swmmcanada.build import (
     NetworkIn,
     OutfallIn,
     RainfallSeries,
-    SubcatchmentIn,
+    SurfaceCatchment,
 )
 from swmmcanada.datastore import ModelReadyDatastore
 from swmmcanada.export.base import ModelExporter
@@ -41,11 +41,11 @@ def _datastore() -> ModelReadyDatastore:
         ],
     )
     subcatchments = [
-        SubcatchmentIn(name="S1", outlet_node="J1", area_ha=1.0, pct_imperv=40.0,
+        SurfaceCatchment(name="S1", outlet_node="J1", area_ha=1.0, pct_imperv=40.0,
                        width_m=50.0, pct_slope=1.5, cn=80.0, n_imperv=0.01, n_perv=0.10,
                        horton_f0_mm_h=127.0, horton_fc_mm_h=9.5, horton_decay_1_h=4.14,
                        polygon=_POLY),
-        SubcatchmentIn(name="S2", outlet_node="J2", area_ha=2.0, pct_imperv=25.0,
+        SurfaceCatchment(name="S2", outlet_node="J2", area_ha=2.0, pct_imperv=25.0,
                        width_m=80.0, pct_slope=2.0, cn=70.0, polygon=None),
     ]
     rain = RainfallSeries(
@@ -131,7 +131,7 @@ def _dirty_datastore() -> ModelReadyDatastore:
         ConduitIn(name="C_BAD", from_node="J1", to_node="O1", length_m=50.0,
                   diameter_m=0.30, roughness_n=0.0))
     ds.subcatchments.append(
-        SubcatchmentIn(name="S_BAD", outlet_node="J2", area_ha=1.0, pct_imperv=30.0,
+        SurfaceCatchment(name="S_BAD", outlet_node="J2", area_ha=1.0, pct_imperv=30.0,
                        width_m=0.0, pct_slope=1.0, n_imperv=0.0, n_perv=0.0, polygon=None))
     return ds
 

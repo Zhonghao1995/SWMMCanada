@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 
 from swmmcanada.api import create_app
 from swmmcanada.build import BuildResult
+from swmmcanada.validate import schema
 
 OTTAWA = {
     "type": "Polygon",
@@ -27,7 +28,7 @@ def fake_pipeline(aoi, start, end, ws, *, report=None, **kwargs):
     ws.mkdir(parents=True, exist_ok=True)
     (ws / "model.inp").write_text("[TITLE]\nfake model\n")
     (ws / "manifest.json").write_text("{}")
-    (ws / "validation.json").write_text(json.dumps({"ok": True, "subcatchment_method": "junction_voronoi"}))
+    (ws / "validation.json").write_text(json.dumps({"ok": True, "subcatchment_method": schema.METHOD_JUNCTION_VORONOI}))
     # The worker refuses to ship an incomplete result package (ADR 0009) — a fake must
     # produce every required path too (empty carriers are fine, only presence is checked).
     from swmmcanada import result_package
@@ -131,7 +132,7 @@ def test_validation_endpoint_serves_report(tmp_path):
     task_id = _submit(client, OTTAWA).json()["task_id"]
     r = client.get(f"/api/v1/tasks/{task_id}/validation")
     assert r.status_code == 200
-    assert r.json()["ok"] is True and r.json()["subcatchment_method"] == "junction_voronoi"
+    assert r.json()["ok"] is True and r.json()["subcatchment_method"] == schema.METHOD_JUNCTION_VORONOI
 
 
 def test_healthz(tmp_path):

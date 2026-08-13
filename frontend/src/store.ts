@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import type { Feature, FeatureCollection, Polygon, Position } from 'geojson'
 import type { Aoi, JobProgress } from './types'
 import { checkRainfall as apiCheckRainfall, fetchPreview, pollTask, previewAoi, resolveAoiPolygon, submitTask } from './lib/api'
-import type { DesignStormChoice, ForcingInfo, InfiltrationMethod } from './lib/api'
+import type { DesignStormChoice, DrainageSystem, ForcingInfo, InfiltrationMethod } from './lib/api'
 import { fetchForcing } from './lib/api'
 import type { Bbox, RainfallCheck, SiteFacts } from './lib/api'
 
@@ -22,6 +22,8 @@ interface AppState {
   endDate: string
   infiltration: InfiltrationMethod // ADR 0013: pervious-area loss model for the build
   designStorm: DesignStormChoice | null // ADR 0018: null = historical observed rain (default)
+  systems: DrainageSystem[] // ADR 0029: which systems the build includes
+  subcatchmentLayer: File | null // the user's own boundaries; overrides ours
   job: JobProgress
   preview: FeatureCollection | null // model geometry (network + subcatchments)
   forcing: ForcingInfo | null // rain tier/station the build actually used (ADR 0014/0015)
@@ -39,6 +41,8 @@ interface AppState {
   setDates: (start: string, end: string) => void
   setInfiltration: (method: InfiltrationMethod) => void
   setDesignStorm: (choice: DesignStormChoice | null) => void
+  setSystems: (systems: DrainageSystem[]) => void
+  setSubcatchmentLayer: (file: File | null) => void
   toggleLayer: (key: LayerKey) => void
   checkRainfall: () => Promise<void>
   submit: () => Promise<void>
@@ -100,6 +104,8 @@ export const useStore = create<AppState>((set, get) => ({
   endDate: '2020-01-07', // default to a 1-week window
   infiltration: 'HORTON', // engineering-practice default (ADR 0013)
   designStorm: null, // historical observed rain unless the user opts in (ADR 0018)
+  systems: ['storm'], // widened to whatever the AOI offers once preview answers
+  subcatchmentLayer: null,
   job: { status: 'idle' },
   preview: null,
   forcing: null,
@@ -125,8 +131,9 @@ export const useStore = create<AppState>((set, get) => ({
           set({
             site: {
               mode: f.mode, city: f.city, cityLabel: f.cityLabel, dataTier: f.dataTier,
-              typicalInvertErrorM: f.typicalInvertErrorM,
+              typicalInvertErrorM: f.typicalInvertErrorM, systems: f.systems,
             },
+            systems: f.systems ?? ['storm'],
           })
         }
       })
@@ -157,7 +164,11 @@ export const useStore = create<AppState>((set, get) => ({
           site: {
             mode: parsed.mode, city: parsed.city, cityLabel: parsed.cityLabel,
             dataTier: parsed.dataTier, typicalInvertErrorM: parsed.typicalInvertErrorM,
+            systems: parsed.systems,
           },
+          // ADR 0029: default to every system this AOI can offer. A user who has not
+          // chosen expects the model they asked for, not a slice of it.
+          systems: parsed.systems ?? ['storm'],
         })
       }
     } catch (err) {
@@ -170,6 +181,8 @@ export const useStore = create<AppState>((set, get) => ({
   setDates: (startDate, endDate) => set({ startDate, endDate, rainfall: IDLE_RAIN }),
   setInfiltration: (infiltration) => set({ infiltration }),
   setDesignStorm: (designStorm) => set({ designStorm }),
+  setSystems: (systems) => set({ systems }),
+  setSubcatchmentLayer: (subcatchmentLayer) => set({ subcatchmentLayer }),
   toggleLayer: (key) => set((s) => ({ layers: { ...s.layers, [key]: !s.layers[key] } })),
 
   checkRainfall: async () => {
@@ -204,11 +217,13 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   submit: async () => {
-    const { aoi, startDate, endDate, infiltration, designStorm } = get()
+    const { aoi, startDate, endDate, infiltration, designStorm, systems,
+            subcatchmentLayer } = get()
     if (!aoi) return
     set({ job: { status: 'queued' }, preview: null, forcing: null })
     try {
-      const { taskId } = await submitTask({ aoi, startDate, endDate, infiltration, designStorm })
+      const { taskId } = await submitTask({ aoi, startDate, endDate, infiltration,
+                                            designStorm, systems, subcatchmentLayer })
       for (;;) {
         const p = await pollTask(taskId)
         set({ job: p })

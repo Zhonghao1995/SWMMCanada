@@ -40,7 +40,7 @@ from swmmcanada.build.models import (
     EvaporationSeries,
     NetworkIn,
     RainfallSeries,
-    SubcatchmentIn,
+    SurfaceCatchment,
     TemperatureSeries,
     TideSeries,
 )
@@ -107,15 +107,78 @@ def _coord_projector(crs):
     return lonlat_projector(crs)
 
 
+def _write_dry_weather_flow(inp, service_areas, config) -> None:
+    """Emit ``[DWF]`` and the diurnal ``[PATTERNS]`` entry for sewer service areas (ADR 0031).
+
+    This is where the sanitary system stops being pipes with nothing in them. Areas arrive
+    already loaded (``swmmcanada.loading``), so the writer's only job is to place the flow on
+    the node the area serves — no subcatchment is created, because a separated sanitary
+    network has no surface runoff of its own.
+
+    Several areas may load the same node (many parcels, one manhole); their flows are summed
+    rather than overwriting one another.
+    """
+    from swmm_api.input_file.sections import DryWeatherFlow, Pattern
+
+    loaded = [a for a in (service_areas or []) if getattr(a, "dwf_lps", None)]
+    if not loaded:
+        return
+
+    from swmmcanada.loading.dwf import diurnal_pattern, to_flow_units
+
+    name, factors = diurnal_pattern()
+    patterns = inp.get(SEC.PATTERNS) or Pattern.create_section()
+    patterns.add_obj(Pattern(name, Pattern.CYCLES.HOURLY, factors=list(factors)))
+    inp[SEC.PATTERNS] = patterns
+
+    by_node: dict = {}
+    for a in loaded:
+        by_node[a.node] = by_node.get(a.node, 0.0) + float(a.dwf_lps)
+
+    # SWMM reads the base value in the model's own FLOW_UNITS (this project defaults to
+    # CMS), so litres/second must be converted or every sanitary inflow is 1000x too big.
+    units = config.flow_units.value
+    dwf = inp.get(SEC.DWF) or DryWeatherFlow.create_section()
+    for node, lps in sorted(by_node.items()):
+        dwf.add_obj(DryWeatherFlow(node, "FLOW", round(to_flow_units(lps, units), 8), name))
+    inp[SEC.DWF] = dwf
+
+
+def _reject_service_areas(subcatchments) -> None:
+    """Refuse to write a sewer service area as a surface subcatchment (ADR 0029 Q1/Q8).
+
+    A separated sanitary network has no surface runoff of its own. Emitting a service area
+    into ``[SUBCATCHMENTS]`` would route roof and road runoff straight into a foul sewer —
+    physically the cross-connection municipalities run dedicated programmes to find and fix,
+    and the exact error the type split exists to make impossible.
+
+    Types alone do not enforce this at runtime in Python, so the invariant is guarded here,
+    at the one place the sections are actually written. Failing loudly beats a model that
+    runs, looks plausible and is wrong.
+    """
+    from swmmcanada.build.models import SewerServiceArea
+
+    offenders = [s for s in subcatchments if isinstance(s, SewerServiceArea)]
+    if offenders:
+        names = ", ".join(s.name for s in offenders[:5])
+        raise TypeError(
+            f"{len(offenders)} sewer service area(s) reached the [SUBCATCHMENTS] writer "
+            f"({names}{'...' if len(offenders) > 5 else ''}). Service areas carry wastewater "
+            f"loading to a node via [DWF]/[RDII]; they are never surface subcatchments "
+            f"(ADR 0029). Route them through the loading path instead.")
+
+
 def assemble_inp(
     network: NetworkIn,
-    subcatchments: List[SubcatchmentIn],
+    subcatchments: List[SurfaceCatchment],
     rain: RainfallSeries,
     config: BuildConfig,
     evaporation: Optional[EvaporationSeries] = None,
     temperature: Optional[TemperatureSeries] = None,
     tide: Optional["TideSeries"] = None,
+    service_areas: Optional[List] = None,
 ) -> SwmmInput:
+    _reject_service_areas(subcatchments)
     inp = SwmmInput()
     with_snow = temperature is not None and bool(temperature.timestamps)
 
@@ -211,6 +274,7 @@ def assemble_inp(
             infil.add_obj(InfiltrationCurveNumber(
                 s.name, curve_no=s.cn, hydraulic_conductivity=0.5, time_dry=7
             ))
+    _write_dry_weather_flow(inp, service_areas, config)
     inp[SEC.SUBCATCHMENTS] = subs
     inp[SEC.SUBAREAS] = subareas
     inp[SEC.INFILTRATION] = infil
@@ -335,7 +399,7 @@ class BuildValidationError(Exception):
 def build_model(
     *,
     network: NetworkIn,
-    subcatchments: List[SubcatchmentIn],
+    subcatchments: List[SurfaceCatchment],
     rain: RainfallSeries,
     config: BuildConfig,
     evaporation: Optional[EvaporationSeries] = None,
@@ -343,12 +407,13 @@ def build_model(
     tide: Optional["TideSeries"] = None,
     observed=None,
     aoi=None,
+    service_areas: Optional[List] = None,
 ) -> BuildResult:
     out_dir = Path(config.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     inp = assemble_inp(network, subcatchments, rain, config, evaporation=evaporation, tide=tide,
-                       temperature=temperature)
+                       temperature=temperature, service_areas=service_areas)
     inp_path = out_dir / "model.inp"
     inp.write_file(str(inp_path))
 

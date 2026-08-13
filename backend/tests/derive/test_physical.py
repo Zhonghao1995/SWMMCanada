@@ -4,7 +4,7 @@ import networkx as nx
 import pytest
 from shapely.geometry import Polygon
 
-from swmmcanada.build.models import SubcatchmentIn
+from swmmcanada.build.models import SurfaceCatchment
 from swmmcanada.derive.physical import refine_imperviousness
 from swmmcanada.geo import aoi_from_geojson
 
@@ -17,7 +17,7 @@ AOI = aoi_from_geojson({"type": "Polygon", "coordinates": [[
 
 
 def _sub(imperv=70.0):
-    return SubcatchmentIn(name="S1", outlet_node="J1", area_ha=1.1, pct_imperv=imperv,
+    return SurfaceCatchment(name="S1", outlet_node="J1", area_ha=1.1, pct_imperv=imperv,
                           width_m=100.0, pct_slope=1.0, polygon=CELL)
 
 

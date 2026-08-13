@@ -6,7 +6,7 @@ Fixtures are tiny EPSG:3979 GeoTIFFs synthesised in a tmp dir with rasterio+nump
   - hsg       : every pixel = 2 (HSG "B")
   - dem       : a planar ramp in the x-direction with a known % slope
 
-SubcatchmentIn polygons are real (lon, lat) WGS84 rings that fall inside the AOI box.
+SurfaceCatchment polygons are real (lon, lat) WGS84 rings that fall inside the AOI box.
 """
 import math
 
@@ -21,7 +21,7 @@ from swmmcanada.acquire.landcover import (
     LandcoverResult,
 )
 from swmmcanada.acquire.soil import DEFAULT_HSG_TO_CN, SoilResult
-from swmmcanada.build.models import SubcatchmentIn
+from swmmcanada.build.models import SurfaceCatchment
 from swmmcanada.derive.core import derive_parameters
 
 # A small AOI near Ottawa (WGS84). We project to 3979 to lay out the rasters.
@@ -109,7 +109,7 @@ def _polygon_4326(frac_left, frac_bottom, frac_right, frac_top):
 def test_derive_overwrites_imperv_cn_slope(tmp_path):
     dem_path, landcover, soil = _make_fixtures(tmp_path)
 
-    sub = SubcatchmentIn(
+    sub = SurfaceCatchment(
         name="S1",
         outlet_node="J1",
         area_ha=1.0,
@@ -145,7 +145,7 @@ def test_derive_overwrites_imperv_cn_slope(tmp_path):
 
 def test_subcatchment_without_polygon_returned_unchanged(tmp_path):
     dem_path, landcover, soil = _make_fixtures(tmp_path)
-    sub = SubcatchmentIn(
+    sub = SurfaceCatchment(
         name="S_no_poly",
         outlet_node="J9",
         area_ha=2.0,
@@ -185,7 +185,7 @@ def test_empty_overlap_keeps_existing_values(tmp_path):
         (left + dx, bottom + dy),
     ]
     ring = [tuple(_to_4326(x, y)) for x, y in corners_3979]
-    sub = SubcatchmentIn(
+    sub = SurfaceCatchment(
         name="S_far",
         outlet_node="J7",
         area_ha=1.0,

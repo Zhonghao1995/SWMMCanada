@@ -21,12 +21,13 @@ from typing import Dict, List, Tuple
 
 import numpy as np
 
-from swmmcanada.build.models import JunctionIn, NetworkIn, SubcatchmentIn
+from swmmcanada.build.models import JunctionIn, NetworkIn, SurfaceCatchment
 from swmmcanada.network.subcatchments import _AREA_CRS, SubcatchmentCell, _largest_polygon
 from swmmcanada.network.synth import NetworkConfig, _build_subcatchments
 
 METHOD_DEM = "junction_dem"
-METHOD_VORONOI = "junction_voronoi"
+from swmmcanada.validate.schema import METHOD_JUNCTION_STREET
+from swmmcanada.validate.schema import METHOD_JUNCTION_VORONOI as METHOD_VORONOI
 
 
 @dataclass(frozen=True)
@@ -59,7 +60,18 @@ def delineate_junction_subcatchments(
     min_cell_ha=None,      # ADR 0017: sliver-merge threshold; None = no merging (v2)
     config: DemDelineationConfig = DemDelineationConfig(),
     network_config: NetworkConfig = NetworkConfig(),
-) -> Tuple[List[SubcatchmentIn], dict]:
+    # 规划书 §4 priority 2 — assets the terrain omits, in the DEM's own CRS. Absent for
+    # thirty of the fleet, which must therefore be left exactly where they were.
+    kerbs=None,
+    openings=None,
+    buildings=None,
+    #: Published inlet positions, as (lon, lat). Not a seeding option — they intercept the
+    #: gutter so a falling street does not run its whole length to one node.
+    inlets=None,
+    #: Move pour points onto the local low before routing (规划书 §4). A published inlet
+    #: marks the structure, not the pixel water arrives at.
+    snap_pour_points: bool = False,
+) -> Tuple[List[SurfaceCatchment], dict]:
     """One subcatchment per junction, DEM-delineated when the terrain earns it.
 
     Returns ``(subcatchments, diagnostics)``; diagnostics carries the method used and the
@@ -77,13 +89,27 @@ def delineate_junction_subcatchments(
             from swmmcanada.network.service_area import edge_split_cells
 
             gate["decision"] = "corridor_frontage"
-            cells = edge_split_cells(streets, junction_xy, service_mask, aoi)
+            # Ground decides which way each gutter runs; frontage already decided the
+            # shape. Without a surface the divide stays at the segment midpoint.
+            elevation = _dem_sampler(dem_path) if dem_path else None
+            gate["gutter_grade"] = elevation is not None
+            gate["inlets_intercepting"] = len(inlets or [])
+            cells = edge_split_cells(streets, junction_xy, service_mask, aoi,
+                                     elevation=elevation, inlets=inlets)
             subs = _build_subcatchments(junction_xy, aoi, network_config, cells=cells)
             subs, service_diag = _apply_service(subs, junction_xy, aoi, None, min_cell_ha)
             service_diag["applied"] = True
-            return subs, {"method": METHOD_VORONOI, "n_subcatchments": len(subs),
+            # Every path answers the same question before returning: did this produce units?
+            # The check used to sit inside the terrain branch, and the frontage split walked
+            # straight past it.
+            gate["noise_cell_share"] = _noise_share(subs)
+            if cells_are_mostly_noise(subs):
+                gate["decision"] = "noise_cell_fallback"
+                return _voronoi(junction_xy, aoi, network_config, gate,
+                                service_mask=None, min_cell_ha=min_cell_ha)
+            return subs, {"method": METHOD_JUNCTION_STREET, "n_subcatchments": len(subs),
                           "gate": gate, "service": service_diag,
-                          "split": "nearest street segment, midpoint gutter divides"}
+                          "split": "nearest street segment, gutter divides at the crest"}
         gate["decision"] = "corridor_voronoi"
         return _voronoi(junction_xy, aoi, network_config, gate,
                         service_mask=service_mask, min_cell_ha=min_cell_ha)
@@ -115,6 +141,14 @@ def delineate_junction_subcatchments(
     # trench stubs legitimately refill (they ARE pits).
     burned, n_burned = _burn_streets(dem, transform, dem_crs, streets, config)
     gate["streets_burned_cells"] = n_burned
+    # Kerbs, their gates and buildings go in BEFORE depressions are filled (规划书 §4): a
+    # raised kerb creates ponding behind it that filling then resolves, which is exactly
+    # what happens on a real street. Raising after the fill would leave that water in a pit
+    # the router never drains.
+    from swmmcanada.network.urban_conditioning import condition_urban_dem
+
+    burned, urban_diag = condition_urban_dem(
+        burned, transform, kerbs=kerbs, openings=openings, buildings=buildings)
     conditioned, _ = pyflwdir.dem.fill_depressions(burned, nodata=config.nodata)
     median_slope = _median_slope_pct(conditioned, aoi_mask, transform, config.nodata)
     gate["median_slope_pct"] = round(median_slope, 3)
@@ -122,6 +156,20 @@ def delineate_junction_subcatchments(
         gate["decision"] = "below_slope_gate"
         return _voronoi(junction_xy, aoi, network_config, gate,
                         service_mask=service_mask, min_cell_ha=min_cell_ha)
+
+    snap_diag = None
+    if snap_pour_points:
+        from pyproj import Transformer
+
+        from swmmcanada.geo.crs import lonlat_projector
+        from swmmcanada.network.urban_conditioning import snap_to_local_low
+
+        to_dem = lonlat_projector(dem_crs)
+        back = Transformer.from_crs(dem_crs, "EPSG:4326", always_xy=True).transform
+        snapped, snap_diag = snap_to_local_low(
+            {n: to_dem(*xy) for n, xy in junction_xy.items()},
+            conditioned, transform, nodata=config.nodata)
+        junction_xy = {n: back(*xy) for n, xy in snapped.items()}
 
     cells, widths, dem_diag = _dem_basins(
         conditioned, transform, dem_crs, aoi_mask, junction_xy, aoi, config
@@ -143,15 +191,86 @@ def delineate_junction_subcatchments(
         return _voronoi(junction_xy, aoi, network_config, gate,
                         service_mask=service_mask, min_cell_ha=min_cell_ha)
 
+    # Coverage can be perfect while the cells are useless: the area is all there, gathered
+    # into a few basins with slivers around the rest of the inlets. Nothing else notices.
+    gate["noise_cell_share"] = _noise_share(subs)
+    if cells_are_mostly_noise(subs):
+        gate["decision"] = "noise_cell_fallback"
+        gate["noise_cell_share"] = _noise_share(subs)
+        return _voronoi(junction_xy, aoi, network_config, gate,
+                        service_mask=service_mask, min_cell_ha=min_cell_ha)
+
     gate["decision"] = "dem"
     diag = {
         "method": METHOD_DEM,
         "n_subcatchments": len(subs),
         "gate": gate,
+        "urban_conditioning": urban_diag,
+        "pour_point_snapping": snap_diag or {"applied": False},
         "width_method": "area_over_flow_length",
         **dem_diag,
     }
     return subs, diag
+
+
+#: Share of noise-scale cells above which a delineation has not produced units. A majority
+#: rule rather than a tuned number: if most of what came back is too small to be a
+#: subcatchment, the method did not work here whatever its coverage looks like.
+NOISE_CELL_MAJORITY = 0.5
+
+
+def _dem_sampler(dem_path):
+    """``(lon, lat) -> z`` reading a DEM, or ``None`` if it cannot be opened.
+
+    Opened once and held, because the gutter divide asks for a few samples per street
+    segment and reopening per point would dominate the delineation.
+    """
+    try:
+        import rasterio
+        from pyproj import Transformer
+
+        src = rasterio.open(dem_path)
+        to_dem = Transformer.from_crs("EPSG:4326", src.crs, always_xy=True).transform
+    except Exception:  # noqa: BLE001 — no surface is a missing refinement, not a failure
+        return None
+
+    def sample(lon, lat):
+        x, y = to_dem(lon, lat)
+        return next(src.sample([(x, y)]))[0]
+
+    return sample
+
+
+def _noise_share(subs) -> float:
+    """Share of cells below the size the repo calls noise. Reported on every path so the
+    number is visible even when it passes."""
+    from swmmcanada.network.service_area import MIN_CELL_HA
+
+    if not subs:
+        return 0.0
+    return round(sum(1 for s in subs if getattr(s, "area_ha", 0.0) < MIN_CELL_HA)
+                 / len(subs), 3)
+
+
+def cells_are_mostly_noise(subs) -> bool:
+    """True when most cells are below the size the repo already calls noise.
+
+    D8 to many pour points assigns each cell to the FIRST one downstream, so on a gutter
+    with several inlets the downstream one collects the block and those above it get
+    slivers. `MIN_CELL_HA` is documented as exactly this: "noise from adjacent pour points
+    on one flow path".
+
+    Coverage does not catch it — the area is all there, just concentrated in a few cells —
+    so a result like this passes every existing check and ships as the default silently.
+    Measured on live Victoria: 59% noise-scale from the terrain path against 36% from inlet
+    tessellation.
+    """
+    from swmmcanada.network.service_area import MIN_CELL_HA
+
+    if not subs:
+        return False
+    noise = sum(1 for s in subs if getattr(s, "area_ha", 0.0) < MIN_CELL_HA)
+    return noise / len(subs) > NOISE_CELL_MAJORITY
 
 
 def _apply_service(subs, junction_xy, aoi, service_mask, min_cell_ha):
@@ -170,7 +289,7 @@ def _apply_service(subs, junction_xy, aoi, service_mask, min_cell_ha):
 # fallback + gate helpers
 # --------------------------------------------------------------------------- #
 def _voronoi(junction_xy, aoi, network_config, gate,
-             service_mask=None, min_cell_ha=None) -> Tuple[List[SubcatchmentIn], dict]:
+             service_mask=None, min_cell_ha=None) -> Tuple[List[SurfaceCatchment], dict]:
     # The Voronoi tiling clips to the corridor at the source (ADR 0017): pass it as the
     # clip polygon, then apply size discipline. None/None = the v2 whole-AOI behaviour.
     clip = None

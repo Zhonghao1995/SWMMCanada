@@ -20,7 +20,7 @@ from swmmcanada.build import (
     NetworkIn,
     OutfallIn,
     RainfallSeries,
-    SubcatchmentIn,
+    SurfaceCatchment,
     build_model,
 )
 
@@ -33,7 +33,7 @@ def _model_with_evaporation(out_dir):
         outfalls=[OutfallIn("O1", 98.0, 200.0, 0.0)],
         conduits=[ConduitIn("C1", "J1", "J2", 100.0), ConduitIn("C2", "J2", "O1", 100.0)],
     )
-    subs = [SubcatchmentIn("S1", "J1", area_ha=1.0, pct_imperv=40.0, width_m=100.0, pct_slope=1.0)]
+    subs = [SurfaceCatchment("S1", "J1", area_ha=1.0, pct_imperv=40.0, width_m=100.0, pct_slope=1.0)]
     rain = RainfallSeries(
         timestamps=[datetime(2020, 6, 1, h) for h in range(6)],
         precip_mm=[1.2, 3.4, 0.0, 5.0, 2.0, 0.0],

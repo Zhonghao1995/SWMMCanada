@@ -2,7 +2,7 @@
 against an injected intensity function (IDF integration is tested in its own module)."""
 import pytest
 
-from swmmcanada.build.models import ConduitIn, JunctionIn, NetworkIn, OutfallIn, SubcatchmentIn
+from swmmcanada.build.models import ConduitIn, JunctionIn, NetworkIn, OutfallIn, SurfaceCatchment
 from swmmcanada.network.sizing import COMMERCIAL_DIAMETERS_M, SizingConfig, size_conduits
 
 
@@ -18,9 +18,9 @@ def _net():
 
 
 def _subs(area_ha=2.0):
-    return [SubcatchmentIn("S1", "J1", area_ha, 50.0, 100.0, 1.0),
-            SubcatchmentIn("S2", "J2", area_ha, 50.0, 100.0, 1.0),
-            SubcatchmentIn("S3", "J3", area_ha, 50.0, 100.0, 1.0)]
+    return [SurfaceCatchment("S1", "J1", area_ha, 50.0, 100.0, 1.0),
+            SurfaceCatchment("S2", "J2", area_ha, 50.0, 100.0, 1.0),
+            SurfaceCatchment("S3", "J3", area_ha, 50.0, 100.0, 1.0)]
 
 
 FLAT_30 = lambda tc: 30.0   # constant 30 mm/h regardless of tc
@@ -48,7 +48,7 @@ def test_no_downstream_shrinkage_even_when_flow_says_smaller():
         outfalls=[OutfallIn("O", 90.0, 0.0, 2.0)],     # huge drop on the trunk
         conduits=[ConduitIn("C1", "J1", "J2", 100.0), ConduitIn("C2", "J2", "O", 100.0)],
     )
-    subs = [SubcatchmentIn("S1", "J1", 5.0, 80.0, 100.0, 1.0)]
+    subs = [SurfaceCatchment("S1", "J1", 5.0, 80.0, 100.0, 1.0)]
     sized, _ = size_conduits(net, subs, FLAT_30)
     d = {c.name: c.diameter_m for c in sized.conduits}
     assert d["C2"] >= d["C1"]

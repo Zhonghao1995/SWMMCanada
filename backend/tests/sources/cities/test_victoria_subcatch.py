@@ -140,7 +140,7 @@ def test_remainder_donut_parcel_is_dropped_and_streets_revert_to_voronoi():
 
 def test_wraparound_cell_keeps_its_holes(monkeypatch):
     """A cell whose polygon carries interior rings (it wraps around land that drains
-    elsewhere) must emit them on SubcatchmentIn.holes — analysis geometry, round-2
+    elsewhere) must emit them on SurfaceCatchment.holes — analysis geometry, round-2
     F-005. Before the fix this path stored the exterior only, so a wrap-around cell
     blanketed everything inside it (the giant Moncton piece had 0 of its 69 holes)."""
     from shapely.geometry import Polygon

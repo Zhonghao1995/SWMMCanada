@@ -12,13 +12,14 @@ from swmmcanada.build import (
     NetworkIn,
     OutfallIn,
     RainfallSeries,
-    SubcatchmentIn,
+    SurfaceCatchment,
     build_model,
 )
 from swmmcanada.geo import aoi_from_geojson
 from swmmcanada.sources.cities import base
 from swmmcanada.sources.cities.regina import build_regina_network
 from swmmcanada.validate import MethodDescriptor, validate_model
+from swmmcanada.validate import schema
 
 FIX = Path(__file__).resolve().parent / "fixtures" / "regina"
 
@@ -45,7 +46,7 @@ def _merged():
 
 def test_default_system_is_storm_minor():
     assert JunctionIn("J", 1.0, 0.0, 0.0).system == "storm_minor"
-    assert SubcatchmentIn("S", "J", 1.0, 50.0, 100.0, 1.0).system == "storm_minor"
+    assert SurfaceCatchment("S", "J", 1.0, 50.0, 100.0, 1.0).system == "storm_minor"
 
 
 def test_merge_prefixes_tags_and_keeps_primary_untouched():
@@ -60,7 +61,7 @@ def test_merge_prefixes_tags_and_keeps_primary_untouched():
 def test_merged_model_builds_and_datastore_roundtrips_system(tmp_path):
     from swmmcanada.datastore import build_from_datastore, read_datastore, write_datastore
 
-    subs = [SubcatchmentIn("S1", "J1", 1.0, 40.0, 100.0, 1.0)]
+    subs = [SurfaceCatchment("S1", "J1", 1.0, 40.0, 100.0, 1.0)]
     rain = RainfallSeries([datetime(2020, 6, 1, h) for h in range(3)], [1.0, 2.0, 0.0])
     cfg = BuildConfig(out_dir=tmp_path / "x", start=date(2020, 6, 1), end=date(2020, 6, 2))
 
@@ -78,12 +79,12 @@ def test_validation_scopes_node_checks_to_storm():
     aoi = aoi_from_geojson({"type": "Polygon", "coordinates": [[
         [-104.625, 50.435], [-104.605, 50.435], [-104.605, 50.445], [-104.625, 50.445],
         [-104.625, 50.435]]]})
-    subs = [SubcatchmentIn("S1", "J1", area_ha=aoi.area_km2 * 100, pct_imperv=50.0,
+    subs = [SurfaceCatchment("S1", "J1", area_ha=aoi.area_km2 * 100, pct_imperv=50.0,
                            width_m=100.0, pct_slope=1.0,
                            polygon=[(-104.625, 50.435), (-104.605, 50.435),
                                     (-104.605, 50.445), (-104.625, 50.445)])]
     r = validate_model(_merged(), subs, aoi,
-                       method=MethodDescriptor("junction_voronoi", "x", "low"))
+                       method=MethodDescriptor(schema.METHOD_JUNCTION_VORONOI, "x", "low"))
     node_cov = {c.id: c for c in r.checks}["node_coverage"]
     assert not any("SAN_" in n for n in node_cov.metrics.get("sample", []))
     d = r.to_dict()
@@ -91,23 +92,26 @@ def test_validation_scopes_node_checks_to_storm():
     assert d["systems"]["storm_minor"]["conduits"] == 2
 
 
-def test_mikeplus_export_is_storm_only(tmp_path):
+def test_mikeplus_export_honours_a_storm_only_selection(tmp_path):
     from swmmcanada.datastore import ModelReadyDatastore
     from swmmcanada.export.mikeplus import MikePlusExporter
     import geopandas as gpd
 
     ds = ModelReadyDatastore(
         network=_merged(),
-        subcatchments=[SubcatchmentIn("S1", "J1", 1.0, 40.0, 100.0, 1.0,
+        subcatchments=[SurfaceCatchment("S1", "J1", 1.0, 40.0, 100.0, 1.0,
                                       polygon=[(-104.62, 50.439), (-104.615, 50.439),
                                                (-104.615, 50.441), (-104.62, 50.441)])],
         rain=RainfallSeries([datetime(2020, 6, 1, h) for h in range(3)], [1.0, 2.0, 0.0]),
         config={"start": "2020-06-01", "end": "2020-06-02", "coordinate_crs": "EPSG:32613"},
         provenance={},
     )
-    MikePlusExporter().export(ds, tmp_path)
+    # ADR 0029 Q3: the default is every system present, so a storm-only view is
+    # something the caller asks for. Exporting storm only by default would drop
+    # the combined mains that carry most of a combined city's stormwater.
+    MikePlusExporter().export(ds, tmp_path, systems=["storm_minor"])
     nodes = gpd.read_file(tmp_path / "nodes.shp")
-    assert not nodes["MUID"].str.startswith("SAN_").any()           # sanitary omitted (v1)
+    assert not nodes["MUID"].str.startswith("SAN_").any()  # the selection was honoured
     links = gpd.read_file(tmp_path / "links.shp")
     assert len(links) == 2                                          # storm conduits only
 
@@ -136,7 +140,7 @@ def test_regina_storm_plus_sanitary_one_inp(tmp_path):
     merged = base.merge_secondary_system(storm, san, prefix="SAN_", system="sanitary")
 
     rain = RainfallSeries([datetime(2020, 6, 1, h) for h in range(3)], [1.0, 2.0, 0.0])
-    sub = SubcatchmentIn("S1", storm.junctions[0].name, 1.0, 50.0, 100.0, 1.0)
+    sub = SurfaceCatchment("S1", storm.junctions[0].name, 1.0, 50.0, 100.0, 1.0)
     res = build_model(network=merged, subcatchments=[sub], rain=rain,
                       config=BuildConfig(out_dir=tmp_path, start=date(2020, 6, 1), end=date(2020, 6, 2)))
     manifest = json.loads(res.manifest_path.read_text())

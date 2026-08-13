@@ -7,7 +7,7 @@ and use `unary_union` so coverage/overlap stay O(n) rather than O(n²) pairwise.
 import math
 from typing import Dict, List, Tuple
 
-from swmmcanada.build.models import NetworkIn, SubcatchmentIn
+from swmmcanada.build.models import NetworkIn, SurfaceCatchment
 from swmmcanada.validate import schema
 
 
@@ -19,7 +19,7 @@ def _result(id, severity, passed, message, **metrics):
 # --- topological checks (no polygon needed) -----------------------------------
 
 
-def check_outlet_present(subs: List[SubcatchmentIn]):
+def check_outlet_present(subs: List[SurfaceCatchment]):
     bad = [s.name for s in subs if not (s.outlet_node and str(s.outlet_node).strip())]
     return _result("outlet_present", schema.ERROR, not bad,
                    "every subcatchment has an outlet node" if not bad
@@ -27,7 +27,7 @@ def check_outlet_present(subs: List[SubcatchmentIn]):
                    n_missing=len(bad), sample=bad[:10])
 
 
-def check_outlet_exists(subs: List[SubcatchmentIn], node_names):
+def check_outlet_exists(subs: List[SurfaceCatchment], node_names):
     bad = [s.name for s in subs if s.outlet_node not in node_names]
     return _result("outlet_exists", schema.ERROR, not bad,
                    "every outlet resolves to a network node" if not bad
@@ -35,7 +35,7 @@ def check_outlet_exists(subs: List[SubcatchmentIn], node_names):
                    n_dangling=len(bad), sample=bad[:10])
 
 
-def check_area_positive(subs: List[SubcatchmentIn]):
+def check_area_positive(subs: List[SurfaceCatchment]):
     bad = [s.name for s in subs if not (s.area_ha and s.area_ha > 0)]
     return _result("area_positive", schema.ERROR, not bad,
                    "every subcatchment has positive area" if not bad
@@ -43,7 +43,7 @@ def check_area_positive(subs: List[SubcatchmentIn]):
                    n_bad=len(bad), sample=bad[:10])
 
 
-def check_geometry_absent(subs: List[SubcatchmentIn]):
+def check_geometry_absent(subs: List[SurfaceCatchment]):
     missing = [s.name for s in subs if not s.polygon]
     return _result("geometry_absent", schema.WARNING, not missing,
                    "every subcatchment carries a polygon" if not missing
@@ -92,7 +92,7 @@ def check_invert_consistency(network: NetworkIn):
 class GeoContext:
     """Cell polygons + AOI reprojected once into a metric CRS, with a cached cell union."""
 
-    def __init__(self, subcatchments: List[SubcatchmentIn], aoi, water=None, served=None):
+    def __init__(self, subcatchments: List[SurfaceCatchment], aoi, water=None, served=None):
         from shapely.geometry import Polygon
         from shapely.ops import transform as shp_transform
 
@@ -111,7 +111,7 @@ class GeoContext:
         if self.water_m is not None:
             eff = eff.difference(self.water_m)
         self.effective_aoi_m = eff
-        self.cells: List[Tuple[SubcatchmentIn, object]] = []
+        self.cells: List[Tuple[SurfaceCatchment, object]] = []
         for s in subcatchments:
             if not s.polygon:
                 continue
@@ -171,7 +171,7 @@ def check_overlap(geo: GeoContext):
                    overlap_m2=round(overlap, 1), fraction=round(frac, 4))
 
 
-def check_area_conservation(subs: List[SubcatchmentIn], aoi, effective_aoi_m2=None):
+def check_area_conservation(subs: List[SurfaceCatchment], aoi, effective_aoi_m2=None):
     sum_m2 = sum((s.area_ha or 0.0) for s in subs) * 1e4
     aoi_m2 = effective_aoi_m2 if effective_aoi_m2 is not None else aoi.area_km2 * 1e6
     frac = abs(sum_m2 - aoi_m2) / aoi_m2 if aoi_m2 > 0 else 0.0
@@ -224,14 +224,27 @@ def check_aoi_containment(geo: GeoContext):
 
 
 def check_node_coverage(geo: GeoContext, node_coords: Dict[str, tuple]):
+    """Nodes inside the extract that no cell covers — land at that node belongs to nothing.
+
+    Judged against the AOI, because cells stop there and the pipe network does not. Counting
+    nodes beyond it made this fail on every build in the fleet (one downtown: 59 reported,
+    all 59 outside the AOI, none inside), and a check that is always red is one people learn
+    to skip. How many nodes were judged is reported beside the verdict, so a small count
+    cannot quietly stand in for a clean one.
+    """
     if not geo.valid_polys():
         return _na("node_coverage", schema.WARNING)
     union = geo.union()
-    uncovered = [name for name, xy in node_coords.items() if not union.covers(geo.point_m(xy))]
+    inside = {name: geo.point_m(xy) for name, xy in node_coords.items()
+              if geo.aoi_m.covers(geo.point_m(xy))}
+    uncovered = [name for name, p in inside.items() if not union.covers(p)]
     return _result("node_coverage", schema.WARNING, not uncovered,
-                   "every network node is covered by a subcatchment" if not uncovered
-                   else f"{len(uncovered)} network node(s) fall in no subcatchment",
-                   n_uncovered=len(uncovered), n_nodes=len(node_coords), sample=uncovered[:10])
+                   f"every network node in the area is covered by a subcatchment "
+                   f"({len(inside)} judged)" if not uncovered
+                   else f"{len(uncovered)} of {len(inside)} network node(s) inside the area "
+                        f"fall in no subcatchment",
+                   n_uncovered=len(uncovered), n_nodes=len(node_coords),
+                   n_nodes_in_aoi=len(inside), sample=uncovered[:10])
 
 
 def check_outlet_distance(geo: GeoContext, node_coords: Dict[str, tuple]):
@@ -282,11 +295,17 @@ def check_forcing_consistency(forcing: dict):
     """Hourly-vs-daily rain total sanity (ADR 0014). Passes when no mismatch was computed
     (daily tier, or no daily reference) or the mismatch is within tolerance; a failure is
     Warning-tier — the model runs, but the raingage source deserves a look."""
+    from swmmcanada.acquire.climate import rain_totals_disagree
+
     mismatch = forcing.get("mismatch_pct")
     if forcing.get("rainfall_resolution") != "hourly" or mismatch is None:
         return _result("forcing_consistency", schema.WARNING, True,
                        f"rainfall tier: {forcing.get('rainfall_resolution', 'daily')}")
-    ok = mismatch <= 15.0
+    # Same verdict the acquirer used, from the same function: a percentage alone cannot tell
+    # a real disagreement from arithmetic on two dry feeds, and two copies of the rule drift.
+    h, d = forcing.get("hourly_total_mm"), forcing.get("daily_total_mm")
+    ok = (not rain_totals_disagree(h, d)) if (h is not None and d is not None) \
+        else mismatch <= 15.0
     msg = (f"hourly vs daily rain totals within {mismatch}%" if ok else
            forcing.get("mismatch_warning", f"hourly vs daily rain totals differ by {mismatch}%"))
     return _result("forcing_consistency", schema.WARNING, ok, msg, mismatch_pct=mismatch)
@@ -359,23 +378,78 @@ def check_finite_hydraulics(network: NetworkIn):
                    n_bad=len(bad), sample=bad[:10])
 
 
+#: Systems a `combined` element may legitimately connect to. A combined sewer carries both
+#: stormwater and wastewater, so it is the one place the two meet by design rather than by
+#: fault (ADR 0029 Q5).
+_COMBINED_ADJACENT = frozenset({"storm_minor", "storm_major", "sanitary", "combined"})
+
+
 def check_system_outfalls(network: NetworkIn):
-    """ADR 0011: every tagged system included in the model must reach at least one
-    outfall of its own system, and conduits must not bridge systems — ERROR."""
-    systems = {c.system for c in network.conduits}
+    """System integrity (ADR 0029 Q5, superseding ADR 0011's stricter rule) — ERROR.
+
+    ADR 0011 required every system to be physically isolated and to own an outfall. That
+    held only because sanitary was grafted in as a disconnected subgraph; it is false for
+    combined sewers, where storm and sanitary meet by design. Ottawa serves storm, sanitary
+    and combined pipes from one network, and the old rule would have failed the city for
+    describing itself accurately.
+
+    Two rules replace it:
+
+    1. **Connectivity by type.** ``storm <-> combined`` and ``sanitary <-> combined`` are
+       legitimate — combined is the interface system. A **direct** ``storm <-> sanitary``
+       link is still an ERROR: with no combined pipe between them and no published topology
+       saying otherwise, it is a cross-connection, the fault municipalities run dedicated
+       programmes to find.
+    2. **Outfall reachability by component, not by system.** Every connected hydraulic
+       component must reach some outfall. One outfall may serve a mixed component containing
+       combined pipes — requiring each system to own an outfall would demand a storm outfall
+       for a combined network whose water leaves via an interceptor.
+    """
     node_sys = {j.name: j.system for j in network.junctions}
     node_sys.update({o.name: o.system for o in network.outfalls})
+    outfalls = {o.name for o in network.outfalls}
     problems = []
-    for sysname in sorted(systems):
-        if not any(o.system == sysname for o in network.outfalls):
-            problems.append(f"{sysname}: no outfall")
+
+    # --- rule 1: which system pairs a conduit may join ---
     for c in network.conduits:
         fs, ts = node_sys.get(c.from_node), node_sys.get(c.to_node)
-        if fs is not None and ts is not None and (fs != c.system or ts != c.system):
-            problems.append(f"{c.name}: bridges {fs}->{ts} as {c.system}")
-            if len(problems) > 20:
-                break
+        if fs is None or ts is None or fs == ts:
+            continue
+        pair = {fs, ts}
+        if "combined" in pair and pair <= _COMBINED_ADJACENT:
+            continue  # combined is the legitimate interface
+        problems.append(f"{c.name}: links {fs}->{ts} with no combined pipe between them")
+        if len(problems) > 20:
+            break
+
+    # --- rule 2: every connected component reaches an outfall ---
+    adj = {}
+    for c in network.conduits:
+        adj.setdefault(c.from_node, set()).add(c.to_node)
+        adj.setdefault(c.to_node, set()).add(c.from_node)
+    seen, components = set(), []
+    for start in adj:
+        if start in seen:
+            continue
+        stack, comp = [start], set()
+        seen.add(start)
+        while stack:
+            n = stack.pop()
+            comp.add(n)
+            for m in adj[n]:
+                if m not in seen:
+                    seen.add(m)
+                    stack.append(m)
+        components.append(comp)
+    for comp in components:
+        if not (comp & outfalls):
+            systems = sorted({node_sys.get(n, "?") for n in comp})
+            sample = sorted(comp)[:3]
+            problems.append(
+                f"component of {len(comp)} node(s) ({'/'.join(systems)}) reaches no "
+                f"outfall; e.g. {', '.join(sample)}")
+
     return _result("system_outfalls", schema.ERROR, not problems,
-                   "every system reaches its own outfall; no cross-system links"
+                   "every component reaches an outfall; no storm-sanitary cross-connections"
                    if not problems else f"{len(problems)} system-integrity problem(s)",
                    n_problems=len(problems), sample=problems[:10])

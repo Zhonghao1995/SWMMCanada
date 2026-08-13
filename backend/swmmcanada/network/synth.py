@@ -26,7 +26,7 @@ from swmmcanada.build.models import (
     JunctionIn,
     NetworkIn,
     OutfallIn,
-    SubcatchmentIn,
+    SurfaceCatchment,
 )
 from swmmcanada.network.errors import NetworkError
 from swmmcanada.network.subcatchments import delineate_subcatchments
@@ -48,7 +48,7 @@ class NetworkConfig:
 @dataclass(frozen=True)
 class SynthesisedNetwork:
     network: NetworkIn
-    subcatchments: List[SubcatchmentIn]
+    subcatchments: List[SurfaceCatchment]
     diagnostics: dict = field(default_factory=dict)
 
 
@@ -190,34 +190,77 @@ def _select_sinks(g: nx.Graph, *, aoi, water, config: NetworkConfig):
     return [min(g.nodes, key=lambda n: g.nodes[n]["elev"])], "lowest node (no water layer)"
 
 
+def _width_from_shape(cell) -> float:
+    """SWMM width = area / overland flow length, estimated from the cell's own geometry."""
+    from swmmcanada.geo.crs import lonlat_projector, utm_crs_for
+    from shapely.ops import transform as _tf
+
+    from swmmcanada.sources.cities.base import characteristic_flow_length_m
+
+    poly = getattr(cell, "polygon_4326", None)
+    if poly is None or poly.is_empty:
+        return math.sqrt(cell.area_m2)
+    try:
+        rep = poly.representative_point()
+        poly_m = _tf(lonlat_projector(utm_crs_for_point(rep.x, rep.y)), poly)
+        return cell.area_m2 / characteristic_flow_length_m(poly_m, (rep.x, rep.y))
+    except Exception:  # noqa: BLE001 — a shape we cannot project falls back, never fails
+        return math.sqrt(cell.area_m2)
+
+
+def utm_crs_for_point(lon: float, lat: float) -> str:
+    """UTM zone for a lon/lat, so a single cell can be projected without an AOI."""
+    zone = int((lon + 180.0) // 6) + 1
+    return f"EPSG:{32600 + zone if lat >= 0 else 32700 + zone}"
+
+
 def _build_subcatchments(junction_xy, aoi, config: NetworkConfig, cells=None,
-                         widths=None, clip_poly=None) -> List[SubcatchmentIn]:
-    """Cells → one SubcatchmentIn per junction (missing cell → nominal placeholder; %imperv
+                         widths=None, clip_poly=None) -> List[SurfaceCatchment]:
+    """Cells → one SurfaceCatchment per junction (missing cell → nominal placeholder; %imperv
     stays a placeholder, derive overwrites). ``cells`` defaults to Voronoi delineation when
     an AOI polygon is given; the DEM delineator (delineate_dem, ADR 0010) passes its own,
     plus optional per-junction ``widths`` (area / DEM flow length) that beat the √area
     default (SWMM width is a time-of-concentration input, not a shape statistic)."""
+    # A caller that supplied cells has MEASURED the land. A node it found none for has no
+    # frontage, and giving it the nominal area invents half a hectare: Victoria's frontage
+    # split came out at 162% of its own AOI that way. Synthesis, which delineates every node
+    # it creates, keeps the nominal path below.
+    # "Measured" means a delineation ran, not that someone handed one in. The nearest-node
+    # fallback tiles for itself just below, and a node it misses is exactly as unmeasured as
+    # one a caller found no cell for: on a live downtown that produced 11 cells carrying
+    # 5.5 ha between them and no polygon at all, generating runoff while invisible to every
+    # geometric check. The nominal path below is for synthesis, which has no area to tile
+    # against and delineates every node it invents.
+    measured = cells is not None
     if cells is None:
         cells = {}
         if aoi is not None and len(junction_xy) >= 2:
+            measured = True
             # ADR 0017: the Voronoi tiling clips to the street service corridor when one is
             # given — the municipal "nearest junction serves its half-blocks" split.
             poly = clip_poly if clip_poly is not None else (
                 aoi.geometry if hasattr(aoi, "geometry") else aoi)
             cells = delineate_subcatchments(junction_xy, poly)
-    subs: List[SubcatchmentIn] = []
+    subs: List[SurfaceCatchment] = []
     for jname in junction_xy:
         cell = cells.get(jname)
         if cell is not None and cell.area_m2 > 0:
             area_ha = cell.area_m2 / 10_000.0
-            width = (widths or {}).get(jname) or math.sqrt(cell.area_m2)
+            # A measured flow length (the DEM path reads one off the raster) always wins.
+            # Otherwise estimate it from the cell's own shape: `sqrt(area)` is the answer
+            # for a square and frontage cells are strips, which is exactly where it is
+            # wrong. This used to live only in the inlet path, so the frontage default
+            # quietly went back to assuming squares.
+            width = (widths or {}).get(jname) or _width_from_shape(cell)
             polygon = cell.exterior
+        elif measured:
+            continue        # nothing was measured here; do not invent it
         else:
             area_ha = config.sub_area_ha
             width = math.sqrt(config.sub_area_ha * 10_000.0)
             polygon = None
         subs.append(
-            SubcatchmentIn(
+            SurfaceCatchment(
                 f"S_{jname}",
                 outlet_node=jname,
                 area_ha=area_ha,

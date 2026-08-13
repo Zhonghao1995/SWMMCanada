@@ -19,11 +19,12 @@ from swmmcanada.sources.cities import base
 from swmmcanada.sources.cities.ottawa import build_ottawa_network
 from swmmcanada.sources.cities.victoria import build_victoria_network
 from swmmcanada.validate import MethodDescriptor, validate_model
+from swmmcanada.validate import schema
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
 
-JUNCTION_VORONOI = MethodDescriptor("junction_voronoi", "nearest node service area", "low")
-CATCHBASIN_VORONOI = MethodDescriptor("catchbasin_voronoi", "nearest inlet service area", "low")
+JUNCTION_VORONOI = MethodDescriptor(schema.METHOD_JUNCTION_VORONOI, "nearest node service area", "low")
+CATCHBASIN_VORONOI = MethodDescriptor(schema.METHOD_CATCHBASIN_VORONOI, "nearest inlet service area", "low")
 
 # --- the locked baseline (today's behaviour; a legit change is a one-line diff) ---
 VIC_N_JUNCTIONS = 74            # downtown-Victoria fixture -> one Voronoi cell per junction
@@ -161,7 +162,7 @@ def test_junction_delineator_records_honest_fallback_without_dem(ottawa):
     jxy = {j.name: (j.x, j.y) for j in net.junctions}
     subs, diag = delineate_junction_subcatchments(jxy, aoi, dem_path=None)
 
-    assert diag["method"] == "junction_voronoi"
+    assert diag["method"] == schema.METHOD_JUNCTION_VORONOI
     assert diag["gate"]["decision"] == "no_dem"          # the honesty trail
     assert len(subs) == OTT_N_JUNCTIONS                  # identical to the locked baseline
     baseline = _build_subcatchments(jxy, aoi, NetworkConfig())

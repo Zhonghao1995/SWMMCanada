@@ -15,17 +15,17 @@ from typing import Dict, List, Tuple
 from shapely.geometry import Polygon, shape
 from shapely.ops import transform as shp_transform, unary_union
 
-from swmmcanada.build.models import SubcatchmentIn
+from swmmcanada.build.models import SurfaceCatchment
 from swmmcanada.geo.crs import lonlat_projector, utm_crs_for
 
 _MIN_SCRAP_M2 = 25.0
 
 
 def snap_subcatchments_to_parcels(
-    subcatchments: List[SubcatchmentIn],
+    subcatchments: List[SurfaceCatchment],
     parcels: List[dict],
     aoi,
-) -> Tuple[List[SubcatchmentIn], dict]:
+) -> Tuple[List[SurfaceCatchment], dict]:
     """Reshape cell polygons onto parcel boundaries; areas re-measured, outlets/params
     untouched. Returns ``(new_subcatchments, diagnostics)``; without parcels this is a
     documented no-op (non-BC provinces, WFS failure)."""
@@ -105,7 +105,7 @@ def snap_subcatchments_to_parcels(
         if merged.geom_type == "Polygon":
             picked[best] = merged
 
-    out: List[SubcatchmentIn] = []
+    out: List[SurfaceCatchment] = []
     n_reshaped = n_kept_original = 0
     for s in subcatchments:
         g = picked.get(s.name)
@@ -126,7 +126,7 @@ def snap_subcatchments_to_parcels(
         # (holes = enclosed foreign lots, not our runoff), width scales with area.
         net_m2 = g.area
         holes_m = list(g.interiors)
-        # SubcatchmentIn carries one exterior ring, so holes are stripped IN METRIC and
+        # SurfaceCatchment carries one exterior ring, so holes are stripped IN METRIC and
         # the ring re-cleaned there: a valid polygon's exterior can self-touch where a
         # hole met the boundary, and reprojection rounding then breaks 4326 validity.
         g = Polygon(g.exterior).buffer(0)

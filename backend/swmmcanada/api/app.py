@@ -19,12 +19,48 @@ from functools import partial
 from pathlib import Path
 from typing import Optional
 
+import json
+
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from shapely.geometry import mapping as shp_mapping
 
 from swmmcanada.acquire.design_storm import DesignStormChoice
+
+#: The drainage systems a build may be asked to include (ADR 0029 Q3). A city
+#: offers a subset of these; the API validates against the vocabulary, and the
+#: registry decides what each city actually has.
+KNOWN_SYSTEMS = frozenset({"storm", "sanitary", "combined"})
+
+
+def _parse_subcatchment_layer(raw: Optional[str]):
+    """A user's own subcatchment boundaries (resolver priority 0), or ``None``.
+
+    Accepts a FeatureCollection or a bare feature list, because not everyone exports the
+    former. Rejected at the door rather than three minutes into a build: a file of points is
+    a mistake worth catching while the user is still looking at the screen.
+    """
+    if raw is None or not raw.strip():
+        return None
+    try:
+        parsed = json.loads(raw)
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(422, f"Could not read the subcatchment layer: {exc}")
+
+    features = parsed.get("features") if isinstance(parsed, dict) else parsed
+    if not isinstance(features, list) or not features:
+        raise HTTPException(
+            422, "The subcatchment layer contains no features — expected a GeoJSON "
+                 "FeatureCollection of polygons.")
+    polygons = [f for f in features
+                if isinstance(f, dict)
+                and ((f.get("geometry") or {}).get("type") in ("Polygon", "MultiPolygon"))]
+    if not polygons:
+        raise HTTPException(
+            422, "The subcatchment layer contains no polygons — subcatchments are areas, "
+                 "so a layer of points or lines cannot be used as one.")
+    return polygons
 from swmmcanada.api.tasks import TaskStore, run_task
 from swmmcanada.build.config import InfiltrationModel
 from swmmcanada.geo import aoi_from_geojson, aoi_from_shapefile
@@ -34,6 +70,7 @@ from swmmcanada.sources.cities.registry import (
     DATA_TIERS,
     TYPICAL_INVERT_ERROR_M,
     city_for_point,
+    systems_for_city,
     coverage_summary,
     in_canada_coarse,
 )
@@ -120,6 +157,11 @@ def create_app(*, pipeline=None, workdir=None, run_inline: bool = False) -> Fast
             "mode": mode,
             "city": spec.key if spec is not None else None,
             "city_label": spec.label if spec is not None else None,
+            # ADR 0029 Q3: which systems this AOI could produce, so the frontend renders a
+            # checkbox per system that actually exists rather than a fixed list. Outside a
+            # supported city there is no municipal sanitary layer, so offering the choice
+            # would promise something the build cannot deliver.
+            "systems": systems_for_city(spec.key) if spec is not None else ["storm"],
             # Vertical-data tier (A/B/C, see the ASSUMPTIONS.md per-city table):
             # shown at draw time so users know what they are getting BEFORE a build.
             "data_tier": DATA_TIERS[spec.key] if spec is not None else None,
@@ -137,6 +179,8 @@ def create_app(*, pipeline=None, workdir=None, run_inline: bool = False) -> Fast
         infiltration: Optional[str] = Form(None),
         design_storm_yr: Optional[int] = Form(None),
         design_storm_h: int = Form(24),
+        systems: Optional[str] = Form(None),
+        subcatchment_layer: Optional[str] = Form(None),
     ):
         aoi = await _aoi_from_request(polygon, file)
         try:
@@ -167,6 +211,21 @@ def create_app(*, pipeline=None, workdir=None, run_inline: bool = False) -> Fast
                 raise HTTPException(
                     422, f"Unknown infiltration method {infiltration!r} — "
                          f"one of: {', '.join(m.value for m in InfiltrationModel)}")
+        user_layer = _parse_subcatchment_layer(subcatchment_layer)
+
+        selected_systems = None
+        if systems is not None:                    # ADR 0029 Q3: which systems to include
+            selected_systems = [s.strip() for s in systems.split(",") if s.strip()]
+            if not selected_systems:
+                raise HTTPException(
+                    422, "Empty system selection — omit the field to include every system "
+                         f"the city has, or name some of {sorted(KNOWN_SYSTEMS)}.")
+            unknown = [s for s in selected_systems if s not in KNOWN_SYSTEMS]
+            if unknown:
+                raise HTTPException(
+                    422, f"Unknown drainage system(s) {unknown} — "
+                         f"expected any of {sorted(KNOWN_SYSTEMS)}.")
+
         design_storm = None
         if design_storm_yr is not None:            # ADR 0018: presence of a return period
             if design_storm_yr not in IDF_RETURN_PERIODS:   # IS the mode selection
@@ -188,6 +247,10 @@ def create_app(*, pipeline=None, workdir=None, run_inline: bool = False) -> Fast
             build_fn = partial(build_fn, infiltration=infiltration)  # pipelines stay as-is
         if design_storm is not None:               # same contract as infiltration (ADR 0018)
             build_fn = partial(build_fn, design_storm=design_storm)
+        if selected_systems is not None:           # same contract again (ADR 0029 Q3)
+            build_fn = partial(build_fn, systems=selected_systems)
+        if user_layer is not None:                 # resolver priority 0
+            build_fn = partial(build_fn, subcatchment_layer=user_layer)
         args = (task_id, aoi, start, end, store, work_root, build_fn, mode)
         if run_inline:
             run_task(*args)

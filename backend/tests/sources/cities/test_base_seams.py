@@ -57,13 +57,20 @@ def test_full_parcel_no_buildings_keeps_landcover(rec=None):
 
 
 def test_roofs_union_right_of_way():
-    """Half the cell is parcels (holding a 400 m² roof), the other half is road
-    right-of-way: pct = (400 + 5,000) / 10,000 = 54%."""
+    """Half the cell is parcels (holding a 400 m² roof), the other half is road reserve.
+
+    The reserve counts at its paved share rather than in full (规划书 §5): a 20 m reserve
+    carries an 8 m carriageway between boulevards, and counting all of it inflated
+    residential cells. pct = (400 + 0.85 × 5,000) / 10,000 = 46.5%.
+    """
+    from swmmcanada.sources.cities.base import CatchbasinSubcatchmentConfig
+
     par = _gdf([box(0, 0, 50, 100)])
     bld = _gdf([box(10, 10, 30, 30)])
     pct, parcel_based = _impervious_fraction(CELL, par, _sidx(par), bld, _sidx(bld))
     assert parcel_based is True
-    assert pct == pytest.approx(54.0)
+    share = CatchbasinSubcatchmentConfig().road_reserve_impervious_frac
+    assert pct == pytest.approx((400 + share * 5000) / 10000 * 100)
 
 
 # --- _shape_cells ----------------------------------------------------------------

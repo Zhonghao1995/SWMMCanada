@@ -5,6 +5,7 @@ from datetime import date, datetime
 import pandas as pd
 
 from swmmcanada.acquire.climate import (
+    rain_totals_disagree,
     ClimateResult,
     ClimateSeries,
     ClimateStation,
@@ -324,3 +325,27 @@ def test_missing_hours_within_tolerance_count_as_zero_rain():
     assert res.forcing["n_missing_hours"] == 3               # hours 0, 20, 40
     rain = to_rainfall_series(res.hourly_rain)
     assert rain.precip_mm[0] == 0.0                          # NaN -> 0, recorded not hidden
+
+
+class TestTraceRainIsNotAMismatch:
+    """A percentage taken on a nearly dry window says nothing about the raingage.
+
+    A live build over three June days read 0.0 mm hourly against 0.2 mm daily and reported
+    "differs by 100.0% — review the raingage source". Nothing was wrong: two stations
+    disagreeing by two tenths of a millimetre is rounding, not a source defect. A check that
+    cries wolf on dry weather is how a report stops being read — which is exactly how an
+    unrelated defect stayed hidden behind warnings nobody opened.
+    """
+
+    def test_two_tenths_of_a_millimetre_is_not_flagged(self):
+        assert rain_totals_disagree(hourly_mm=0.0, daily_mm=0.2) is False
+
+    def test_a_real_disagreement_is_still_flagged(self):
+        assert rain_totals_disagree(hourly_mm=10.0, daily_mm=40.0) is True
+
+    def test_the_floor_is_absolute_not_relative(self):
+        """Tripling a trace amount is still a trace amount."""
+        assert rain_totals_disagree(hourly_mm=0.3, daily_mm=0.9) is False
+
+    def test_a_storm_the_hourly_feed_missed_entirely_is_flagged(self):
+        assert rain_totals_disagree(hourly_mm=0.0, daily_mm=25.0) is True

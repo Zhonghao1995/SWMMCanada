@@ -15,6 +15,7 @@ from swmmcanada.network.delineate_dem import (
     _burn_streets,
     delineate_junction_subcatchments,
 )
+from swmmcanada.validate import schema
 
 DEM_CRS = "EPSG:32618"
 RES = 10.0
@@ -95,13 +96,16 @@ def test_valley_dem_delineates_basins(tmp_path):
         assert 0 < s.width_m < (s.area_ha * 1e4) ** 0.5
 
 
-def test_dem_width_uses_flow_length_voronoi_keeps_sqrt(tmp_path):
+def test_width_is_a_flow_length_on_every_path(tmp_path):
+    """SWMM width is area over the distance water travels, and `sqrt(area)` is that only for
+    a square. The DEM path measures the length off the raster; every other path estimates it
+    from the cell's own shape. Neither assumes a square, including the Voronoi floor — its
+    cells are real polygons and get the same treatment."""
     dem = _write_dem(tmp_path, _valley_dem())
     dem_subs, _ = delineate_junction_subcatchments(_valley_junctions(), AOI, dem_path=dem, config=CFG)
     vor_subs, _ = delineate_junction_subcatchments(_valley_junctions(), AOI, dem_path=None, config=CFG)
-    for s in vor_subs:
-        assert s.width_m == pytest.approx((s.area_ha * 1e4) ** 0.5)   # voronoi contract intact
-    assert all(s.width_m != pytest.approx((s.area_ha * 1e4) ** 0.5) for s in dem_subs)
+    for s in dem_subs + vor_subs:
+        assert s.width_m != pytest.approx((s.area_ha * 1e4) ** 0.5)
 
 
 def test_dem_cells_cover_aoi_without_gross_overlap(tmp_path):
@@ -137,7 +141,7 @@ def test_flat_dem_falls_back_to_voronoi_with_reading(tmp_path):
     subs, diag = delineate_junction_subcatchments(
         _valley_junctions(), AOI, dem_path=dem, config=CFG)
 
-    assert diag["method"] == "junction_voronoi"
+    assert diag["method"] == schema.METHOD_JUNCTION_VORONOI
     assert diag["gate"]["decision"] == "below_slope_gate"
     assert diag["gate"]["median_slope_pct"] < 1.0        # the reading is recorded
     assert diag["gate"]["threshold_pct"] == 3.0
@@ -146,7 +150,7 @@ def test_flat_dem_falls_back_to_voronoi_with_reading(tmp_path):
 
 def test_no_dem_falls_back_with_reason():
     subs, diag = delineate_junction_subcatchments(_valley_junctions(), AOI, dem_path=None, config=CFG)
-    assert diag["method"] == "junction_voronoi"
+    assert diag["method"] == schema.METHOD_JUNCTION_VORONOI
     assert diag["gate"]["decision"] == "no_dem"
     assert len(subs) == 2
 
@@ -159,7 +163,7 @@ def test_partial_dem_trips_posterior_gate(tmp_path):
         {"JW": _valley_junctions()["JW"]} | {"JE": _valley_junctions()["JE"]},
         AOI, dem_path=dem, config=CFG)
 
-    assert diag["method"] == "junction_voronoi"
+    assert diag["method"] == schema.METHOD_JUNCTION_VORONOI
     assert diag["gate"]["decision"] in ("posterior_fallback", "dem_degenerate")
     if diag["gate"]["decision"] == "posterior_fallback":
         assert "aoi_coverage" in diag["gate"]["posterior_errors"]
@@ -249,7 +253,7 @@ def test_fine_posting_still_gates_flat_ground(tmp_path):
     subs, diag = delineate_junction_subcatchments(_junctions_1m(), _aoi_1m(), dem_path=dem)
     assert diag["gate"]["threshold_pct"] == 1.0
     assert diag["gate"]["decision"] == "below_slope_gate"
-    assert diag["method"] == "junction_voronoi"
+    assert diag["method"] == schema.METHOD_JUNCTION_VORONOI
 
 
 def test_coarse_posting_keeps_calibrated_threshold(tmp_path):

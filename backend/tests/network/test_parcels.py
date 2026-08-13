@@ -1,6 +1,6 @@
 """Cadastral cell snapping (ADR 0023 cut 2): lots join their fronting cell, coverage is
 conserved, and no cadastre means a documented no-op."""
-from swmmcanada.build.models import SubcatchmentIn
+from swmmcanada.build.models import SurfaceCatchment
 from swmmcanada.geo import aoi_from_geojson
 from swmmcanada.network.parcels import snap_subcatchments_to_parcels
 
@@ -13,9 +13,9 @@ AOI = aoi_from_geojson({"type": "Polygon", "coordinates": [[
 
 
 def _subs():
-    return [SubcatchmentIn(name="A", outlet_node="J1", area_ha=0.55, pct_imperv=40.0,
+    return [SurfaceCatchment(name="A", outlet_node="J1", area_ha=0.55, pct_imperv=40.0,
                            width_m=50.0, pct_slope=1.0, polygon=L + [L[0]]),
-            SubcatchmentIn(name="B", outlet_node="J2", area_ha=0.55, pct_imperv=40.0,
+            SurfaceCatchment(name="B", outlet_node="J2", area_ha=0.55, pct_imperv=40.0,
                            width_m=50.0, pct_slope=1.0, polygon=R + [R[0]])]
 
 

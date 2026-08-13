@@ -14,8 +14,8 @@ in the [README](README.md).
 | | Bucket | What it means | Layers |
 |---|---|---|---|
 | 🟢 | **Real data** | measured & published, used as-is | storm pipe network (the 35 real-network cities); ground elevation; rainfall & temperature; parcel & building footprints; node / outfall / catch-basin locations |
-| 🟢 | **Derived from real data** | computed from the above by a standard, accepted method — trustworthy model inputs, the way professional models are built | imperviousness %, terrain slope, curve number (CN), evaporation, and the outlines of parcel-followed subcatchments |
-| 🟠 | **Approximated / assumed** | where direct data is thin: a sensible approximation or a standard default — apply judgment | the network **outside** the 35 cities (synthesized from streets); how subcatchments are **partitioned** (nearest-inlet service areas, not surveyed watersheds); gap-fills for missing inverts/diameters; non-circular pipes treated as circular; default roughness / depths |
+| 🟢 | **Derived from real data** | computed from the above by a standard, accepted method — trustworthy model inputs, the way professional models are built | imperviousness %, terrain slope, curve number (CN), evaporation, and the outlines of subcatchments that follow published streets or parcels |
+| 🟠 | **Approximated / assumed** | where direct data is thin: a sensible approximation or a standard default — apply judgment | the network **outside** the 35 cities (synthesized from streets); how subcatchments are **partitioned** (each node takes the street it fronts, not surveyed watersheds); gap-fills for missing inverts/diameters; non-circular pipes treated as circular; default roughness / depths |
 
 > In a real-network-city model, the great majority of what matters — pipes, terrain, climate, roofs, and the
 > parameters derived from them — is 🟢. The 🟠 items are normal modelling approximations to be
@@ -125,6 +125,185 @@ Outside these cities, the network itself is 🟠 synthesized from OpenStreetMap 
 > auto-built model, however real its inputs. Calibrate against gauged flow (e.g. ECCC HYDAT)
 > before using results for design or decisions.
 
+## What a storm subcatchment is here
+
+**Land is divided among the model's nodes.** A subcatchment discharges to a node that
+exists, and in a published pipe network those nodes are the maintenance holes. Catch basins
+are surface structures joined by leads; almost none are model nodes, and the reach between
+two nodes has one tributary area however many inlets sit on it. Splitting it per inlet gives
+several subcatchments discharging to the same node — more model objects, no more information
+about the pipe. That level of detail belongs to a dual-drainage model, where inlet capture
+and street flow are the question being asked.
+
+Catch basins keep their real job: their leads say which main a lot taps, which is how a
+cell's outlet is resolved.
+
+**Each node takes the land draining to its own reach** — the street segment plus the lots
+fronting it, back to the rear-lot line, with the divide at the segment midpoint. This is
+what a municipality draws. Assigning land to the nearest node *point* instead carves every
+block into a triangle fan meeting at its centre, which is not a shape anyone surveys.
+
+**Which way each gutter runs is decided by the ground, and by the inlets.** The divide
+between two nodes sits at the crest between them, not at the geometric midpoint — water runs
+downhill to whichever node is lower, and maintenance holes are placed for pipe runs rather
+than for symmetry. Grade alone would send a whole falling street to its lowest node and
+leave every node above it dry, so published inlets intercept: each stretch of gutter is
+caught by the first inlet below it, and that inlet resolves to a node. Several inlets on one
+reach merge into one cell. Without a surface the divide stays at the midpoint; without
+published inlets the grade rule stands alone.
+
+Terrain is used here rather than to cut cells. Cutting by terrain was tried and produced a
+majority of cells at noise scale — the area was all present, gathered into a few basins with
+slivers around the rest of the nodes.
+
+Measured on two downtowns with different data behind them:
+
+| | cells | median | mean | 90th pct | coverage | cells at noise scale |
+|---|---|---|---|---|---|---|
+| Victoria — parcels, kerbs, 1 m surface | 174 | 0.40 ha | 0.51 ha | 0.97 ha | 100% | none |
+| Ottawa — no parcels published, no kerbs | 368 | 0.33 ha | 0.42 ha | 0.76 ha | 100% | none |
+
+The two cities publish very different things and land within a few percent of each other,
+which is the property worth having: the unit follows the network's own spacing rather than
+whichever layers a city happens to release.
+
+**Cells at the edge of the extract run large.** The node that would have taken the far half
+of a boundary street is outside the area you asked for, so the node inside takes all of it.
+That is deliberate: every square metre inside the extract belongs to some cell, because rain
+falling there has to go somewhere in the model. It does mean the size spread is wider at the
+boundary than inside it — measured on the same two AOIs, counting only cells that do not
+touch the boundary:
+
+| | interior cells | median | mean | median/mean |
+|---|---|---|---|---|
+| Victoria | 119 | 0.34 ha | 0.36 ha | 0.94 |
+| Ottawa | 294 | 0.30 ha | 0.36 ha | 0.83 |
+
+Including the boundary the ratio is 0.78 in both. If you are modelling a real catchment
+rather than a sample, draw the extract wider than the area you care about and the edge cells
+stay outside it.
+
+For comparison, on the same Victoria AOI the previous inlet tessellation gave a 0.076 ha
+median with 36% of cells at noise scale, and routing terrain to each inlet gave 0.027 ha
+with 59%. Both of the current methods produce **no cells at noise scale at all**.
+
+Where the streets are not published the shaping falls back — to terrain where the surface is
+fine enough, to lot lines where it is not, and to nearest-node tessellation as the floor. The
+unit does not change; only the edges do.
+
+## Bringing your own subcatchment boundaries
+
+Everything in the sections that follow is a judgement call: which method the data supports,
+what an overland flow length is, how much of a road reserve is paved, whether kerb lines are
+fine enough to use. They are defensible and they are still judgements.
+
+So an uploaded layer overrides all of it. Upload a GeoJSON of polygons and those boundaries
+are used **verbatim** — no reshaping, no merging, no sliver discipline — ahead of the city's
+own catchment layer and ahead of anything derived here. A municipal layer is authoritative
+about the municipality; yours is authoritative about what you want modelled.
+
+What is still derived: outlets, unless a feature names one this network contains (a polygon
+file rarely carries our node ids, and naming one we do not have is not a reason to reject
+the upload); and imperviousness, slope and curve number, from terrain, land cover and soil
+exactly as for any other cell. Only the boundary is yours.
+
+Its confidence is recorded as **unrated** rather than high or low. We did not draw these and
+cannot vouch for them — calling them high would be endorsing someone else's work, low would
+be dismissing it.
+
+## Telling the terrain what it cannot see
+
+At 1 m LiDAR posting a 150 mm kerb is one pixel of a smooth cross-slope, so D8 routes street
+runoff across it into the front garden when in reality it runs along the gutter to the
+nearest inlet. Where a city publishes the assets, three facts are written into the surface
+before flow directions are computed:
+
+- **kerbs** are raised 0.30 m — larger than the real face on purpose, so the barrier is
+  decisive rather than a model of its exact height;
+- **kerb drops and inlets** open a 2 m gate, punched out of the barrier *before* it is
+  raised, so the router finds the crossing on its own;
+- **buildings** are raised 10 m and are not crossed at all.
+
+Conditioning happens before depressions are filled, because ponding behind a kerb is real
+and filling is what resolves it.
+
+Two limits, both physical rather than incidental: a kerb across a valley is simply
+overtopped, because the water behind it has nowhere else to go; and a 150 mm kerb does
+nothing on a steep grade. Neither is a defect and both are pinned by tests.
+
+It is skipped entirely on a DEM coarser than 2 m — a 150 mm edit is far below the vertical
+noise of a 30 m surface, and claiming to have conditioned with it would be theatre. Five of
+the fleet publish kerbs; the rest are untouched.
+
+**Inlets are snapped to the local low** before being used as drainage targets, within about
+one carriageway width. A published inlet coordinate marks the structure, not the pixel water
+arrives at, and an inlet left on the kerb gets a basin of one pixel while its real catchment
+drains past it. The search is deliberately short: a distant low point is somebody else's
+gutter. Snapping is a heuristic, so the delineation is still checked afterwards and falls
+back if it made things worse.
+
+## How much of a road reserve is pavement
+
+Imperviousness counts roofs in full plus the paved share of the road reserve — the land in a
+cell that falls outside every parcel.
+
+That share was an implicit, undocumented **1.0**: every square metre outside a parcel was
+counted as pavement. Downtown that is close enough, because carriageway plus sidewalk fills
+the reserve. In a suburb it is not — a 20 m reserve carries an 8 m carriageway between grass
+boulevards, and counting all of it inflates a residential cell.
+
+It is now a stated **0.85**, and configurable. A stated number can be argued with; a silent
+one cannot. Measured on live downtown Victoria the median cell moves from 100% to 95.6% and
+the lower quartile from 56.3% to 52.9% — small downtown, which is exactly where the old
+assumption was nearly right, and larger where it was not.
+
+Roofs are never discounted by it: the allowance applies to the reserve, and a roof is a
+roof. Where kerb lines are published the paved area can be measured instead of assumed, and
+that replaces this number rather than tuning it.
+
+## What a method label is telling you
+
+The delineation method travels with every model, and it is the shortest honest answer to
+"how much should I trust these boundaries". Two of the labels were misleading and have been
+renamed:
+
+| Label | What produced the boundaries |
+|---|---|
+| `catchbasin_parcel` | real inlets, real lot lines and roofs |
+| `junction_dem` | terrain, D8 flow paths to manholes |
+| `fallback_voronoi_catchbasin` | real inlets, **geometric** division between them |
+| `fallback_voronoi_junction` | **nothing** to delineate with: land goes to the nearest node |
+
+"Voronoi" reads to a hydrologist as a technique. It is not one here. Assigning land to
+whichever node happens to be nearest is what the code does when it has no inlets, no lot
+lines and no usable terrain, and the name now says so rather than dressing an absence of
+data as a method. The two renamed entries keep their `low` confidence — this is a
+relabelling, not a demotion, because they were always the floor.
+
+## Subcatchment width: a flow length, not a square root
+
+SWMM's width is area divided by the distance water travels overland. `sqrt(area)` is that
+distance for a square cell and only for a square cell.
+
+Municipal cells are street-frontage strips, and water does **not** run along the gutter to
+the inlet as overland flow — it crosses the lot perpendicular to the street, reaches the
+gutter, and travels the rest as channel flow. So the length that matters is the depth of the
+strip, and the width is its frontage.
+
+Width is now `area / (area / frontage)`, with frontage taken as the long side of the cell's
+minimum rotated rectangle. Measured on live downtown Victoria (3,387 cells): the median
+width is **1.58x** what the square assumption gave, the 95th percentile **2.67x**, and 58%
+of cells widened by more than half. Only 2% are within 10% of where they were — square-ish
+cells stay put, elongated ones move, which is the intent.
+
+This changes hydrographs, not just a number: a wider subcatchment has a shorter flow length
+and responds faster and more sharply. Models built before this ran their street strips as if
+water crossed four times the distance it does.
+
+The frontage estimate is geometric and does not know where the street is. It is the honest
+approximation available without a flow-direction raster; the DEM path computes the same
+quantity properly from raster flow paths.
+
 ## Physical imperviousness (ADR 0023 cut 1, #138)
 
 Where OSM maps buildings inside a synthesis cell, `pct_imperv` is the physical estimate
@@ -195,3 +374,115 @@ pipeline uses, now stated explicitly rather than left implicit in the code:
   snaps to it. That erases in-chamber falls at 85% of its structures; peer cities that
   publish per-end inverts put the erased fall at a median 0.02–0.11 m (p75 0.13–0.53 m).
   Reykjavík profiles are smooth by construction.
+
+## Wastewater loading: dry-weather flow (ADR 0031, #12)
+
+The sanitary system carried pipes and manholes and no water until now. It carries flow
+because a service area was drawn and a coefficient was applied to it — and **the coefficient
+is the accuracy ceiling, not the drawing**. Splitting a city into thousands of service areas
+and multiplying each by a handbook number does not make the answer more accurate; it makes a
+very fine polygon times a guess. Every number below is 🟠 until a city's measured plant
+influent replaces it.
+
+- **280 L per person per day** — average-day domestic sanitary flow, Canadian municipal
+  design practice. Carries roughly ±50 % until calibrated.
+- **2.4 persons per dwelling** — StatCan 2021 average household size, used where a city
+  publishes address points or dwelling counts.
+- **45 persons per hectare** — medium-density urban residential, used only where neither a
+  population nor a dwelling count is available. This is the floor of the ladder and every
+  build reports what share of its areas rest on it.
+- **Diurnal pattern** — a standard municipal 24-hour shape (overnight minimum ~0.28,
+  morning peak ~1.61), mean exactly 1.0 so it redistributes the average day without
+  changing its volume. A handbook shape until a city's own flow record replaces it.
+
+**Population is estimated on a ladder, and which rung answered is recorded**: published
+population → dwelling count × household size → area × assumed density. An area resting on
+assumed density stays distinguishable from one resting on a census count, the same
+discipline the invert gap-fill uses.
+
+**Geometry provenance and loading provenance are separate.** A service area can be taken
+verbatim from a municipal polygon (`geometry_source = official`) while the coefficient
+applied to it is a handbook number (`loading_source = synthetic`). One must not lend its
+authority to the other.
+
+**Wet-weather sewer response (RDII) is deliberately absent.** The interface exists and is
+empty. Without measured wet-weather sewer flow the RTK unit-hydrograph parameters can only
+be invented, and an invented wet-weather response is a worse failure than an honest gap —
+it would look like the answer to the question combined and I&I studies actually ask.
+
+## How well our outlet resolution matches the city's own (Victoria, 2026-08-12)
+
+Municipal catchment polygons declare which outfall each area drains to. We do not read that
+field — it lives in the city's id space and most of the fleet infers topology geometrically
+— so we resolve outlets ourselves and use the declaration as a yardstick.
+
+**Victoria: 80.3% agreement over 1,185 comparable units, 62.9% of the model.** Every
+disagreement lands on an *adjacent* published outfall rather than somewhere unrelated, which
+is the residual this method is expected to have: two neighbouring drainage areas differ near
+their shared boundary, not wholesale.
+
+The coverage figure matters as much as the rate. Units are excluded, and counted separately,
+when they drain to an invented boundary (357 — their real destination is outside the AOI),
+reach no outfall at all (237 — a connectivity fault reported in its own right), fall outside
+every official polygon (63), or are sent to an outfall outside the extract (8). Without that
+exclusion the same method reported 3.8% on a clipped extract, with every "disagreement"
+pointing at a boundary we had invented ourselves — a number that looks like a quality measure
+and is an artefact of the clip.
+
+Only Victoria publishes both the polygons and a joinable outlet key, so this is one city's
+number, not the fleet's.
+
+## Invented outfalls: how many of a model's destinations are real
+
+Where a city publishes no outfall for a drainage component, the assembler promotes that
+component's lowest node into one so the water has somewhere to go. This has always
+happened, for every city and every system; what is new is that those outfalls now **say so**
+(`synthesised = true`) instead of being indistinguishable from published structures.
+
+The scale is easy to underestimate. Victoria publishes **zero** sanitary outfalls, so all
+**19** destinations in its sanitary system are modelling boundaries. A missing destination
+fails validation loudly; an invented one that looks published passes quietly and is then
+used as if it were real. That is the failure this marker exists to prevent.
+
+Reading a result: an outfall marked synthesised is a place where water leaves the model, not
+a structure you can go and look at. Its invert is the component's lowest node minus a
+nominal drop, and it carries no boundary behaviour beyond free discharge.
+
+## Wastewater terminal outlets (ADR 0029 Q4)
+
+A combined sewer has two real destinations: dry weather leaves through an interceptor to
+the treatment plant, storm weather overflows to a watercourse through a CSO.
+
+The fleet scan (2026-08-12) measured what is published: **no supported city publishes a CSO
+structure**, and two publish interceptors. So in nearly every build the wastewater system is
+terminated by a **synthetic interceptor / treatment-plant boundary outfall** — a node we
+invented, 0.5 m below the lowest node of its component, carrying no overflow behaviour and
+labelled `synthetic` in provenance.
+
+Two consequences to be aware of:
+
+- **CSO discharge is identically zero** in these models. There is no overflow structure, so
+  there is nothing to overflow through. A combined model here answers questions about
+  conveyance, not about overflow volumes.
+- **A wastewater system is never given a storm outfall.** Ottawa publishes 13 outfalls and
+  not one of them takes combined flow; reusing one would fabricate a destination the city
+  does not have and let the model answer questions about it.
+
+## Sewer service areas: what they are and are not (ADR 0029 Q1)
+
+A service area is **not a watershed**. Sewage reaches a pipe through a lateral connection,
+not by flowing over the ground, so a service-area boundary follows parcels and connections
+and may cross a topographic divide without anything being wrong. It never becomes a SWMM
+subcatchment; it becomes node loading.
+
+Seeds are chosen by evidence, best first, and the choice is recorded:
+
+- **Lateral endpoints** where a city publishes laterals (16 of the fleet do) — a lateral
+  states which property feeds which main. An endpoint more than 60 m from any node is
+  not treated as a connection to it: beyond a block width the pairing is a guess, and a
+  guessed connection routes a household to the wrong sewer.
+- **Manholes** otherwise — these say only where the network is, which is a weaker claim,
+  and the diagnostics say so.
+- Laterals that are published but never snap are reported **differently** from laterals that
+  were never published. The first usually means a city's lateral and main layers disagree
+  about where its network is.

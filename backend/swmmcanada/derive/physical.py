@@ -18,7 +18,7 @@ from typing import List, Tuple
 from shapely.geometry import LineString, Polygon
 from shapely.ops import transform as shp_transform, unary_union
 
-from swmmcanada.build.models import SubcatchmentIn
+from swmmcanada.build.models import SurfaceCatchment
 from swmmcanada.geo.crs import lonlat_projector, utm_crs_for
 
 # Half of a local-street carriageway (~8 m curb to curb): the paved band each side of the
@@ -32,11 +32,11 @@ CAP_PCT = 90.0
 
 
 def refine_imperviousness(
-    subcatchments: List[SubcatchmentIn],
+    subcatchments: List[SurfaceCatchment],
     buildings,
     streets,
     aoi,
-) -> Tuple[List[SubcatchmentIn], dict]:
+) -> Tuple[List[SurfaceCatchment], dict]:
     """Replace land-cover imperviousness with the roof+road physical estimate on every
     cell with mapped-building evidence. Returns ``(new_subcatchments, diagnostics)``;
     with no buildings at all this is a documented no-op."""
@@ -57,7 +57,7 @@ def refine_imperviousness(
             segments.append(LineString([to_m(a["x"], a["y"]), to_m(b["x"], b["y"])]))
         road_m = unary_union([s.buffer(ROAD_HALF_WIDTH_M) for s in segments])
 
-    out: List[SubcatchmentIn] = []
+    out: List[SurfaceCatchment] = []
     n_refined = 0
     for sub in subcatchments:
         if not sub.polygon:

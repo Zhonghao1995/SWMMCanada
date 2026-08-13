@@ -26,6 +26,11 @@ from swmmcanada.acquire.landcover import acquire_landcover
 from swmmcanada.acquire.soil import acquire_soil
 from swmmcanada.build import BuildConfig, BuildResult
 from swmmcanada.datastore import build_from_datastore, write_datastore
+from swmmcanada.build.models import filter_system
+from swmmcanada.delineation import DelineationPlan, Evidence, resolve
+from swmmcanada.delineation.outlet import ensure_wastewater_outlet
+from swmmcanada.delineation.service_area import derive_service_areas
+from swmmcanada.loading import load_service_areas
 from swmmcanada import result_package
 from swmmcanada.derive.core import derive_parameters
 from swmmcanada.geo.crs import utm_crs_for
@@ -56,14 +61,30 @@ from swmmcanada.sources.cities.registry import CitySpec, city_for_point, city_sp
 
 def _method_descriptor(sub_diag: Optional[dict]) -> MethodDescriptor:
     """Map a delineation's diagnostics to the honest controlled-vocabulary method label."""
-    method = (sub_diag or {}).get("method", "")
+    diag = sub_diag or {}
+    method = diag.get("method", "")
+    # The DEM delineator reports `junction_dem` whatever it was seeded on. Seeded on real
+    # inlets it is a different claim, and the label a reader sees must say which
+    # (规划书 §4 priorities 2-3).
+    if method == vschema.METHOD_JUNCTION_STREET:
+        return MethodDescriptor(
+            vschema.METHOD_JUNCTION_STREET,
+            "each node takes the street it fronts", "medium")
+    if method == vschema.METHOD_JUNCTION_DEM and diag.get("seeded_on") == "catch_basin":
+        kerbed = (diag.get("urban_conditioning") or {}).get("applied")
+        return MethodDescriptor(
+            vschema.METHOD_CATCHBASIN_DEM,
+            "terrain routed to real inlets" + (" over kerb-aware ground" if kerbed else ""),
+            "high" if kerbed else "medium")
     if "parcel-shaped" in method:
         return MethodDescriptor("catchbasin_parcel", "nearest inlet service area", "medium")
     if "voronoi-shaped" in method:
-        return MethodDescriptor("catchbasin_voronoi", "nearest inlet service area", "low")
+        return MethodDescriptor(vschema.METHOD_CATCHBASIN_VORONOI,
+                                "nearest inlet service area", "low")
     if method == "junction_dem":
         return MethodDescriptor("junction_dem", "DEM D8 basins to manholes", "medium")
-    return MethodDescriptor("junction_voronoi", "nearest node service area", "low")
+    return MethodDescriptor(vschema.METHOD_JUNCTION_VORONOI,
+                            "nearest node service area", "low")
 
 
 def _infiltration_kwargs(infiltration) -> dict:
@@ -266,7 +287,7 @@ def _finish_build(
     ws: Path, aoi, network, subcatchments, *, start: date, end: date, method,
     config: BuildConfig, extra_provenance: dict, climate_client, climate_buffer_deg: float,
     report=None, sub_diag: Optional[dict] = None, dem=None, water=None, served=None,
-    design_storm=None, network_kind: str = "synthesis",
+    design_storm=None, network_kind: str = "synthesis", service_areas=None,
 ) -> BuildResult:
     """The build spine (CONTEXT "Build spine") — the single shared tail of every build path.
 
@@ -372,6 +393,7 @@ def _finish_build(
     write_datastore(
         ws / result_package.DATASTORE_DIR, network=network, subcatchments=subcatchments, rain=rain,
         config=config, evaporation=evaporation, temperature=temperature, tide=tide,
+        service_areas=service_areas,
         provenance={
             "aoi_bbox": list(aoi.bbox), "crs": "EPSG:4326",
             "start": start.isoformat(), "end": end.isoformat(),
@@ -414,6 +436,11 @@ def build_from_aoi(
     climate_client=None,
     climate_buffer_deg: float = 0.3,
     derive: bool = True,
+    # ADR 0029 Q3: accepted for interface symmetry with build_city — the API does not know
+    # which pathway an AOI will take. Synthesis produces a storm network only, so a
+    # selection cannot change what is built; it is recorded in provenance so a package that
+    # was asked for sanitary and could not supply it says so rather than looking complete.
+    systems=None,
     landcover_source=None,
     soil_source=None,
     infiltration=None,
@@ -455,6 +482,12 @@ def build_from_aoi(
     # mask keeps the nearest-street-segment frontage split shaping the cells; open water is
     # still carved out afterwards (ADR 0016 — lakes are receiving waters, not land).
     junction_xy = {j.name: (j.x, j.y) for j in synth.network.junctions}
+    # Synthesis has one family of options, but it goes through the resolver anyway
+    # (ADR 0029 Q11): a second place that picks a method is a second place the recorded
+    # reason can drift from the real one, and provenance must have the same shape on both
+    # build paths so a reader never has to know which one produced the model.
+    plan = resolve(Evidence(n_junctions=len(junction_xy), dem_available=dem is not None,
+                            system="storm"))
     subcatchments, sub_diag = delineate_junction_subcatchments(
         junction_xy, aoi, dem_path=dem.path, streets=streets,
         service_mask=aoi.geometry, min_cell_ha=MIN_CELL_HA)
@@ -507,6 +540,11 @@ def build_from_aoi(
         ws, aoi, network, subcatchments,
         start=start, end=end, method=method, config=config,
         extra_provenance={
+            "delineation_plan": plan.as_dict(),
+            "systems": {"requested": list(systems) if systems else None,
+                        "produced": ["storm"],
+                        "note": ("synthesis builds a storm network only; any other system "
+                                 "requested was not available from open data for this AOI")},
             "sources": {
                 "dem": type(dem_source).__name__,
                 "climate": type(climate_client).__name__,
@@ -520,12 +558,244 @@ def build_from_aoi(
     )
 
 
+def _outlet_agreement_provenance(spec, bbox, client, subcatchments, network) -> dict:
+    """Score this build's outlet resolution against the city's own declaration (#129).
+
+    Additive and non-blocking: the yardstick is a nice-to-have, and a municipal server being
+    down must never fail a model. A city that publishes nothing usable says so explicitly —
+    silence would be indistinguishable from "not measured yet".
+    """
+    from swmmcanada.validate.outlet_agreement import official_outlet_agreement
+
+    if getattr(spec, "official_catchments", None) is None:
+        return {"rate_pct": None,
+                "reason": f"{spec.key} publishes no catchment layer with a joinable "
+                          f"outlet key"}
+    try:
+        official = spec.official_catchments(bbox, client)
+        rate, diag = official_outlet_agreement(subcatchments, network, official)
+    except Exception as exc:  # noqa: BLE001 — additive metric, degrade with a note
+        return {"rate_pct": None, "reason": f"{type(exc).__name__}: {exc}"}
+    return {"rate_pct": (round(rate * 100, 1) if rate is not None else None), **diag}
+
+
+def _subcatchments_from_user_layer(features, network, crs, laterals=None):
+    """Turn an uploaded layer into subcatchments (resolver priority 0).
+
+    The boundaries are the user's and are used verbatim — no reshaping, no merging, no
+    sliver discipline. Outlets are resolved the way every other path resolves them unless
+    the layer names one, because a polygon file rarely carries our node ids.
+
+    Geometry is repaired if invalid, since a broken ring would crash downstream exactly as
+    a broken parcel did, and repairs are counted rather than hidden.
+    """
+    from shapely.geometry import shape as shp_shape
+    from shapely.ops import transform as _tf
+
+    from swmmcanada.build.models import SurfaceCatchment
+    from swmmcanada.geo.crs import lonlat_projector
+
+    to_m = lonlat_projector(crs)
+    outlet_of = base._outlet_resolver(network, crs, laterals)
+    known = {n.name for n in list(network.junctions) + list(network.outfalls)}
+
+    subs, n_repaired, n_named_outlet, n_dropped = [], 0, 0, 0
+    for i, f in enumerate(features or []):
+        geom = (f or {}).get("geometry")
+        if not geom:
+            n_dropped += 1
+            continue
+        try:
+            poly = shp_shape(geom)
+        except Exception:  # noqa: BLE001 — one bad feature is not a failed upload
+            n_dropped += 1
+            continue
+        if not poly.is_valid:
+            poly = poly.buffer(0)
+            n_repaired += 1
+        if poly.is_empty or poly.geom_type not in ("Polygon", "MultiPolygon"):
+            n_dropped += 1
+            continue
+        if poly.geom_type == "MultiPolygon":
+            poly = max(poly.geoms, key=lambda g: g.area)
+
+        props = f.get("properties") or {}
+        name = str(props.get("name") or props.get("NAME") or f"U{i + 1}")
+        declared = props.get("outlet") or props.get("OUTLET") or props.get("outlet_node")
+        rep = poly.representative_point()
+        if declared and str(declared) in known:
+            outlet = str(declared)
+            n_named_outlet += 1
+        else:
+            outlet = outlet_of((rep.x, rep.y))
+
+        ring = [(float(x), float(y)) for x, y in poly.exterior.coords]
+        poly_m = _tf(to_m, poly)
+        area_m2 = poly_m.area
+        subs.append(SurfaceCatchment(
+            name=name, outlet_node=outlet, area_ha=area_m2 / 1e4,
+            # Placeholders: `derive` overwrites imperviousness, slope and CN from the DEM,
+            # land cover and soil exactly as it does for cells we drew. Only the boundary
+            # is the user's.
+            pct_imperv=50.0,
+            width_m=area_m2 / base.characteristic_flow_length_m(poly_m, (rep.x, rep.y)),
+            pct_slope=1.0, polygon=ring))
+
+    return subs, {
+        "method": "user_supplied",
+        "n_subcatchments": len(subs),
+        "n_geometry_repaired": n_repaired,
+        "n_dropped_invalid": n_dropped,
+        "n_outlet_declared_by_user": n_named_outlet,
+        "note": ("boundaries are the user's and are used verbatim; outlets are resolved "
+                 "here unless the layer names one this network contains"),
+    }
+
+
+def _apply_official_boundary(subcatchments, official_features, crs):
+    """Trim cells to the published basin they drain to (规划书 §4, ADR 0029 Q2).
+
+    Cells arrive as EPSG:4326 rings and the cut has to happen in metres, so each is
+    projected, clipped, and projected back. Only cells the clip actually changed are
+    rebuilt; the rest are passed through untouched.
+    """
+    from pyproj import Transformer
+    from shapely.geometry import Polygon, shape as shp_shape
+    from shapely.ops import transform as _tf
+
+    from swmmcanada.delineation.boundary import clip_to_official_basins
+    from swmmcanada.geo.crs import lonlat_projector
+
+    if not official_features or not subcatchments:
+        return subcatchments, {"applied": False, "reason": "no official layer or no cells"}
+
+    to_m = lonlat_projector(crs)
+    basins = []
+    for f in official_features:
+        g = (f or {}).get("geometry")
+        if not g:
+            continue
+        try:
+            poly = _tf(to_m, shp_shape(g))
+        except Exception:  # noqa: BLE001 — a broken basin is not a build failure
+            continue
+        if poly.is_valid and not poly.is_empty:
+            basins.append({"geometry": poly,
+                           "outlet": (f.get("properties") or {}).get("OUTLET")})
+
+    class _View:
+        """Mutable stand-in the clipper can rewrite; carries its cell and its original."""
+
+        def __init__(self, polygon, seed, src):
+            self.polygon, self.seed, self.src, self.original = polygon, seed, src, polygon
+
+    views = []
+    for sub in subcatchments:
+        if not sub.polygon or len(sub.polygon) < 4:
+            continue
+        poly_m = _tf(to_m, Polygon(sub.polygon))
+        rep = poly_m.representative_point()
+        views.append(_View(poly_m, (rep.x, rep.y), sub))
+
+    _clipped, diag = clip_to_official_basins(views, basins)
+    back = Transformer.from_crs(crs, "EPSG:4326", always_xy=True).transform
+    rebuilt = {}
+    for v in views:
+        if v.polygon is v.original:
+            continue
+        ring = _tf(back, v.polygon)
+        if ring.is_empty or ring.geom_type != "Polygon":
+            continue
+        rebuilt[id(v.src)] = replace(
+            v.src, area_ha=v.polygon.area / 1e4,
+            polygon=[(float(x), float(y)) for x, y in ring.exterior.coords])
+
+    return [rebuilt.get(id(s), s) for s in subcatchments], diag
+
+
+def _dem_crs_geoms(features, dem):
+    """Reproject GeoJSON features into the DEM's grid, or ``[]``. The conditioner edits a
+    raster and needs its geometry in the same frame."""
+    if not features or dem is None:
+        return []
+    import rasterio
+    from shapely.geometry import shape as shp_shape
+    from shapely.ops import transform as _tf
+
+    from swmmcanada.geo.crs import lonlat_projector
+
+    try:
+        with rasterio.open(dem.path) as src:
+            to_dem = lonlat_projector(str(src.crs))
+    except Exception:  # noqa: BLE001 — an unreadable surface costs the refinement only
+        return []
+    out = []
+    for f in features:
+        g = (f or {}).get("geometry")
+        if not g:
+            continue
+        try:
+            out.append(_tf(to_dem, shp_shape(g)))
+        except Exception:  # noqa: BLE001 — one broken feature is not a failed build
+            continue
+    return out
+
+
+def _plan_delineation(spec, bbox, client, network, derive: bool, subcatchment_method: str,
+                      dem_resolution_m=None, user_layer=None, streets=None):
+    """Fetch the land evidence and let the resolver choose. Returns ``(land, plan)``.
+
+    Extracted so the decision is testable without a full offline build: this is the seam
+    where ADR 0029 Q11 is either honoured or quietly broken, and it needs coverage that does
+    not depend on a DEM, a climate service and four open-data hosts being reachable.
+    """
+    if subcatchment_method != "parcel":
+        # An explicit caller override short-circuits the resolver — but it is still a
+        # decision, so it is recorded in the same shape. The land fetch is skipped: the plan
+        # is already fixed, and paying for evidence nobody will read is waste.
+        return {}, DelineationPlan(
+            method=vschema.METHOD_JUNCTION_VORONOI, boundary="aoi",
+            anchors="junction",
+            shaping="voronoi", confidence="low",
+            reason=f"caller override subcatchment_method={subcatchment_method!r}",
+            gates={"caller_override": True}, evidence={})
+    land = spec.land(bbox, client)
+    # Phase 0 measured every published catchment layer in the fleet as macro, so a city that
+    # publishes one publishes a Level 2 boundary. Additive: a municipal server being down
+    # must not fail a model, it just means no hard edge.
+    official_level = None
+    if getattr(spec, "official_catchments", None) is not None:
+        try:
+            if spec.official_catchments(bbox, client):
+                official_level = "level_2"
+        except Exception:  # noqa: BLE001 — the boundary is a bonus, never a blocker
+            official_level = None
+
+    return land, resolve(Evidence(
+        n_catchbasins=len(land.get("catchbasins") or []),
+        n_parcels=len(land.get("parcels") or []),
+        n_buildings=len(land.get("buildings") or []),
+        n_kerbs=len(land.get("kerbs") or []),
+        n_user_units=len(user_layer or []),
+        n_streets=(streets.number_of_edges() if streets is not None else 0),
+        n_junctions=len(network.junctions),
+        dem_available=bool(derive),
+        dem_resolution_m=dem_resolution_m,
+        official_basin_level=official_level,
+        city=spec.key, system="storm",
+    ))
+
+
 def build_city(
     city, aoi, start: date, end: date, workspace, *,
     client=None,
     dem_source=None, climate_client=None, climate_buffer_deg: float = 0.3, derive: bool = True,
     landcover_source=None, soil_source=None, subcatchment_method: str = "parcel",
-    infiltration=None, design_storm=None, report=None,
+    infiltration=None, design_storm=None, report=None, systems=None,
+    #: A subcatchment layer the user uploaded (GeoJSON features). Resolver priority 0 —
+    #: their boundaries override every method here, because every choice this module makes
+    #: is a judgement call and theirs is the one with local knowledge behind it.
+    subcatchment_layer=None,
 ) -> BuildResult:
     """Build a SWMM model from a real municipal network (ADR 0004/0005/0006). ``city`` is a
     registry key ("victoria") or a ``CitySpec``; the spec supplies the city's fetch/build
@@ -557,25 +827,80 @@ def build_city(
         base.SURFACE_SAMPLER.reset(_tok)
     network = netres.network
 
-    # Subcatchments: catch-basin + parcel/building (ADR 0005), else Voronoi-of-nodes fallback.
+    # Subcatchments. The RESOLVER is the sole method-selection entry point (ADR 0029
+    # Q10/Q11): it is handed what this AOI actually contains and returns a plan carrying the
+    # reason, gates and evidence. This function only executes that plan — it must not branch
+    # on data availability itself, or the decision splits across two places and the recorded
+    # reason stops being the real one.
+    # The surface is acquired BEFORE planning (规划书 §4): a plan that prefers terrain has
+    # to know the terrain's posting, and acquiring it afterwards left the resolver choosing
+    # between methods with `dem_resolution_m=None` — the terrain path existed and was
+    # unreachable, which is worse than not having it.
+    dem = None
+    if derive:
+        _r("ACQUIRING_DEM", 30)
+        dem = acquire_dem(tuple(aoi.bbox), ws, source=dem_source)
+
+    # Streets, before planning: frontage splitting is the municipal unit and the plan cannot
+    # prefer it without knowing whether the streets are there. Additive — OSM being
+    # unreachable costs the shape, never the build.
+    streets = None
+    try:
+        streets = fetch_street_graph(tuple(aoi.bbox))
+    except Exception:  # noqa: BLE001
+        streets = None
+
     _r("SUBCATCHMENTS", 35)
     imperv_map: dict = {}
     sub_diag: dict = {}
-    if subcatchment_method == "parcel":
-        land = spec.land(bbox, client)
+    land, plan = _plan_delineation(spec, bbox, client, network, derive, subcatchment_method,
+                                   dem_resolution_m=(dem.resolution_m if dem else None),
+                                   user_layer=subcatchment_layer, streets=streets)
+
+    subcatchments = []
+    if plan.shaping == "user":
+        # Priority 0: used verbatim. Nothing below runs, and the official boundary is not
+        # applied either — clipping someone else's boundaries to our reading of a municipal
+        # layer would be overriding the choice we just said outranks us.
+        subcatchments, sub_diag = _subcatchments_from_user_layer(
+            subcatchment_layer, network, spec.sub_crs, land.get("laterals"))
+    if not subcatchments and plan.shaping == "street_segment":
+        # The municipal unit: each node takes the land draining to its own reach — the
+        # street segment plus the lots fronting it, back to the rear-lot line. Nearest-POINT
+        # assignment carves a block into a triangle fan meeting at its centre, which is
+        # nothing a city would draw.
+        junction_xy = {j.name: (j.x, j.y) for j in network.junctions}
+        inlet_xy = [tuple(((f.get("geometry") or {}).get("coordinates") or [])[:2])
+                    for f in (land.get("catchbasins") or [])
+                    if len((f.get("geometry") or {}).get("coordinates") or []) >= 2]
+        subcatchments, sub_diag = delineate_junction_subcatchments(
+            junction_xy, aoi, dem_path=(dem.path if dem else None), streets=streets,
+            service_mask=aoi.geometry, min_cell_ha=MIN_CELL_HA, inlets=inlet_xy)
+    if not subcatchments and plan.shaping == "dem_d8":
+        # No streets published: land follows the ground to its node instead of the frontage
+        # it cannot see. Same delineator, one input fewer.
+        junction_xy = {j.name: (j.x, j.y) for j in network.junctions}
+        subcatchments, sub_diag = delineate_junction_subcatchments(
+            junction_xy, aoi, dem_path=(dem.path if dem else None),
+            kerbs=_dem_crs_geoms(land.get("kerbs"), dem),
+            openings=_dem_crs_geoms(land.get("kerb_openings"), dem),
+            buildings=_dem_crs_geoms(land.get("buildings"), dem),
+            snap_pour_points=True)
+    if not subcatchments and plan.shaping == "parcel":
+        # Neither streets nor a usable surface: the boundary between neighbouring nodes
+        # follows real lot lines rather than a bisector through the middle of a garden.
+        junction_xy = {j.name: (j.x, j.y) for j in network.junctions}
         subcatchments, imperv_map, sub_diag = base.delineate_catchbasin_subcatchments(
-            network, land["catchbasins"], land["parcels"], land["buildings"], aoi, crs=spec.sub_crs
+            network, [{"type": "Feature", "properties": {"AssetID": n},
+                       "geometry": {"type": "Point", "coordinates": list(xy)}}
+                      for n, xy in junction_xy.items()],
+            land.get("parcels") or [], land.get("buildings") or [], aoi,
+            crs=spec.sub_crs, laterals=land.get("laterals"),
         )
-    else:
-        subcatchments = []
-    dem = None
     water = None
     landcover = None
-    if not subcatchments:  # no catch-basin data -> junction delineation (DEM-gated, ADR 0010)
+    if not subcatchments:  # plan said junctions, or the inlet pass yielded nothing
         junction_xy = {j.name: (j.x, j.y) for j in network.junctions}
-        if derive:  # the DEM is needed for derive anyway; without derive there is none → "no_dem"
-            _r("ACQUIRING_DEM", 40)
-            dem = acquire_dem(tuple(aoi.bbox), ws, source=dem_source)
         subcatchments, sub_diag = delineate_junction_subcatchments(
             junction_xy, aoi, dem_path=(dem.path if dem else None))
         imperv_map = {}
@@ -584,6 +909,16 @@ def build_city(
             water = water_union(landcover.raster_path, aoi)
             subcatchments, water_diag = subtract_water(subcatchments, water, junction_xy, aoi)
             sub_diag = {**(sub_diag or {}), "water": water_diag}
+
+    # The hard edge the plan asked for. Applied to what WE drew, never to an uploaded layer.
+    boundary_diag = {"applied": False, "reason": "plan did not ask for one"}
+    if plan.boundary == "official_basin" and plan.shaping != "user" and subcatchments:
+        try:
+            subcatchments, boundary_diag = _apply_official_boundary(
+                subcatchments, spec.official_catchments(bbox, client), spec.sub_crs)
+        except Exception as exc:  # noqa: BLE001 — a bonus edge, never a blocker
+            boundary_diag = {"applied": False, "reason": f"{type(exc).__name__}: {exc}"}
+    sub_diag = {**(sub_diag or {}), "official_boundary": boundary_diag}
 
     if derive:
         if dem is None:
@@ -605,7 +940,13 @@ def build_city(
     # as a tagged, disconnected subgraph — AFTER subcatchments (they are storm-seeded) and
     # with graceful degradation (a sanitary fetch failure never blocks the storm build).
     san_diag = {"included": False, "reason": "not_published"}
-    if spec.sanitary is not None:
+    service_areas: list = []
+    # ADR 0029 Q3: a selection the user made is honoured at BUILD time, not just at export.
+    # Grafting a system nobody asked for and filtering it out later would still pay for the
+    # fetch and still put it in the datastore.
+    if systems is not None and "sanitary" not in systems:
+        san_diag = {"included": False, "reason": "not selected"}
+    elif spec.sanitary is not None:
         _r("SANITARY", 78)
         try:
             _tok = base.SURFACE_SAMPLER.set(surface_sampler)  # same DEM tier as storm
@@ -615,11 +956,27 @@ def build_city(
                 base.SURFACE_SAMPLER.reset(_tok)
             network = base.merge_secondary_system(
                 network, sanres.network, prefix="SAN_", system="sanitary")
-            san_diag = {"included": True,
+            # ADR 0029 Q4: give the wastewater system a destination of its own. No
+            # supported city publishes a CSO structure (Phase 0), so this is almost always
+            # a synthetic interceptor/WWTP boundary — labelled as one, never a borrowed
+            # storm outfall.
+            network, outlet_diag = ensure_wastewater_outlet(network, system="sanitary")
+            san_diag = {"included": True, "terminal_outlet": outlet_diag,
                         "n_junctions": len(sanres.network.junctions),
                         "n_conduits": len(sanres.network.conduits)}
+            # ADR 0031: a sanitary network with no inflow is a drawing, not a model. Derive
+            # the service areas and load them, on the SAN_-prefixed subgraph so the areas
+            # address the grafted node names rather than the pre-merge ones.
+            service_areas, sa_diag = derive_service_areas(
+                filter_system(network, "sanitary"), land.get("parcels") or [], aoi,
+                laterals=land.get("sanitary_laterals") or land.get("laterals"),
+                crs=spec.sub_crs, buildings=land.get("buildings"))
+            loaded = load_service_areas(service_areas)
+            service_areas = loaded.areas
+            san_diag["service_areas"] = {**sa_diag, **loaded.diagnostics}
         except Exception as exc:  # noqa: BLE001 — additive system, degrade with a note
             san_diag = {"included": False, "reason": f"{type(exc).__name__}: {exc}"}
+            service_areas = []
 
     # Head done (network producer = the city adapter); the shared build spine does the rest.
     method = _method_descriptor(sub_diag)
@@ -633,10 +990,14 @@ def build_city(
             "city": spec.key, "network_source": spec.network_source,
             "network_diagnostics": netres.diagnostics,
             "subcatchment_diagnostics": sub_diag,
+            "delineation_plan": plan.as_dict(),
+            "official_outlet_agreement": _outlet_agreement_provenance(
+                spec, bbox, client, subcatchments, network),
             "sanitary": san_diag,
         },
         climate_client=climate_client, climate_buffer_deg=climate_buffer_deg, report=report,
         sub_diag=sub_diag, dem=dem, water=water, design_storm=design_storm, network_kind="city",
+        service_areas=service_areas,
     )
 
 

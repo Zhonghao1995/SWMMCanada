@@ -12,7 +12,7 @@ from swmmcanada.build import (
     NetworkIn,
     OutfallIn,
     RainfallSeries,
-    SubcatchmentIn,
+    SurfaceCatchment,
     build_model,
 )
 
@@ -33,7 +33,7 @@ def _tiny_network():
 
 def _tiny_subs():
     return [
-        SubcatchmentIn("S1", outlet_node="J1", area_ha=1.0, pct_imperv=40.0, width_m=100.0, pct_slope=1.0)
+        SurfaceCatchment("S1", outlet_node="J1", area_ha=1.0, pct_imperv=40.0, width_m=100.0, pct_slope=1.0)
     ]
 
 

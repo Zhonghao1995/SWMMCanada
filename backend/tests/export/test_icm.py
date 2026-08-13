@@ -19,7 +19,7 @@ from swmmcanada.build import (
     NetworkIn,
     OutfallIn,
     RainfallSeries,
-    SubcatchmentIn,
+    SurfaceCatchment,
 )
 from swmmcanada.datastore import ModelReadyDatastore
 from swmmcanada.export.base import ModelExporter
@@ -52,12 +52,12 @@ def _datastore() -> ModelReadyDatastore:
         ],
     )
     subcatchments = [
-        SubcatchmentIn(name="S1", outlet_node="J1", area_ha=1.0, pct_imperv=40.0,
+        SurfaceCatchment(name="S1", outlet_node="J1", area_ha=1.0, pct_imperv=40.0,
                        width_m=50.0, pct_slope=1.5, cn=80.0, n_imperv=0.01, n_perv=0.10,
                        polygon=_POLY),
-        SubcatchmentIn(name="S2", outlet_node="J2", area_ha=2.0, pct_imperv=25.0,
+        SurfaceCatchment(name="S2", outlet_node="J2", area_ha=2.0, pct_imperv=25.0,
                        width_m=80.0, pct_slope=2.0, cn=70.0, polygon=None),
-        SubcatchmentIn(name="S_SAN", outlet_node="SAN_J1", area_ha=0.5, pct_imperv=30.0,
+        SurfaceCatchment(name="S_SAN", outlet_node="SAN_J1", area_ha=0.5, pct_imperv=30.0,
                        width_m=30.0, pct_slope=1.0, system="sanitary"),
     ]
     rain = RainfallSeries(
@@ -90,7 +90,7 @@ def test_icm_exporter_conforms_to_interface():
 
 
 def test_package_files_all_present(tmp_path):
-    res = IcmExporter().export(_datastore(), tmp_path)
+    res = IcmExporter().export(_datastore(), tmp_path, systems=["storm_minor"])
     names = {p.name for p in res.files}
     assert names == {"nodes.csv", "conduits.csv", "subcatchments.shp",
                      "rain_infoworks.csv", "rain.csv", "field_mapping.md", "README.md"}
@@ -100,12 +100,12 @@ def test_package_files_all_present(tmp_path):
 
 
 def test_nodes_csv_automap_columns_and_levels(tmp_path):
-    IcmExporter().export(_datastore(), tmp_path)
+    IcmExporter().export(_datastore(), tmp_path, systems=["storm_minor"])
     rows = _rows(tmp_path / "nodes.csv")
     assert list(rows[0]) == ["node_id", "x", "y", "node_type", "system_type",
                              "ground_level", "chamber_floor"]     # InfoWorks DB field names
     by_id = {r["node_id"]: r for r in rows}
-    assert set(by_id) == {"J1", "J2", "O1"}                       # storm only — no SAN_*
+    assert set(by_id) == {"J1", "J2", "O1"}                       # ADR 0029 Q3: storm-only is now a REQUESTED view, not the default
     assert float(by_id["J1"]["ground_level"]) == 12.0             # invert + max_depth
     assert float(by_id["J1"]["chamber_floor"]) == 10.0
     assert by_id["J1"]["node_type"] == "Manhole"
@@ -115,7 +115,7 @@ def test_nodes_csv_automap_columns_and_levels(tmp_path):
 
 
 def test_conduits_csv_units_and_suffixes(tmp_path):
-    IcmExporter().export(_datastore(), tmp_path)
+    IcmExporter().export(_datastore(), tmp_path, systems=["storm_minor"])
     rows = _rows(tmp_path / "conduits.csv")
     assert [r["us_node_id"] for r in rows] == ["J1", "J1", "J2"]  # storm only
     c1, c1b, c2 = rows
@@ -131,7 +131,7 @@ def test_conduits_csv_units_and_suffixes(tmp_path):
 
 
 def test_subcatchments_shp_units_cn_and_geometry(tmp_path):
-    IcmExporter().export(_datastore(), tmp_path)
+    IcmExporter().export(_datastore(), tmp_path, systems=["storm_minor"])
     gdf = gpd.read_file(tmp_path / "subcatchments.shp")
     assert gdf.crs.to_epsg() == 32610
     assert set(gdf["sub_id"]) == {"S1", "S2"}                     # sanitary-draining omitted
@@ -151,7 +151,7 @@ def test_subcatchments_shp_units_cn_and_geometry(tmp_path):
 
 
 def test_rain_event_csv_infoworks_grammar(tmp_path):
-    IcmExporter().export(_datastore(), tmp_path)
+    IcmExporter().export(_datastore(), tmp_path, systems=["storm_minor"])
     text = (tmp_path / "rain_infoworks.csv").read_text().splitlines()
     assert text[0] == "!Version=2,type=RED,charset=UTF8"
     assert "G_START,G_TS,G_NPROFILES,G_ARD,G_EVAP" in text
@@ -177,7 +177,7 @@ def test_export_icm_from_datastore_dir(tmp_path):
                       coordinate_crs="EPSG:32610")
     write_datastore(tmp_path / "ds", network=ds.network, subcatchments=ds.subcatchments,
                     rain=ds.rain, config=cfg, evaporation=ds.evaporation)
-    res = export_icm(tmp_path / "ds", tmp_path / "icm")
+    res = export_icm(tmp_path / "ds", tmp_path / "icm", systems=["storm_minor"])
     assert res.target == "icm" and (tmp_path / "icm" / "nodes.csv").exists()
     rows = _rows(tmp_path / "icm" / "conduits.csv")
     assert len(rows) == 3                                        # sanitary conduit filtered
@@ -185,7 +185,7 @@ def test_export_icm_from_datastore_dir(tmp_path):
 
 
 def test_lossy_report_no_cn_loss_but_drops_reported(tmp_path):
-    res = IcmExporter().export(_datastore(), tmp_path)
+    res = IcmExporter().export(_datastore(), tmp_path, systems=["storm_minor"])
     by_source = {m.source: m for m in res.lossy}
     assert "cn" not in by_source                    # THE headline: CN is lossless in ICM
     assert by_source["pct_zero"].kind == "dropped"
@@ -202,7 +202,7 @@ def test_lossy_report_no_cn_loss_but_drops_reported(tmp_path):
 def test_readme_points_2d_modellers_at_the_raw_materials(tmp_path):
     """ADR 0009 amendment: the package IS the 2D raw-material delivery — the README must
     say where terrain/roughness live and that meshing stays in the engineer's tool."""
-    IcmExporter().export(_datastore(), tmp_path)
+    IcmExporter().export(_datastore(), tmp_path, systems=["storm_minor"])
     text = (tmp_path / "README.md").read_text()
     assert "For 2D overland modelling" in text
     assert "dem_dtm.tif" in text and "landcover.tif" in text

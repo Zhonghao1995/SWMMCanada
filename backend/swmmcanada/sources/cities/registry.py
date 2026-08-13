@@ -127,7 +127,8 @@ from swmmcanada.sources.cities.whiterock import (
     fetch_whiterock_storm,
 )
 from swmmcanada.sources.cities.victoria import (
-    build_victoria_network, fetch_victoria_land, fetch_victoria_sanitary, fetch_victoria_storm,
+    build_victoria_network, fetch_victoria_land, fetch_victoria_official_catchments,
+    fetch_victoria_sanitary, fetch_victoria_storm,
 )
 
 Bbox = Tuple[float, float, float, float]
@@ -149,6 +150,10 @@ class CitySpec:
     storm: NetworkFn
     land: LandFn
     sanitary: Optional[NetworkFn] = None   # None = city publishes no sanitary layer
+    #: The city's OWN catchment polygons, used only as the yardstick our outlet resolution
+    #: is scored against (#129, ADR 0029 Q2) — never as model units. Requires a joinable
+    #: outlet key, which most of the fleet does not publish, so this is usually None.
+    official_catchments: Optional[LandFn] = None
 
 
 CITIES: Tuple[CitySpec, ...] = (
@@ -160,6 +165,8 @@ CITIES: Tuple[CitySpec, ...] = (
         storm=lambda bbox, client: build_victoria_network(**fetch_victoria_storm(bbox, client=client)),
         land=lambda bbox, client: fetch_victoria_land(bbox, client=client),
         sanitary=lambda bbox, client: build_victoria_network(**fetch_victoria_sanitary(bbox, client=client)),
+        official_catchments=lambda bbox, client: fetch_victoria_official_catchments(
+            bbox, client=client),
     ),
     # Ottawa: geometry-inferred topology; no public parcels/buildings, so subcatchments seed
     # on real catch basins with land-cover imperviousness (no parcel/building override).
@@ -587,6 +594,9 @@ def coverage_summary() -> list:
             "label": spec.label,
             "coverage_bbox": list(spec.coverage),
             "has_sanitary": spec.sanitary is not None,
+            # ADR 0029 Q3: the frontend renders a checkbox per system a city actually has,
+            # so the list must come from here rather than being hardcoded client-side.
+            "systems": systems_for_city(spec.key),
             "data_tier": DATA_TIERS[spec.key],
             "typical_invert_error_m": TYPICAL_INVERT_ERROR_M[spec.key],
         }
@@ -620,3 +630,35 @@ def city_spec(key: str) -> CitySpec:
         if spec.key == key:
             return spec
     raise KeyError(f"Unknown city {key!r} — known: {', '.join(s.key for s in CITIES)}")
+
+
+#: Cities whose adapter actually ingests combined mains into the storm graph (ADR 0021).
+#: Membership is evidence, not geography: each of these adapters has an explicit combined
+#: branch (a WATERTYPE/UNITTYPE/Sewer_Type value, or a dedicated combined layer). Victoria
+#: is deliberately absent — it has two combined relics that its adapter excludes, and
+#: offering a checkbox for two pipes would misdescribe the city.
+COMBINED_SEWER_CITIES: frozenset = frozenset({
+    "ottawa", "toronto", "vancouver", "newwestminster", "moncton", "windsor", "reykjavik",
+})
+
+
+def systems_for_city(key: str) -> list:
+    """Which drainage systems a city can actually produce (ADR 0029 Q3).
+
+    One source of truth for the frontend's checkboxes, the same rule DATA_TIERS follows: a
+    hardcoded client-side list drifts, exactly as aiswmm's supported-cities hint once did
+    when Regina went missing for a week.
+
+    Derived rather than declared wherever possible — sanitary presence is read off the
+    spec's own fetcher, so a city that gains a sanitary layer gains the option without a
+    second edit that could be forgotten.
+    """
+    spec = next((c for c in CITIES if c.key == key), None)
+    if spec is None:
+        return []
+    systems = ["storm"]
+    if spec.sanitary is not None:
+        systems.append("sanitary")
+    if key in COMBINED_SEWER_CITIES:
+        systems.append("combined")
+    return systems

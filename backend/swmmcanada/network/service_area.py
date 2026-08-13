@@ -15,7 +15,7 @@ from typing import Dict, List, Tuple
 from shapely.geometry import LineString, Polygon
 from shapely.ops import transform as shp_transform, unary_union
 
-from swmmcanada.build.models import SubcatchmentIn
+from swmmcanada.build.models import SurfaceCatchment
 from swmmcanada.geo.crs import lonlat_projector, utm_crs_for
 
 # One lot depth each side of the street — the served band. Urban lot depths run ~40-60 m
@@ -96,17 +96,17 @@ def block_aware_service_area(streets, aoi, *, lot_depth_m: float = LOT_DEPTH_M,
 
 
 def merge_slivers(
-    subcatchments: List[SubcatchmentIn],
+    subcatchments: List[SurfaceCatchment],
     aoi,
     *,
     min_cell_ha: float = MIN_CELL_HA,
-) -> Tuple[List[SubcatchmentIn], dict]:
+) -> Tuple[List[SurfaceCatchment], dict]:
     """Size discipline (ADR 0017 §3): cells below ``min_cell_ha`` merge into the polygon
     neighbour they share the longest boundary with (area conserved, union geometry).
     Cells without polygons pass through untouched."""
     to_m = lonlat_projector(utm_crs_for(aoi))
 
-    keep: List[SubcatchmentIn] = [s for s in subcatchments if not s.polygon]
+    keep: List[SurfaceCatchment] = [s for s in subcatchments if not s.polygon]
     cells = [(s, Polygon([(float(x), float(y)) for x, y in s.polygon]))
              for s in subcatchments if s.polygon]
     cells = [(s, p if p.is_valid else p.buffer(0)) for s, p in cells]
@@ -144,7 +144,59 @@ def merge_slivers(
     return keep, diag
 
 
-def edge_split_cells(streets, junction_xy, mask, aoi, *, sample_step_m: float = 10.0):
+def _inlet_fractions(inlet_m, a, b, *, corridor_m: float = 20.0):
+    """Positions along an edge, as fractions, where a published inlet sits beside it."""
+    import numpy as np
+
+    if inlet_m is None or not len(inlet_m):
+        return []
+    ab = np.array([b[0] - a[0], b[1] - a[1]], dtype="float64")
+    l2 = float(ab @ ab)
+    if l2 <= 0:
+        return []
+    rel = inlet_m - np.array(a, dtype="float64")
+    t = np.clip((rel @ ab) / l2, 0.0, 1.0)
+    proj = np.array(a, dtype="float64") + t[:, None] * ab
+    near = np.hypot(*(inlet_m - proj).T) <= corridor_m
+    return sorted(float(x) for x in t[near])
+
+
+def _first_inlet_downhill(catches, t, crest):
+    """The first inlet reached going downhill from ``t``, or ``None`` if the stretch runs
+    clear to the end of the segment."""
+    if not catches:
+        return None
+    if t < crest:                       # falls towards a
+        below = [c for c in catches if c <= t]
+        return max(below) if below else None
+    above = [c for c in catches if c >= t]
+    return min(above) if above else None
+
+
+def _crest_fraction(elevation, lon_a, lat_a, lon_b, lat_b, n_samples):
+    """Where along an edge the ground is highest, as a fraction from a to b, or ``None``.
+
+    ``None`` means "no usable ground here" and the caller keeps the geometric midpoint — a
+    surface that cannot be read must cost the refinement, never the delineation. A crest at
+    an end means the street falls the whole way and the far node takes all of it.
+    """
+    if elevation is None:
+        return None
+    try:
+        zs = []
+        for i in range(n_samples + 1):
+            t = i / n_samples
+            zs.append(float(elevation(lon_a + t * (lon_b - lon_a),
+                                      lat_a + t * (lat_b - lat_a))))
+    except Exception:  # noqa: BLE001 — an unreadable surface is not a failed delineation
+        return None
+    if not zs or max(zs) - min(zs) <= 0:
+        return None
+    return zs.index(max(zs)) / n_samples
+
+
+def edge_split_cells(streets, junction_xy, mask, aoi, *, sample_step_m: float = 10.0,
+                     elevation=None, inlets=None):
     """Municipal split (ADR 0017 amendment 3): assign ground to the nearest STREET SEGMENT
     (not the nearest intersection point), each segment half draining to its end junction.
 
@@ -154,6 +206,23 @@ def edge_split_cells(streets, junction_xy, mask, aoi, *, sample_step_m: float = 
     along the rear-lot midline with 45° corner hips and mid-segment gutter divides —
     the rectangular municipal look. Implemented as dense samples along each half-edge
     labelled by its end junction, one Voronoi over the samples, unioned per junction.
+
+    ``elevation`` — optional ``(lon, lat) -> z``. Water in a gutter runs downhill to
+    whichever node is LOWER, not whichever is nearer, and maintenance holes are placed for
+    pipe runs rather than for symmetry. Given ground, the divide moves from the geometric
+    midpoint to the crest between the two nodes; without it, or if the lookup fails, the
+    midpoint stands and the delineation is exactly what it was.
+
+    ``inlets`` — optional ``[(lon, lat), ...]``. Grade alone sends a whole falling street to
+    its lowest node and leaves every node above it dry, which is not what happens: inlets
+    exist so water does not run the length of a block. Each stretch of gutter is caught by
+    the first inlet below it, and that inlet resolves to a node — several inlets on one reach
+    merge into one cell. This is catch basins doing the job they are kept for, evidence about
+    where surface water enters, without becoming the unit land is divided among.
+
+    Terrain is used here and not to cut cells: cutting by terrain produced a majority of
+    noise-scale slivers. It decides which way the gutter runs inside a cell that street
+    frontage already shaped.
 
     Returns {junction_name: SubcatchmentCell} for `_build_subcatchments(cells=...)`.
     """
@@ -169,23 +238,57 @@ def edge_split_cells(streets, junction_xy, mask, aoi, *, sample_step_m: float = 
     to_deg = Transformer.from_crs(utm_crs_for(aoi), "EPSG:4326", always_xy=True).transform
     mask_m = shp_transform(to_m, mask)
 
+    # Each street sample belongs to the NEAREST node. In synthesis the nodes sit on the
+    # street graph and this reproduces the midpoint gutter divide exactly; on a published
+    # network the maintenance holes sit wherever the pipes go, and keying off the street
+    # graph's own node ids matched nothing at all — Victoria's 391 real nodes against 121
+    # street edges returned zero cells, and every subcatchment silently took a placeholder
+    # area. Land still goes to the street it faces; only "whose street is this" changed.
+    import numpy as np
+
+    names = list(junction_xy)
+    if not names:
+        return {}
+    node_m = np.array([to_m(*junction_xy[n]) for n in names])
+    inlet_m = np.array([to_m(lon, lat) for lon, lat in (inlets or [])]) if inlets else None
+
     labels: List[str] = []
     pts: List[Point] = []
     for u, v in streets.edges():
-        nu, nv = str(u), str(v)
-        if nu not in junction_xy and nv not in junction_xy:
-            continue
-        a = to_m(streets.nodes[u]["x"], streets.nodes[u]["y"])
-        b = to_m(streets.nodes[v]["x"], streets.nodes[v]["y"])
+        lon_a, lat_a = streets.nodes[u]["x"], streets.nodes[u]["y"]
+        lon_b, lat_b = streets.nodes[v]["x"], streets.nodes[v]["y"]
+        a = to_m(lon_a, lat_a)
+        b = to_m(lon_b, lat_b)
         length = ((b[0] - a[0]) ** 2 + (b[1] - a[1]) ** 2) ** 0.5
         n = max(2, int(length // sample_step_m))
+
+        crest = _crest_fraction(elevation, lon_a, lat_a, lon_b, lat_b, n)
+        catches = _inlet_fractions(inlet_m, a, b) if crest is not None else []
+        end_names = None
+        if crest is not None:
+            ka = int(((node_m[:, 0] - a[0]) ** 2 + (node_m[:, 1] - a[1]) ** 2).argmin())
+            kb = int(((node_m[:, 0] - b[0]) ** 2 + (node_m[:, 1] - b[1]) ** 2).argmin())
+            end_names = (names[ka], names[kb])
+
         for i in range(n + 1):
             t = i / n
-            name = nu if t < 0.5 else nv          # gutter divide at the segment midpoint
-            if name not in junction_xy:
-                continue
+            x, y = a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1])
+            if end_names is None:
+                k = int(((node_m[:, 0] - x) ** 2 + (node_m[:, 1] - y) ** 2).argmin())
+                name = names[k]
+            else:
+                # Downhill is away from the crest. The first inlet in that direction takes
+                # this stretch; with none, it runs to the end of the segment.
+                catch = _first_inlet_downhill(catches, t, crest)
+                if catch is None:
+                    name = end_names[0] if t < crest else end_names[1]
+                else:
+                    cx = a[0] + catch * (b[0] - a[0])
+                    cy = a[1] + catch * (b[1] - a[1])
+                    k = int(((node_m[:, 0] - cx) ** 2 + (node_m[:, 1] - cy) ** 2).argmin())
+                    name = names[k]
             labels.append(name)
-            pts.append(Point(a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1])))
+            pts.append(Point(x, y))
     if not pts:
         return {}
 

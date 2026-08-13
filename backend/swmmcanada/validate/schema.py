@@ -14,9 +14,26 @@ WARNING = "warning"    # runs, but the user should know it's approximate
 
 # --- controlled method vocabulary (honest labelling) --------------------------
 # Produced today:
+#: Boundaries the USER supplied. Priority 0 — above the city's own polygons, because a
+#: municipal layer is authoritative about the municipality while an uploaded one is
+#: authoritative about what this user wants modelled.
+METHOD_USER_SUPPLIED = "user_supplied"
+
+#: The municipal unit: each model node takes the land draining to its own reach — the street
+#: segment plus the lots fronting it, back to the rear-lot line. What a city draws by hand.
+METHOD_JUNCTION_STREET = "junction_street_segment"
+#: Node-seeded, parcel-shaped: the unit is still the model node, and the boundary
+#: between neighbouring nodes follows real lot lines rather than a bisector through
+#: the middle of a garden.
+METHOD_JUNCTION_PARCEL = "junction_parcel"
+
 METHOD_CATCHBASIN_PARCEL = "catchbasin_parcel"      # real inlets, parcel-shaped (Victoria)
-METHOD_CATCHBASIN_VORONOI = "catchbasin_voronoi"    # real inlets, Voronoi (Ottawa)
-METHOD_JUNCTION_VORONOI = "junction_voronoi"        # synthesized / fallback
+# The two Voronoi entries are named as fallbacks on purpose (规划书 §3 Level 5). This label
+# travels into provenance and the result package, where someone decides how much to trust
+# the model, and "voronoi" reads to a hydrologist as a technique. It is not one: assigning
+# land to whichever node is nearest is what happens when there is nothing to delineate with.
+METHOD_CATCHBASIN_VORONOI = "fallback_voronoi_catchbasin"  # real inlets, geometric division
+METHOD_JUNCTION_VORONOI = "fallback_voronoi_junction"      # no inlets, no DEM
 METHOD_JUNCTION_DEM = "junction_dem"                # DEM D8 basins to manholes (ADR 0010)
 # Reserved for future methods (not produced yet):
 METHOD_MUNICIPAL_POLYGON = "municipal_polygon"      # city-published catchment polygons

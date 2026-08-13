@@ -10,7 +10,7 @@ import pytest
 
 from swmmcanada.build import (
     BuildConfig, ConduitIn, JunctionIn, NetworkIn, OutfallIn, RainfallSeries,
-    SubcatchmentIn, build_model,
+    SurfaceCatchment, build_model,
 )
 from swmmcanada.build.config import InfiltrationModel
 from swmmcanada.datastore import read_datastore, write_datastore
@@ -65,7 +65,7 @@ def _tiny_model(tmp_path, method: InfiltrationModel):
         outfalls=[OutfallIn("O1", 98.0, 200.0, 0.0)],
         conduits=[ConduitIn("C1", "J1", "J2", 100.0), ConduitIn("C2", "J2", "O1", 100.0)],
     )
-    subs = [SubcatchmentIn("S1", "J1", area_ha=1.0, pct_imperv=40.0, width_m=100.0,
+    subs = [SurfaceCatchment("S1", "J1", area_ha=1.0, pct_imperv=40.0, width_m=100.0,
                            pct_slope=1.0, cn=85.0, horton_f0_mm_h=127.0, horton_fc_mm_h=9.5,
                            horton_decay_1_h=4.14, ga_psi_mm=110.1, ga_ksat_mm_h=10.9,
                            ga_imd=0.412)]
@@ -111,7 +111,7 @@ def test_datastore_roundtrips_all_three_parameter_sets(tmp_path):
         outfalls=[OutfallIn("O1", 98.0, 200.0, 0.0)],
         conduits=[ConduitIn("C1", "J1", "O1", 200.0)],
     )
-    subs = [SubcatchmentIn("S1", "J1", area_ha=1.0, pct_imperv=40.0, width_m=100.0,
+    subs = [SurfaceCatchment("S1", "J1", area_ha=1.0, pct_imperv=40.0, width_m=100.0,
                            pct_slope=1.0, cn=90.0,
                            polygon=[(0.0, 0.0), (0.001, 0.0), (0.001, 0.001), (0.0, 0.0)],
                            horton_f0_mm_h=76.2, horton_fc_mm_h=2.5, horton_decay_1_h=4.14,

@@ -35,6 +35,22 @@ _VICTORIA_CRS = "EPSG:32610"
 # --- ArcGIS layers (see fixtures/victoria/README.md) ----------------------------
 BASE = "https://maps.victoria.ca/server/rest/services/OpenData/OpenData_StormDrain/MapServer"
 MAINS, MANHOLES, FITTINGS, OUTFALLS, CATCHBASINS = 10, 4, 3, 5, 1
+#: Storm Drain Catchment Areas — the city's OWN catchments. Measured at 64 polygons
+#: city-wide against 7,864 catch basins (Phase 0), i.e. one per outfall: far too
+#: coarse to be model units. Used as the yardstick our outlet resolution is scored
+#: against instead, via `OUTLET` (an outfall AssetID) — see #129 / ADR 0029 Q2.
+STORM_CATCHMENTS = 12
+#: Storm Drain Lateral Line — the leads from each inlet to the main it taps.
+#: 11,969 city-wide. A lead states which pipe an inlet actually reaches, which
+#: geometry only approximates where two mains run close together (规划书 §5).
+STORM_LATERALS = 8
+
+#: Planimetry: the surveyed street furniture a DEM cannot see. 26,809 kerb lines and 54,331
+#: kerb drops city-wide, in a service no adapter referenced until the capability scan walked
+#: the sibling folder. A kerb decides where street runoff goes and a drop is the one place
+#: through it (规划书 §4 priority 2).
+PLANIMETRY_BASE = "https://maps.victoria.ca/server/rest/services/OpenData/OpenData_Planimetry/MapServer"
+KERBS, KERB_DROPS = 2, 3
 LAND_BASE = "https://maps.victoria.ca/server/rest/services/OpenData/OpenData_Land/MapServer"
 LAND_PARCELS, LAND_BUILDINGS = 5, 1            # Parcels (Folio based), Buildings
 SEWER_BASE = "https://maps.victoria.ca/server/rest/services/OpenData/OpenData_Sewer/MapServer"
@@ -136,6 +152,19 @@ def fetch_victoria_sanitary(bbox, *, client=None) -> dict:
     return result
 
 
+def fetch_victoria_official_catchments(bbox, *, client=None) -> list:
+    """The city's published storm catchments intersecting ``bbox`` (GeoJSON Features).
+
+    Boundaries and a declared outlet, not model units. `OUTLET` joins the outfalls layer's
+    AssetID, which is what makes official-outlet agreement computable here at all — most of
+    the fleet publishes no such key.
+    """
+    if hasattr(bbox, "bbox"):
+        bbox = bbox.bbox
+    client = client or VicMapClient()
+    return _fetch_layer_bbox(BASE, STORM_CATCHMENTS, bbox, client)
+
+
 def fetch_victoria_land(bbox, *, client=None) -> dict:
     """Drainage inlets + land units for the parcel/building subcatchment method:
     ``{"catchbasins", "parcels", "buildings"}`` (lists of GeoJSON Features)."""
@@ -146,6 +175,9 @@ def fetch_victoria_land(bbox, *, client=None) -> dict:
         "catchbasins": _fetch_layer_bbox(BASE, CATCHBASINS, bbox, client),
         "parcels": _fetch_layer_bbox(LAND_BASE, LAND_PARCELS, bbox, client),
         "buildings": _fetch_layer_bbox(LAND_BASE, LAND_BUILDINGS, bbox, client),
+        "laterals": _fetch_layer_bbox(BASE, STORM_LATERALS, bbox, client),
+        "kerbs": _fetch_layer_bbox(PLANIMETRY_BASE, KERBS, bbox, client),
+        "kerb_openings": _fetch_layer_bbox(PLANIMETRY_BASE, KERB_DROPS, bbox, client),
     }
 
 

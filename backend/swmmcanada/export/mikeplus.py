@@ -19,7 +19,7 @@ from typing import Dict, List, Optional
 import geopandas as gpd
 from shapely.geometry import LineString, Point, Polygon
 
-from swmmcanada.build.models import filter_system
+from swmmcanada.build.models import filter_system_report
 from swmmcanada.export._shared import node_lookup, placeholder_square, to_crs, write_rain_csv
 from swmmcanada.export.base import ExportResult, LossyMapping
 
@@ -39,17 +39,26 @@ def _recip(n, fallback: float, what: str, warnings: List[str]) -> float:
     return fallback
 
 
+def _systems_present(network) -> list:
+    """Every system tag the model actually carries. The honest default for an export: a
+    user who has not chosen a subset expects the model they built, not a slice of it."""
+    tags = {getattr(e, "system", "storm_minor")
+            for e in list(network.junctions) + list(network.outfalls) + list(network.conduits)}
+    return sorted(tags)
+
+
 class MikePlusExporter:
     """Write a MIKE+ CS import package from the datastore (ADR 0008 Option B)."""
 
     target = "mikeplus"
 
-    def export(self, ds, out_dir) -> ExportResult:
+    def export(self, ds, out_dir, *, systems=None) -> ExportResult:
         out = Path(out_dir)
         out.mkdir(parents=True, exist_ok=True)
 
         crs = ds.config.get("coordinate_crs")  # e.g. "EPSG:32610"; None → keep EPSG:4326
-        network = filter_system(ds.network)  # v1 exports the storm system only (ADR 0011)
+        systems = _systems_present(ds.network) if systems is None else systems
+        network, view_report = filter_system_report(ds.network, systems)
         node_xy = node_lookup(network)      # name → (lon, lat) over junctions + outfalls
 
         lossy: List[LossyMapping] = list(_hydrology_lossy())
@@ -60,10 +69,11 @@ class MikePlusExporter:
         files.append(_write_links(out / "links.shp", network, node_xy, crs, warnings))
         files.append(_write_catchments(out / "catchments.shp", ds, node_xy, crs, lossy, warnings))
         files.append(write_rain_csv(out / "rain.csv", ds.rain))
-        files.append(_write_field_mapping(out / "field_mapping.md", lossy))
+        files.append(_write_field_mapping(out / "field_mapping.md", lossy, view_report))
         files.append(_write_readme(out / "README.md"))
 
         return ExportResult(
+            view=view_report,
             target=self.target, out_dir=out, files=files, lossy=lossy, warnings=warnings
         )
 
@@ -244,7 +254,7 @@ def _hydrology_lossy() -> List[LossyMapping]:
     ]
 
 
-def _write_field_mapping(path: Path, lossy: List[LossyMapping]) -> Path:
+def _write_field_mapping(path: Path, lossy: List[LossyMapping], view: dict) -> Path:
     rows = [
         ("`invert_m` (junction/outfall)", "`InvertLev`", "as-is (m)"),
         ("`invert_m` + `max_depth_m`", "`GroundLev` (junction)", "sum (m)"),
@@ -268,8 +278,12 @@ def _write_field_mapping(path: Path, lossy: List[LossyMapping]) -> Path:
                  "(`HortDry`) is a fixed typical value to review.\n")
     lines.append("> **Rainfall is exported as CSV** (`rain.csv`); the native MIKE `.dfs0` "
                  "carrier is deferred (`mikecore`/`mikeio` have no macOS wheel).\n")
-    lines.append("> **Storm system only:** models carrying additional tagged systems "
-                 "(e.g. a separated sanitary subgraph) export their storm_minor elements here.\n")
+    lines.append(
+        "> **Systems in this package:** {systems}. Models carry every tagged system in one "
+        "hydraulic model; an export is a filtered view of it (ADR 0029). {orphan}\n".format(
+            systems=", ".join(view.get("systems", [])) or "unknown",
+            orphan=(view.get("note") or
+                    "No element lost its route to an outfall in this view.")))
     lines.append("## SWMM datastore field → MIKE+ Model B field\n")
     lines.append("| SWMM datastore field | MIKE+ Model B field | conversion |")
     lines.append("|---|---|---|")

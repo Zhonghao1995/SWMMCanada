@@ -3,9 +3,10 @@
 Tests assert external behaviour — which checks pass/fail and the report's verdict — on
 hand-built models, not the internal merge steps.
 """
-from swmmcanada.build.models import ConduitIn, JunctionIn, NetworkIn, OutfallIn, SubcatchmentIn
+from swmmcanada.build.models import ConduitIn, JunctionIn, NetworkIn, OutfallIn, SurfaceCatchment
 from swmmcanada.geo import aoi_from_geojson
 from swmmcanada.validate import MethodDescriptor, validate_model
+from swmmcanada.validate import schema
 
 # ~0.13 km² box (under the AOI cap), split by lon -123.370 into a left/right half.
 AOI = aoi_from_geojson({"type": "Polygon", "coordinates": [[
@@ -13,7 +14,7 @@ AOI = aoi_from_geojson({"type": "Polygon", "coordinates": [[
 NET = NetworkIn(
     junctions=[JunctionIn("J1", 10.0, -123.371, 48.420), JunctionIn("J2", 9.0, -123.369, 48.420)],
     outfalls=[], conduits=[])
-METHOD = MethodDescriptor("catchbasin_voronoi", "nearest inlet service area", "low")
+METHOD = MethodDescriptor(schema.METHOD_CATCHBASIN_VORONOI, "nearest inlet service area", "low")
 HALF_HA = AOI.area_km2 * 1e6 / 2 / 1e4          # area of one half, in hectares
 
 
@@ -22,7 +23,7 @@ def _rect(lo, la, lo2, la2):
 
 
 def _sub(name, outlet, ring, area_ha=HALF_HA):
-    return SubcatchmentIn(name=name, outlet_node=outlet, area_ha=area_ha,
+    return SurfaceCatchment(name=name, outlet_node=outlet, area_ha=area_ha,
                           pct_imperv=50.0, width_m=100.0, pct_slope=1.0, polygon=ring)
 
 
@@ -112,7 +113,7 @@ def test_polygon_none_warns_but_topology_still_ok():
     # Cell A covers the whole AOI (no blank); cell B carries no polygon -> geometry_absent warns,
     # geometric checks skip B, topology is fine -> the model is not blocked.
     full = _rect(-123.372, 48.418, -123.368, 48.422)
-    subs = [_sub("A", "J1", full), SubcatchmentIn("B", "J2", area_ha=HALF_HA, pct_imperv=50.0,
+    subs = [_sub("A", "J1", full), SurfaceCatchment("B", "J2", area_ha=HALF_HA, pct_imperv=50.0,
                                                   width_m=100.0, pct_slope=1.0, polygon=None)]
     r = validate_model(NET, subs, AOI, method=METHOD)
     assert not _ids(r)["geometry_absent"].passed            # the None cell is flagged (warning)
@@ -176,7 +177,48 @@ def test_adverse_conduit_with_a_falling_sibling_is_not_a_pit():
 
 def test_to_dict_shape():
     d = validate_model(NET, _clean_subs(), AOI, method=METHOD).to_dict()
-    assert d["validation_version"] and d["subcatchment_method"] == "catchbasin_voronoi"
+    assert d["validation_version"] and d["subcatchment_method"] == schema.METHOD_CATCHBASIN_VORONOI
     assert d["ok"] is True
     assert d["summary"]["n_subcatchments"] == 2
     assert {"id", "severity", "passed", "message", "metrics"} <= set(d["checks"][0])
+
+
+class TestNodeCoverageJudgesOnlyTheAreaWeDrew:
+    """A node outside the extract cannot be covered by cells clipped to it.
+
+    Cells stop at the AOI; the pipe network does not. Judging every node against them made
+    this check fail on every build in the fleet — measured on one downtown: 59 nodes
+    reported uncovered, all 59 outside the AOI and none inside it. A check that is red on
+    every run carries no signal, and teaches people to skip the report, which is how a
+    defect that deleted land stayed hidden behind warnings nobody opened.
+    """
+
+    def _model(self, junctions):
+        return NetworkIn(junctions=junctions, outfalls=[], conduits=[])
+
+    def test_a_node_beyond_the_extract_is_not_counted(self):
+        far = JunctionIn("J_FAR", 8.0, -123.300, 48.500)      # well outside AOI
+        report = validate_model(self._model([JunctionIn("J1", 10.0, -123.371, 48.420), far]),
+                                [_sub("S1", "J1", LEFT), _sub("S2", "J1", RIGHT)],
+                                AOI, method=METHOD)
+        check = next(c for c in report.checks if c.id == "node_coverage")
+        assert check.passed, check.message
+
+    def test_a_node_inside_the_extract_with_no_cell_still_fails(self):
+        """The real finding must survive: land at that node belongs to nothing."""
+        report = validate_model(self._model([JunctionIn("J1", 10.0, -123.371, 48.420),
+                                             JunctionIn("J2", 9.0, -123.369, 48.420)]),
+                                [_sub("S1", "J1", LEFT)],      # right half left undrawn
+                                AOI, method=METHOD)
+        check = next(c for c in report.checks if c.id == "node_coverage")
+        assert not check.passed
+        assert check.metrics["n_uncovered"] == 1
+
+    def test_how_many_nodes_were_judged_is_reported(self):
+        far = JunctionIn("J_FAR", 8.0, -123.300, 48.500)
+        report = validate_model(self._model([JunctionIn("J1", 10.0, -123.371, 48.420), far]),
+                                [_sub("S1", "J1", LEFT), _sub("S2", "J1", RIGHT)],
+                                AOI, method=METHOD)
+        check = next(c for c in report.checks if c.id == "node_coverage")
+        assert check.metrics["n_nodes_in_aoi"] == 1
+        assert check.metrics["n_nodes"] == 2

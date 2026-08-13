@@ -1,6 +1,6 @@
 """derive.core (spec 07 §3): turn already-acquired/clipped DEM + land-cover + soil(HSG)
 rasters plus `network`'s subcatchment polygons into REAL SWMM subcatchment parameters,
-overwriting the placeholder `pct_imperv` / `cn` / `pct_slope` carried by `SubcatchmentIn`.
+overwriting the placeholder `pct_imperv` / `cn` / `pct_slope` carried by `SurfaceCatchment`.
 
 This stage is pure computation and fully offline: every input has already been acquired
 and clipped by `acquire.dem / acquire.landcover / acquire.soil`. For each subcatchment that
@@ -35,7 +35,7 @@ from shapely.ops import transform as shp_transform
 
 from swmmcanada.acquire.landcover import LandcoverResult
 from swmmcanada.acquire.soil import SoilResult
-from swmmcanada.build.models import SubcatchmentIn
+from swmmcanada.build.models import SurfaceCatchment
 from swmmcanada.derive import infiltration
 
 # HYSOGs250m code -> HSG letter. Dual (shallow-water-table) codes 11-14 reduce to their
@@ -52,17 +52,17 @@ class DeriveError(Exception):
 
 
 def derive_parameters(
-    subcatchments: List[SubcatchmentIn],
+    subcatchments: List[SurfaceCatchment],
     dem_path: "Path | str",
     landcover: LandcoverResult,
     soil: SoilResult,
-) -> List[SubcatchmentIn]:
+) -> List[SurfaceCatchment]:
     """Compute real SWMM parameters per subcatchment, overwriting placeholders.
 
-    Returns a NEW list of SubcatchmentIn. Subcatchments with `polygon is None` are passed
+    Returns a NEW list of SurfaceCatchment. Subcatchments with `polygon is None` are passed
     through unchanged. Empty raster overlap keeps the subcatchment's existing value.
     """
-    out: List[SubcatchmentIn] = []
+    out: List[SurfaceCatchment] = []
     for sub in subcatchments:
         if not sub.polygon:
             out.append(sub)
@@ -216,11 +216,44 @@ def _class_fractions(poly_4326, landcover: LandcoverResult) -> dict:
             for code in np.unique(flat)}
 
 
-def _mean_slope_pct(poly_4326, dem_path: "Path | str", *, fallback: float) -> float:
-    """Mean terrain slope (percent rise) within the polygon, from the DEM.
+def _slope_pct_from_grid(band, px: float, py: float):
+    """Typical terrain slope (percent rise) over a masked DEM window, or ``None``.
 
-    Slope = 100 * |grad(z)| where grad is numpy.gradient over the masked DEM window,
-    scaled by the pixel size (metres) of the (projected) DEM grid.
+    The **median** of the per-pixel gradient, not the mean (规划书 §5). A mean lets one
+    artefact set a whole cell's slope, and urban DEM windows are full of them: a building
+    edge, a bridge deck, a retaining wall, a nodata seam. One 40 m step across a single
+    pixel pair pulls a flat downtown block into hillside territory, and SWMM's overland
+    routing — and the gate that chooses DEM delineation over Voronoi — take that at face
+    value.
+
+    Returns ``None`` when the window cannot support a gradient, so the caller decides what
+    to do rather than receiving a fabricated number.
+
+    Note: the terrain honesty gate (ADR 0010) also reports a median slope, but computes it
+    with pyflwdir's DEM slope operator over the conditioned DEM. Both are medians — the
+    inconsistency that mattered (gate median vs per-cell mean) is gone — but the two
+    estimators differ, so the numbers are not interchangeable.
+    """
+    band = np.asarray(band, dtype="float64")
+    if band.ndim != 2 or band.shape[0] < 2 or band.shape[1] < 2:
+        return None
+    if np.all(np.isnan(band)) or px <= 0 or py <= 0:
+        return None
+
+    # numpy.gradient returns (d/d_row, d/d_col) = (d/dy, d/dx).
+    dzdy, dzdx = np.gradient(band, py, px)
+    slope_pct = 100.0 * np.sqrt(dzdx ** 2 + dzdy ** 2)
+    valid = slope_pct[np.isfinite(slope_pct)]
+    if valid.size == 0:
+        return None
+    return float(np.median(valid))
+
+
+def _mean_slope_pct(poly_4326, dem_path: "Path | str", *, fallback: float) -> float:
+    """Typical terrain slope (percent rise) within the polygon, from the DEM.
+
+    Name kept for its callers; the estimator is the median (see
+    :func:`_slope_pct_from_grid`).
     """
     with rasterio.open(dem_path) as src:
         data, transform = _mask_to_polygon(src, poly_4326, fill=np.nan, as_float=True)
@@ -232,25 +265,8 @@ def _mean_slope_pct(poly_4326, dem_path: "Path | str", *, fallback: float) -> fl
     if nodata is not None:
         band = np.where(band == float(nodata), np.nan, band)
 
-    # Need at least a 2x2 valid window to take a gradient.
-    if band.shape[0] < 2 or band.shape[1] < 2:
-        return fallback
-    if np.all(np.isnan(band)):
-        return fallback
-
-    px = abs(transform.a)  # pixel width (m)
-    py = abs(transform.e)  # pixel height (m)
-    if px <= 0 or py <= 0:
-        return fallback
-
-    # numpy.gradient returns (d/d_row, d/d_col) = (d/dy, d/dx).
-    dzdy, dzdx = np.gradient(band, py, px)
-    rise = np.sqrt(dzdx ** 2 + dzdy ** 2)
-    slope_pct = 100.0 * rise
-    valid = slope_pct[~np.isnan(slope_pct)]
-    if valid.size == 0:
-        return fallback
-    return float(np.mean(valid))
+    slope = _slope_pct_from_grid(band, abs(transform.a), abs(transform.e))
+    return fallback if slope is None else slope
 
 
 # --- masking helper -----------------------------------------------------------
