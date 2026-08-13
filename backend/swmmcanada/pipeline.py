@@ -416,7 +416,8 @@ def _finish_build(
     # Map preview: GeoJSON of the model geometry for the frontend's layers.
     preview_path = ws / result_package.PREVIEW_GEOJSON
     preview_path.parent.mkdir(exist_ok=True)
-    preview_path.write_text(json.dumps(network_geojson(network, subcatchments)))
+    preview_path.write_text(json.dumps(
+        network_geojson(network, subcatchments, service_areas=service_areas)))
 
     # Integrity block LAST (F-019): sha-256 + size for every member, so a shipped
     # package can be verified file by file.

@@ -116,3 +116,53 @@ def test_derived_areas_flow_straight_into_the_loading_step():
     # Every area rests on assumed density here, and the diagnostics say so rather than
     # letting a precise-looking flow imply precise evidence.
     assert res.diagnostics["pct_on_assumed_density"] == 100.0
+
+
+class TestTheUnitIsTheNodeHereToo:
+    """One service area per node, not one per lateral connection.
+
+    A lateral says which node a property feeds — that is evidence, and it is why laterals
+    beat manhole proximity. It is not a unit. Seeding a cell on every lateral endpoint gave
+    a live downtown 1,392 areas over 195 sanitary nodes: 7.1 per node, a median of 190 m²,
+    a third of them under 100 m², and 0.9 people each. Nothing is gained — the flow is
+    applied at the node and sums to the same number either way — and a 190 m² polygon
+    carrying nine tenths of a person is not something an engineer can check.
+
+    This is the storm rule restated on the wastewater side: the unit is the model node,
+    and the connection is the evidence that decides which node land belongs to.
+    """
+
+    def _laterals_into_one_node(self):
+        """Four laterals reaching the same manhole from four sides."""
+        x, y = -123.368, 48.423
+        return [lateral(x + dx, y + dy, x, y) for dx, dy in
+                ((-0.0004, 0.0), (0.0004, 0.0), (0.0, -0.0003), (0.0, 0.0003))]
+
+    def test_four_laterals_on_one_node_make_one_area(self):
+        net = sanitary_network()
+        areas, _ = derive_service_areas(net, [], AOI, laterals=self._laterals_into_one_node(),
+                                        crs="EPSG:32610")
+        at_node = [a for a in areas if a.node == "SAN_M1"]
+        assert len(at_node) == 1, f"{len(at_node)} areas on one node: {[a.name for a in at_node]}"
+
+    def test_no_node_carries_more_than_one_area_per_contiguous_piece(self):
+        net = sanitary_network()
+        areas, diag = derive_service_areas(net, [], AOI, laterals=self._laterals_into_one_node(),
+                                           crs="EPSG:32610")
+        assert diag["n_service_areas"] <= len({a.node for a in areas}) * 2
+
+    def test_the_land_is_not_lost_when_the_pieces_are_joined(self):
+        net = sanitary_network()
+        lats = self._laterals_into_one_node()
+        merged, _ = derive_service_areas(net, [], AOI, laterals=lats, crs="EPSG:32610")
+        assert sum(a.area_ha for a in merged) > 0
+        # the whole AOI is still served: joining pieces must not drop any of them
+        assert sum(a.area_ha for a in merged) == pytest.approx(
+            AOI.area_km2 * 100.0, rel=0.02)
+
+    def test_laterals_still_decide_which_node_land_belongs_to(self):
+        """Merging must not cost the evidence — that is the whole reason laterals win."""
+        net = sanitary_network()
+        _areas, diag = derive_service_areas(net, [], AOI, laterals=self._laterals_into_one_node(),
+                                            crs="EPSG:32610")
+        assert diag["seed_source"] == "lateral"
