@@ -158,18 +158,34 @@ slivers around the rest of the nodes.
 
 Measured on two downtowns with different data behind them:
 
-| | cells | median | 90th pct | coverage | no cell at noise scale |
-|---|---|---|---|---|---|
-| Victoria — parcels, kerbs, 1 m surface | 174 | 0.36 ha | 0.86 ha | 91% | yes |
-| Ottawa — no parcels published, no kerbs | 278 | 0.39 ha | 0.90 ha | 100% | yes |
+| | cells | median | mean | 90th pct | coverage | cells at noise scale |
+|---|---|---|---|---|---|---|
+| Victoria — parcels, kerbs, 1 m surface | 174 | 0.40 ha | 0.51 ha | 0.97 ha | 100% | none |
+| Ottawa — no parcels published, no kerbs | 368 | 0.33 ha | 0.42 ha | 0.76 ha | 100% | none |
 
 The two cities publish very different things and land within a few percent of each other,
 which is the property worth having: the unit follows the network's own spacing rather than
 whichever layers a city happens to release.
 
+**Cells at the edge of the extract run large.** The node that would have taken the far half
+of a boundary street is outside the area you asked for, so the node inside takes all of it.
+That is deliberate: every square metre inside the extract belongs to some cell, because rain
+falling there has to go somewhere in the model. It does mean the size spread is wider at the
+boundary than inside it — measured on the same two AOIs, counting only cells that do not
+touch the boundary:
+
+| | interior cells | median | mean | median/mean |
+|---|---|---|---|---|
+| Victoria | 119 | 0.34 ha | 0.36 ha | 0.94 |
+| Ottawa | 294 | 0.30 ha | 0.36 ha | 0.83 |
+
+Including the boundary the ratio is 0.78 in both. If you are modelling a real catchment
+rather than a sample, draw the extract wider than the area you care about and the edge cells
+stay outside it.
+
 For comparison, on the same Victoria AOI the previous inlet tessellation gave a 0.076 ha
 median with 36% of cells at noise scale, and routing terrain to each inlet gave 0.027 ha
-with 59%.
+with 59%. Both of the current methods produce **no cells at noise scale at all**.
 
 Where the streets are not published the shaping falls back — to terrain where the surface is
 fine enough, to lot lines where it is not, and to nearest-node tessellation as the floor. The
