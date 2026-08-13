@@ -22,6 +22,8 @@ from __future__ import annotations
 
 from typing import Dict, List, Optional, Sequence, Tuple
 
+from shapely.ops import unary_union
+
 from swmmcanada.build.models import NetworkIn, SewerServiceArea
 
 #: A lateral endpoint further than this from any sanitary node is not a connection to it.
@@ -77,6 +79,22 @@ def _seeds_from(network: NetworkIn, laterals, crs: str) -> Tuple[Dict, str]:
     return ({j.name: (j.x, j.y) for j in network.junctions}, "manhole")
 
 
+def _rings_lonlat(poly_m, crs: str):
+    """Metric polygon -> (exterior, holes) in EPSG:4326, the shape the model stores.
+
+    Holes ride along: they are enclosed land the sewer does not serve, and a filled-in hole
+    overstates the load and blankets whatever sits inside it.
+    """
+    from pyproj import Transformer
+    from shapely.ops import transform as shp_transform
+
+    to_ll = Transformer.from_crs(crs, "EPSG:4326", always_xy=True).transform
+    ll = shp_transform(to_ll, poly_m)
+    exterior = [(float(c[0]), float(c[1])) for c in ll.exterior.coords]
+    holes = [[(float(c[0]), float(c[1])) for c in r.coords] for r in ll.interiors]
+    return exterior, holes
+
+
 def derive_service_areas(
     network: NetworkIn, parcels, aoi, *, laterals=None, crs: str = "EPSG:32610",
     system: str = "sanitary", buildings=None,
@@ -102,20 +120,40 @@ def derive_service_areas(
 
     dwellings = _dwellings_per_cell(cells, buildings, crs) if buildings else {}
 
+    # One area per NODE, not per connection. A lateral says which node a property feeds —
+    # that is evidence, and it is why laterals beat manhole proximity. It is not a unit.
+    # Seeding a cell on every lateral endpoint gave a live downtown 1,392 areas over 195
+    # nodes: 7.1 each, a median of 190 m², a third under 100 m², 0.9 people apiece. The
+    # flow is applied at the node and sums the same either way, so the extra objects buy
+    # nothing and cost the reader a boundary they can check. Same rule as the storm side.
+    per_node: Dict[str, list] = {}
+    for seed_id, _i, poly_m, _ext, _holes in cells:
+        per_node.setdefault(outlet_of(seeds[seed_id]), []).append(poly_m)
+
     areas: List[SewerServiceArea] = []
-    for seed_id, i, poly_m, exterior, holes in cells:
-        name = f"SSA_{seed_id}" if i == 0 else f"SSA_{seed_id}__{i + 1}"
-        areas.append(SewerServiceArea(
-            name=name, node=outlet_of(seeds[seed_id]), area_ha=poly_m.area / 1e4,
-            system=system, polygon=exterior, holes=holes or None,
-            dwelling_units=dwellings.get(name),
-            geometry_source="derived"))
+    n_merged = 0
+    for node, polys in per_node.items():
+        merged = unary_union(polys)
+        parts = list(merged.geoms) if hasattr(merged, "geoms") else [merged]
+        # Pieces that do not touch stay separate rather than being bridged: a node can
+        # genuinely serve land on both sides of something it does not drain.
+        parts = [g for g in parts if getattr(g, "area", 0.0) > 0]
+        n_merged += max(0, len(polys) - len(parts))
+        for i, g in enumerate(sorted(parts, key=lambda g: -g.area)):
+            name = f"SSA_{node}" if i == 0 else f"SSA_{node}__{i + 1}"
+            exterior, holes = _rings_lonlat(g, crs)
+            areas.append(SewerServiceArea(
+                name=name, node=node, area_ha=g.area / 1e4,
+                system=system, polygon=exterior, holes=holes or None,
+                dwelling_units=dwellings.get(name),
+                geometry_source="derived"))
 
     return areas, {
         "method": f"{seed_source}-seeded, {shape_method}-shaped",
         "seed_source": seed_source, "shape_method": shape_method,
         "n_seeds": len(seeds), "n_service_areas": len(areas),
         "n_dropped_invalid": n_dropped, "n_remainder_donuts": n_remainder,
+        "n_connection_cells": len(cells), "n_cells_merged_into_nodes": n_merged,
         "n_with_dwelling_counts": sum(1 for a in areas if a.dwelling_units),
         # Named so a reader can tell a connection-backed boundary from a proximity guess.
         "evidence": {
