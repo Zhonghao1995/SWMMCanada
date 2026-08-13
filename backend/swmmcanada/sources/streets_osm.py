@@ -33,6 +33,41 @@ OVERPASS_MIRRORS = (
 )
 
 
+#: How long to spend asking Overpass whether it has a slot. The answer is a courtesy check,
+#: not the query — if the status page is slow we are better off attempting the query, which
+#: the server will refuse with 429 if we are genuinely over quota.
+STATUS_TIMEOUT_S = 10
+
+
+def _overpass_status(base_endpoint: str) -> str:
+    """The server's status page, or '' if it cannot be read."""
+    import requests
+
+    try:
+        return requests.get(f"{base_endpoint}/status", timeout=STATUS_TIMEOUT_S).text
+    except Exception:
+        return ""
+
+
+def _slots_free(status_text: str):
+    """True/False if the status says whether a slot is free, None if it cannot be read.
+
+    osmnx asks this question itself before every query, but cannot parse the answer Overpass
+    currently gives, and recurses on it: measured, the same downtown query returns in 1.7 s
+    with that handshake disabled and never returns with it enabled. Reading it here keeps the
+    courtesy — the server is still asked, and a refusal is still honoured — without a
+    client-side loop that has no exit.
+    """
+    import re
+
+    m = re.search(r"(\d+)\s+slots?\s+available\s+now", status_text or "")
+    if m:
+        return int(m.group(1)) > 0
+    if "Slot available after" in (status_text or ""):
+        return False
+    return None
+
+
 def _endpoints(configured):
     """The configured endpoint first, then the mirrors it is not."""
     rest = [u for u in OVERPASS_MIRRORS if u != configured]
@@ -59,10 +94,14 @@ def fetch_street_graph(bbox_wgs84) -> nx.Graph:
         ox.settings.cache_folder = str(cache)
 
         prior_url = getattr(ox.settings, "overpass_url", None)
+        prior_limit = getattr(ox.settings, "overpass_rate_limit", True)
         g, unreachable = None, None
         try:
             for url in _endpoints(prior_url):
                 ox.settings.overpass_url = url
+                # Believe the server about its own capacity. Only when it says a slot is
+                # occupied do we hand the wait back to osmnx, which handles that case fine.
+                ox.settings.overpass_rate_limit = (_slots_free(_overpass_status(url)) is False)
                 try:
                     # A cached answer is keyed on the query URL, so the configured endpoint
                     # going first is also what keeps earlier builds' cache reachable.
@@ -72,8 +111,9 @@ def fetch_street_graph(bbox_wgs84) -> nx.Graph:
                     unreachable = exc
         finally:
             # osmnx settings are process-global: a mirror reached here must not redirect
-            # every later build in this worker.
+            # every later build in this worker, nor leave the rate limit as we set it.
             ox.settings.overpass_url = prior_url
+            ox.settings.overpass_rate_limit = prior_limit
         if g is None:
             raise unreachable
 

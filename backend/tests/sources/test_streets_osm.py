@@ -9,6 +9,17 @@ import pytest
 from swmmcanada.sources import streets_osm
 
 
+@pytest.fixture(autouse=True)
+def _offline_status(monkeypatch):
+    """No test in this module may ask the real Overpass whether it has a slot.
+
+    The fetcher consults the status page before querying; left live, every test here would
+    make three HTTP calls to a volunteer service. Tests that care about the answer set their
+    own stub over this one.
+    """
+    monkeypatch.setattr(streets_osm, "_overpass_status", lambda _u: "2 slots available now.")
+
+
 def _osm_graph(n_nodes):
     g = nx.MultiDiGraph()
     for i in range(n_nodes):
@@ -165,3 +176,63 @@ class TestOneHostIsNotTheWholeOfOSM:
         monkeypatch.setattr(streets_osm, "_graph_from_bbox", fake)
         with pytest.raises(ConnectionError):
             streets_osm.fetch_street_graph((-123.01, 48.39, -123.0, 48.4))
+
+
+class TestTheRateLimitHandshakeMustNotHang:
+    """osmnx asks Overpass for a slot before querying, and cannot read the current answer.
+
+    Measured: the same downtown query takes 1.7 s with the handshake off and never returns
+    with it on — `_get_overpass_pause` recurses on a status page it cannot parse. Politeness
+    is not the thing being dropped here; the server itself is asked whether it has a slot,
+    and its answer is believed. What is dropped is a client-side loop with no exit.
+    """
+
+    def test_a_free_slot_is_read_from_the_status_page(self):
+        assert streets_osm._slots_free("Rate limit: 2\n2 slots available now.\n") is True
+
+    def test_no_free_slot_is_read_from_the_status_page(self):
+        assert streets_osm._slots_free(
+            "Rate limit: 2\n0 slots available now.\nSlot available after: 2026-08-13T00:51:02Z"
+        ) is False
+
+    def test_an_unreadable_status_says_so_rather_than_guessing(self):
+        assert streets_osm._slots_free("<html>502 Bad Gateway</html>") is None
+
+    def test_a_free_slot_skips_the_handshake(self, monkeypatch):
+        import osmnx as ox
+
+        good = nx.Graph()
+        for i in range(40):
+            good.add_node(i, x=-123.0, y=48.4)
+        seen = []
+        monkeypatch.setattr(streets_osm, "_overpass_status", lambda _u: "2 slots available now.")
+        monkeypatch.setattr(streets_osm, "_graph_from_bbox",
+                            lambda _ox, _b, *, use_cache: (
+                                seen.append(_ox.settings.overpass_rate_limit) or good))
+        streets_osm.fetch_street_graph((-123.01, 48.39, -123.0, 48.4))
+        assert seen == [False], "the handshake ran even though the server offered a slot"
+
+    def test_no_free_slot_leaves_the_handshake_alone(self, monkeypatch):
+        good = nx.Graph()
+        for i in range(40):
+            good.add_node(i, x=-123.0, y=48.4)
+        seen = []
+        monkeypatch.setattr(streets_osm, "_overpass_status",
+                            lambda _u: "0 slots available now.\nSlot available after: x")
+        monkeypatch.setattr(streets_osm, "_graph_from_bbox",
+                            lambda _ox, _b, *, use_cache: (
+                                seen.append(_ox.settings.overpass_rate_limit) or good))
+        streets_osm.fetch_street_graph((-123.01, 48.39, -123.0, 48.4))
+        assert seen == [True], "we skipped a wait the server actually asked for"
+
+    def test_the_setting_is_restored(self, monkeypatch):
+        import osmnx as ox
+
+        before = ox.settings.overpass_rate_limit
+        good = nx.Graph()
+        for i in range(40):
+            good.add_node(i, x=-123.0, y=48.4)
+        monkeypatch.setattr(streets_osm, "_overpass_status", lambda _u: "2 slots available now.")
+        monkeypatch.setattr(streets_osm, "_graph_from_bbox", lambda _ox, _b, *, use_cache: good)
+        streets_osm.fetch_street_graph((-123.01, 48.39, -123.0, 48.4))
+        assert ox.settings.overpass_rate_limit == before
