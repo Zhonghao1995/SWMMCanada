@@ -65,3 +65,34 @@ class TestSynthesisIsUnaffected:
         no-cells path is its own and must keep working."""
         subs = _build_subcatchments(NODES, AOI, NetworkConfig(), cells=None)
         assert len(subs) == len(NODES)
+
+
+class TestTheFallbackInventsToo:
+    """The same rule when the tiling is computed inside `_build_subcatchments`.
+
+    The guard above only fires when a caller hands cells in. The nearest-node fallback lets
+    the builder tile for itself, and there a node the tiling misses still collected the
+    nominal half hectare: measured on a live downtown, 11 cells carrying 5.5 ha between them
+    and no polygon at all. They generate runoff in SWMM and are invisible to every geometric
+    check — overlap, containment, coverage — because there is nothing to check.
+    """
+
+    def test_a_node_the_tiling_misses_gets_no_subcatchment(self):
+        nodes = dict(NODES)
+        nodes["MH_FAR"] = (-123.300, 48.500)          # far outside the AOI
+        subs = _build_subcatchments(nodes, AOI, NetworkConfig())
+        assert "S_MH_FAR" not in {s.name for s in subs}
+
+    def test_no_cell_carries_area_without_a_polygon(self):
+        nodes = dict(NODES)
+        nodes["MH_FAR"] = (-123.300, 48.500)
+        subs = _build_subcatchments(nodes, AOI, NetworkConfig())
+        ghosts = [s.name for s in subs if (s.area_ha or 0) > 0 and not s.polygon]
+        assert ghosts == [], f"area with no geometry: {ghosts}"
+
+    def test_a_network_with_no_area_to_tile_still_gets_its_nominal_cells(self):
+        """Synthesis has no AOI polygon to delineate against; the nominal path is all it
+        has, and removing it would leave a synthesised network with no runoff at all."""
+        subs = _build_subcatchments(NODES, None, NetworkConfig())
+        assert len(subs) == len(NODES)
+        assert all((s.area_ha or 0) > 0 for s in subs)

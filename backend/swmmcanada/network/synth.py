@@ -225,10 +225,17 @@ def _build_subcatchments(junction_xy, aoi, config: NetworkConfig, cells=None,
     # frontage, and giving it the nominal area invents half a hectare: Victoria's frontage
     # split came out at 162% of its own AOI that way. Synthesis, which delineates every node
     # it creates, keeps the nominal path below.
+    # "Measured" means a delineation ran, not that someone handed one in. The nearest-node
+    # fallback tiles for itself just below, and a node it misses is exactly as unmeasured as
+    # one a caller found no cell for: on a live downtown that produced 11 cells carrying
+    # 5.5 ha between them and no polygon at all, generating runoff while invisible to every
+    # geometric check. The nominal path below is for synthesis, which has no area to tile
+    # against and delineates every node it invents.
     measured = cells is not None
     if cells is None:
         cells = {}
         if aoi is not None and len(junction_xy) >= 2:
+            measured = True
             # ADR 0017: the Voronoi tiling clips to the street service corridor when one is
             # given — the municipal "nearest junction serves its half-blocks" split.
             poly = clip_poly if clip_poly is not None else (
