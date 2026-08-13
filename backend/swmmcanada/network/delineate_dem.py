@@ -155,7 +155,8 @@ def delineate_junction_subcatchments(
     if median_slope < threshold:
         gate["decision"] = "below_slope_gate"
         return _voronoi(junction_xy, aoi, network_config, gate,
-                        service_mask=service_mask, min_cell_ha=min_cell_ha)
+                        service_mask=service_mask, min_cell_ha=min_cell_ha,
+                        carry=_conditioning_diag(urban_diag, None))
 
     snap_diag = None
     if snap_pour_points:
@@ -178,7 +179,8 @@ def delineate_junction_subcatchments(
         gate["decision"] = "dem_degenerate"
         gate.update(dem_diag)
         return _voronoi(junction_xy, aoi, network_config, gate,
-                        service_mask=service_mask, min_cell_ha=min_cell_ha)
+                        service_mask=service_mask, min_cell_ha=min_cell_ha,
+                        carry=_conditioning_diag(urban_diag, snap_diag))
 
     subs = _build_subcatchments(junction_xy, aoi, network_config, cells=cells, widths=widths)
 
@@ -189,7 +191,8 @@ def delineate_junction_subcatchments(
         gate["decision"] = "posterior_fallback"
         gate["posterior_errors"] = errors
         return _voronoi(junction_xy, aoi, network_config, gate,
-                        service_mask=service_mask, min_cell_ha=min_cell_ha)
+                        service_mask=service_mask, min_cell_ha=min_cell_ha,
+                        carry=_conditioning_diag(urban_diag, snap_diag))
 
     # Coverage can be perfect while the cells are useless: the area is all there, gathered
     # into a few basins with slivers around the rest of the inlets. Nothing else notices.
@@ -198,6 +201,7 @@ def delineate_junction_subcatchments(
         gate["decision"] = "noise_cell_fallback"
         gate["noise_cell_share"] = _noise_share(subs)
         return _voronoi(junction_xy, aoi, network_config, gate,
+                        carry=_conditioning_diag(urban_diag, snap_diag),
                         service_mask=service_mask, min_cell_ha=min_cell_ha)
 
     gate["decision"] = "dem"
@@ -288,8 +292,16 @@ def _apply_service(subs, junction_xy, aoi, service_mask, min_cell_ha):
 # --------------------------------------------------------------------------- #
 # fallback + gate helpers
 # --------------------------------------------------------------------------- #
+def _conditioning_diag(urban, snap) -> dict:
+    """What the DEM conditioning and pour-point snapping did, in the shape every path
+    reports it — including the paths that then discard the delineation."""
+    return {"urban_conditioning": urban if urban is not None else {"applied": False},
+            "pour_point_snapping": snap if snap is not None else {"applied": False}}
+
+
 def _voronoi(junction_xy, aoi, network_config, gate,
-             service_mask=None, min_cell_ha=None) -> Tuple[List[SurfaceCatchment], dict]:
+             service_mask=None, min_cell_ha=None,
+             carry=None) -> Tuple[List[SurfaceCatchment], dict]:
     # The Voronoi tiling clips to the corridor at the source (ADR 0017): pass it as the
     # clip polygon, then apply size discipline. None/None = the v2 whole-AOI behaviour.
     clip = None
@@ -298,8 +310,10 @@ def _voronoi(junction_xy, aoi, network_config, gate,
     subs = _build_subcatchments(junction_xy, aoi, network_config, clip_poly=clip)
     subs, service_diag = _apply_service(subs, junction_xy, aoi, None, min_cell_ha)
     service_diag["applied"] = service_mask is not None or min_cell_ha is not None
+    # Facts established before the fallback stay facts. A diagnostics dict whose keys
+    # depend on which branch won cannot be read without first knowing the answer.
     return subs, {"method": METHOD_VORONOI, "n_subcatchments": len(subs), "gate": gate,
-                  "service": service_diag}
+                  "service": service_diag, **(carry or {})}
 
 
 def _posterior_errors(junction_xy, subs, aoi) -> List[str]:

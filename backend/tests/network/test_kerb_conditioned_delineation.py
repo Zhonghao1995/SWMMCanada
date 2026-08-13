@@ -215,3 +215,35 @@ class TestPourPointSnapping:
         assert diag["gate"]["decision"] == "posterior_fallback"
         assert diag["method"] == schema.METHOD_JUNCTION_VORONOI
         assert subs, "the fallback still has to produce a delineation"
+
+
+class TestTheDiagnosticsShapeDoesNotDependOnWhichPathWon:
+    """What the conditioning did stays true even when the delineation is thrown away.
+
+    Every fallback inside the DEM path returned a dict without these keys, so a reader had
+    to know which branch ran before it could ask a question. That is how this broke in CI
+    and not here: the fixture sits on the noise gate's threshold (share exactly 0.5, gate
+    fires above 0.5), so a hair of numeric difference between machines flipped the branch
+    and four tests died on KeyError rather than on anything about kerbs.
+
+    A diagnostics dict whose shape depends on the outcome cannot be read by a report, a
+    test, or a person. The conditioning happened; it is reported either way.
+    """
+
+    def _fallback_diag(self, tmp_path):
+        dem = _write_dem(tmp_path, _street_dem())
+        off = {name: _TO_LL(*_utm(col, GUTTER_ROW - 2))
+               for name, col in (("CB_W", 30), ("CB_E", 70))}
+        _s, diag = delineate_junction_subcatchments(
+            off, AOI, dem_path=dem, config=CFG, snap_pour_points=True)
+        assert diag["gate"]["decision"] != "dem", "this scenario is meant to fall back"
+        return diag
+
+    def test_a_fallback_still_reports_the_conditioning(self, tmp_path):
+        assert "urban_conditioning" in self._fallback_diag(tmp_path)
+
+    def test_a_fallback_still_reports_the_snapping(self, tmp_path):
+        diag = self._fallback_diag(tmp_path)
+        assert "pour_point_snapping" in diag
+        assert diag["pour_point_snapping"]["search_radius_m"] > 0, (
+            "the snap ran before the fallback; saying it did not would be a lie")
