@@ -33,6 +33,7 @@ from typing import Dict, List, Optional, Sequence, Tuple
 import geopandas as gpd
 from shapely.geometry import MultiPolygon, Polygon, box, shape
 
+from swmmcanada import result_package
 from swmmcanada.acquire.landcover import DEFAULT_NALCMS_IMPERVIOUS, DEFAULT_NALCMS_LEGEND
 from swmmcanada.build.models import filter_system_report
 from swmmcanada.derive.core import NALCMS_CATEGORY, TR55_CN_TABLE
@@ -53,13 +54,12 @@ from swmmcanada.export.swmm import SwmmExporter
 DEFAULT_SYSTEMS: Tuple[str, ...] = ("storm_minor", "combined")
 NEVER_SYSTEMS: Tuple[str, ...] = ("storm_major",)
 
-#: The 2D raw materials, by their package-root file names (result_package constants are
-#: mirrored here rather than imported: this module must stay importable without the
-#: package contract, and the names are part of the ADR 0009 / ADR 0033 contract anyway).
-DEM_DTM = "dem_dtm.tif"
-LANDCOVER = "landcover.tif"
-SOIL_HSG = "hsg.tif"
-SOIL_TEXTURE = "soil_texture.tif"
+#: The 2D raw materials, by their package-root file names — the ONE place that names
+#: package paths (ADR 0009) is `result_package`; this exporter reads them from there.
+DEM_DTM = result_package.DEM_DTM
+LANDCOVER = result_package.LANDCOVER
+SOIL_HSG = result_package.SOIL_HSG
+SOIL_TEXTURE = result_package.SOIL_TEXTURE
 
 #: HSG raster codes (HYSOGs250m; dual codes 11-14 reduce to A-D, as in derive.core).
 HSG_CODES: Dict[int, str] = {1: "A", 2: "B", 3: "C", 4: "D", 11: "A", 12: "B", 13: "C", 14: "D"}
