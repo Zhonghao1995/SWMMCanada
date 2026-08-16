@@ -31,6 +31,7 @@ LANDCOVER = "landcover.tif"
 # builds its infiltration layer from it. Absent when the soil source is the constant
 # fallback or the build skipped derive.
 SOIL_HSG = "hsg.tif"
+SOIL_TEXTURE = "soil_texture.tif"   # optional: only the SoilGrids soil tier writes it (ADR 0013)
 
 # Paths (relative to the package root) without which the package is NOT shippable.
 REQUIRED: List[str] = [
