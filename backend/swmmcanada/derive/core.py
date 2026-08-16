@@ -182,6 +182,10 @@ _NALCMS_CATEGORY = {
     13: "barren",   # NALCMS 13 = barren-lichen-moss (round-2: was wrongly grass)
     14: "wetland", 15: "crop", 16: "barren", 17: "built", 18: "water", 19: "barren",
 }
+# Public names for readers that must transcribe these tables verbatim (the HEC-RAS
+# package's infiltration/land-cover tables, ADR 0033): one dict, one source of truth.
+TR55_CN_TABLE = _CN_TABLE
+NALCMS_CATEGORY = _NALCMS_CATEGORY
 
 
 def _curve_number(letter: Optional[str], soil: SoilResult, *, fallback: float,

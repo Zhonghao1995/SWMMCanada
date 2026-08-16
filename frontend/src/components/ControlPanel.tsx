@@ -71,7 +71,7 @@ export default function ControlPanel() {
         </a>
         <p className="mt-1 text-xs text-slate-500">
           Draw or upload an area. Get a ready-to-run drainage model from Canadian open data,
-          in SWMM, MIKE+ and InfoWorks ICM formats.
+          in SWMM, MIKE+ and InfoWorks ICM formats, plus a HEC-RAS 2D + pipe-network package.
         </p>
         <p className="mt-1 text-xs text-black">
           Models are a first-pass research baseline built from open data. Not a basis for
@@ -425,7 +425,7 @@ export default function ControlPanel() {
             {job.message && <div className="mt-1 text-slate-500">{job.message}</div>}
             {job.status === 'succeeded' && job.resultUrl && (
               <a href={job.resultUrl} className="mt-2 flex items-center gap-1 font-medium text-blue-600">
-                <Download size={14} /> Download model package (SWMM, MIKE+, ICM)
+                <Download size={14} /> Download model package (SWMM, MIKE+, ICM, HEC-RAS)
               </a>
             )}
           </div>

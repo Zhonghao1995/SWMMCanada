@@ -2,8 +2,9 @@
 build ships — the hand-off artifact aiswmm and users consume.
 
 Mirrors the ``datastore/schema.py`` convention: constants, so writers (pipeline) and
-shippers (api/tasks) agree by construction. ``mikeplus/`` and ``icm/`` are optional BY
-DESIGN — ADR 0008/0012 graceful degradation: a failed secondary export never fails the package."""
+shippers (api/tasks) agree by construction. ``mikeplus/``, ``icm/`` and ``hecras/`` are
+optional BY DESIGN — ADR 0008/0012/0033 graceful degradation: a failed secondary export never
+fails the package."""
 from pathlib import Path
 from typing import List
 
@@ -18,12 +19,18 @@ PREVIEW_DIR = "preview"
 PREVIEW_GEOJSON = f"{PREVIEW_DIR}/network.geojson"
 MIKEPLUS_DIR = "mikeplus"          # optional: ADR 0008 graceful degradation
 ICM_DIR = "icm"                    # optional: ADR 0012, same graceful degradation
+HECRAS_DIR = "hecras"              # optional: ADR 0033, same graceful degradation
 # The 2D-overland raw materials: clipped terrain (LiDAR where covered) + land cover for
 # roughness zoning. Promised deliverables, not workspace leftovers — an engineer meshing
 # a 2D model in ICM/MIKE+ gets terrain, roughness zones, network + rim elevations and the
 # boundary from ONE package. Source/resolution are recorded in manifest.json ("terrain").
 DEM_DTM = "dem_dtm.tif"
 LANDCOVER = "landcover.tif"
+# The soils raster (HYSOGs HSG codes 1-4, clipped) has always been written to the package
+# root by `acquire.soil`; ADR 0033 makes it a named (optional) member — the HEC-RAS package
+# builds its infiltration layer from it. Absent when the soil source is the constant
+# fallback or the build skipped derive.
+SOIL_HSG = "hsg.tif"
 
 # Paths (relative to the package root) without which the package is NOT shippable.
 REQUIRED: List[str] = [

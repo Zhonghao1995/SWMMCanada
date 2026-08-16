@@ -89,3 +89,51 @@ def test_the_package_warns_when_the_view_orphaned_something(target, tmp_path):
     res = _exporter(target).export(_DS(), tmp_path / target, systems=["combined"])
     notes = next(p for p in res.files if p.name == "field_mapping.md").read_text()
     assert "lose their route to an outfall" in notes
+
+
+# --------------------------------------------------------------------------- #
+# ADR 0033: the SWMM adapter writes per-system views through the one .inp writer, and
+# the HEC-RAS package's default is deliberately narrower than "everything present".
+# --------------------------------------------------------------------------- #
+class _BuildableDS(_DS):
+    """The same stub with the config keys the .inp writer needs (MIKE+/ICM never build)."""
+
+    config = {"coordinate_crs": None, "start": "2024-06-01", "end": "2024-06-02"}
+
+
+def test_swmm_adapter_writes_a_system_view_through_the_same_writer(tmp_path):
+    from swmm_api import read_inp_file
+
+    from swmmcanada.export.swmm import SwmmExporter
+
+    res = SwmmExporter().export(_BuildableDS(), tmp_path / "swmm",
+                                systems=["storm_minor", "combined"])
+    assert set(res.view["systems"]) == {"storm_minor", "combined"}
+    inp = read_inp_file(str(res.files[0]))
+    assert set(inp["JUNCTIONS"].keys()) == {"S1", "K1"}
+    assert set(inp["OUTFALLS"].keys()) == {"STORM_OUT"}
+    assert res.lossy == []
+
+
+def test_swmm_adapter_without_a_selection_is_the_full_model(tmp_path):
+    from swmm_api import read_inp_file
+
+    from swmmcanada.export.swmm import SwmmExporter
+
+    res = SwmmExporter().export(_BuildableDS(), tmp_path / "swmm")
+    inp = read_inp_file(str(res.files[0]))
+    assert set(inp["JUNCTIONS"].keys()) == {"S1", "K1", "SAN_M1"}
+    assert res.view == {}
+
+
+def test_hecras_default_is_the_systems_that_take_surface_water(tmp_path):
+    """Sanitary manholes do not take surface water; in a HEC-RAS pipe network every node
+    can be coupled to the 2D mesh, so importing them would present them as drop inlets.
+    Combined mains stay in (they carry a combined city's stormwater)."""
+    from swmmcanada.export.hecras import HecRasExporter
+
+    res = HecRasExporter().export(_BuildableDS(), tmp_path / "hecras")
+    assert set(res.view["systems"]) == {"storm_minor", "combined"}
+    assert res.view["n_junctions"] == 2 and res.view["n_outfalls"] == 1
+    notes = next(p for p in res.files if p.name == "field_mapping.md").read_text()
+    assert "storm_major" in notes and "sanitary" not in res.view["systems"]
