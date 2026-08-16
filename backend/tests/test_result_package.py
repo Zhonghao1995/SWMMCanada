@@ -30,8 +30,11 @@ def test_contract_covers_the_handoff_essentials():
     assert rp.PREVIEW_GEOJSON in rp.REQUIRED
     # 2D-overland raw materials are promised deliverables, not workspace leftovers
     assert rp.DEM_DTM in rp.REQUIRED and rp.LANDCOVER in rp.REQUIRED
-    # mikeplus/ is deliberately NOT required (ADR 0008 graceful degradation).
-    assert not any(r.startswith(rp.MIKEPLUS_DIR) for r in rp.REQUIRED)
+    # mikeplus/ icm/ hecras/ are deliberately NOT required (ADR 0008/0012/0033 graceful
+    # degradation), and neither is the soils raster the HEC-RAS package reads (absent
+    # when the soil source is the constant fallback).
+    for optional in (rp.MIKEPLUS_DIR, rp.ICM_DIR, rp.HECRAS_DIR, rp.SOIL_HSG):
+        assert not any(r.startswith(optional) for r in rp.REQUIRED)
 
 
 def test_observed_flow_exports_when_hydat_present(tmp_path, monkeypatch):

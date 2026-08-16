@@ -283,6 +283,34 @@ def _export_icm_safe(ws: Path) -> None:
         (target / "EXPORT_FAILED.txt").write_text(f"ICM export failed: {exc!r}\n")
 
 
+def _aoi_geojson(aoi) -> Optional[dict]:
+    """GeoJSON mapping of the AOI polygon (lon/lat), or None when the AOI carries none."""
+    geom = getattr(aoi, "geometry", None)
+    if geom is None:
+        return None
+    try:
+        from shapely.geometry import mapping
+
+        return mapping(geom)
+    except Exception:  # noqa: BLE001 — provenance is advisory
+        return None
+
+
+def _export_hecras_safe(ws: Path) -> None:
+    """Emit the HEC-RAS (RAS Mapper) import package into ``ws/hecras`` (ADR 0033). Same
+    contract as MIKE+/ICM: every build, never load-bearing. It reads the 2D raw materials
+    beside it (``dem_dtm.tif`` / ``landcover.tif`` / ``hsg.tif`` at the package root)."""
+    try:
+        from swmmcanada.export import export_hecras
+
+        export_hecras(ws / result_package.DATASTORE_DIR, ws / result_package.HECRAS_DIR,
+                      package_root=ws)
+    except Exception as exc:  # noqa: BLE001 — HEC-RAS export must never break the build
+        target = ws / result_package.HECRAS_DIR
+        target.mkdir(parents=True, exist_ok=True)
+        (target / "EXPORT_FAILED.txt").write_text(f"HEC-RAS export failed: {exc!r}\n")
+
+
 def _finish_build(
     ws: Path, aoi, network, subcatchments, *, start: date, end: date, method,
     config: BuildConfig, extra_provenance: dict, climate_client, climate_buffer_deg: float,
@@ -396,6 +424,9 @@ def _finish_build(
         service_areas=service_areas,
         provenance={
             "aoi_bbox": list(aoi.bbox), "crs": "EPSG:4326",
+            # The drawn AOI itself (lon/lat GeoJSON), so a reader can rebuild the boundary
+            # — the HEC-RAS package's 2D flow-area perimeter (ADR 0033) — from the datastore.
+            "aoi_geojson": _aoi_geojson(aoi),
             "start": start.isoformat(), "end": end.isoformat(),
             "subcatchment_method": method.method,
             "physical_basis": method.physical_basis,
@@ -411,6 +442,7 @@ def _finish_build(
         result_package.record_forcing(ws, forcing)
     _export_mikeplus_safe(ws)  # ADR 0008: MIKE+ CS package — every build, graceful
     _export_icm_safe(ws)  # ADR 0012: ICM ODIC package — every build, graceful
+    _export_hecras_safe(ws)  # ADR 0033: HEC-RAS RAS Mapper package — every build, graceful
     _export_observed_safe(ws, aoi, start, end)  # observed flow (HYDAT) — real data when present
 
     # Map preview: GeoJSON of the model geometry for the frontend's layers.

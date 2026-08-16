@@ -105,7 +105,7 @@ backend/swmmcanada/      # Python pipeline: open data -> SWMM model
   derive/      clip + zonal stats -> subcatchment parameters
   build/       assemble + validate the SWMM .inp
   datastore/   model-ready datastore (GeoPackage + netCDF + JSON)
-  export/      model exporters reading the datastore: SWMM · MIKE+ CS import package · InfoWorks ICM ODIC package
+  export/      model exporters reading the datastore: SWMM · MIKE+ CS import package · InfoWorks ICM ODIC package · HEC-RAS (RAS Mapper) 2D + pipe-network package
   api/         FastAPI async tasks API
   pipeline.py  build_from_aoi · build_from_<city> (35 real-network cities)
 
@@ -123,6 +123,7 @@ Every build ships one result package:
 - **`datastore/`** — the shareable model-ready datastore (GeoPackage network + netCDF/CF forcing + JSON provenance) that every export target reads from;
 - **`mikeplus/`** — a **DHI MIKE+ Collection System import package**: `nodes` / `links` / `catchments` shapefiles + `rain.csv` + a field-mapping sheet, with import steps and every approximation documented inside (`README.md` / `field_mapping.md`);
 - **`icm/`** — an **InfoWorks ICM Open Data Import Centre package**: `nodes.csv` / `conduits.csv` named for ODIC **Auto-Map**, `subcatchments.shp`, an InfoWorks-format rainfall event CSV (+ plain fallback), and the same field-mapping/lossy-report convention — the SWMM curve number transfers losslessly (`curve_number`);
+- **`hecras/`** — a **HEC-RAS (RAS Mapper) import package** for a **2D rain-on-grid + pipe-network** model of the same area — not the SWMM model in another format (HEC-RAS has no subcatchment): the storm + combined network as a filtered `model.inp` for RAS Mapper's *Import SWMM Geometry* (with `projection.prj`), the 2D flow-area perimeter, lookup tables for the land-cover (Manning n, % impervious) and infiltration (TR-55 CN by class × HSG, Green-Ampt) layers built from the package's `dem_dtm.tif` / `landcover.tif` / `hsg.tif`, per-node terrain / drop-inlet defaults, per-outfall boundary suggestions, and the same field-mapping / lossy-report convention;
 - **`validation.json`** — the model's health report: structural checks, the delineation method used, and its confidence;
 - **`preview/`** — map layers for the web UI.
 

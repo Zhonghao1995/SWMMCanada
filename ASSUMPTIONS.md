@@ -333,6 +333,32 @@ NOT composite commercial CN: SWMM applies CURVE_NUMBER infiltration to the pervi
 sub-area only and `pct_imperv` already carries the impervious share — composite CN would
 double-count imperviousness. NALCMS class 13 corrected to barren (lichen-moss).
 
+## HEC-RAS package defaults (ADR 0033)
+
+The `hecras/` package hands RAS Mapper the same terrain, land cover and soils the SWMM
+build used, plus lookup tables **transcribed from the code's own dicts** (the TR-55 CN table
+above, the Green-Ampt-by-HSG tier, the NALCMS %impervious defaults). Two things in it are
+new documented defaults, 🟠 same tier as the Horton parameters:
+
+- **Manning's n per NALCMS class** (RAS Mapper land-cover layer): forests 0.12, shrubland
+  0.08, grassland 0.035, cropland 0.045, wetland 0.08, barren / snow-ice 0.03, urban and
+  built-up 0.12 (developed, medium intensity), water 0.035 — mid-range of the HEC-RAS 2D
+  User's Manual land-cover n table (NLCD classes; Chow 1959 / Kalyanapu et al. 2009 /
+  Bunya et al. 2010 lineage) mapped onto the NALCMS legend. A calibration starting point.
+- **Pipe-network supplements** RAS Mapper's SWMM importer does not fill: manhole base area
+  1.13 m² (a 1,200 mm precast manhole), drop-inlet weir length 0.9 m and orifice area
+  0.42 m² (HEC's pipe-network tutorial curb-inlet values, 3 ft / 4.5 ft²), assigned to every
+  node that a surface catchment drains to; drop-inlet elevation = the node's rim; a
+  Normal-Depth friction slope floored at 0.001 m/m. Per-node inlet counts are not yet in
+  the datastore — refining these by catch-basin count is a follow-up (same lineage as #11).
+
+What that package does **not** carry, by model class: HEC-RAS 2D has no Horton
+infiltration (use Green-Ampt or SCS CN from the tables), the parcel-level physical
+imperviousness collapses to the land-cover class value, and the subcatchment routing
+parameters (width, slope, per-surface n, depression storage) are dropped because the 2D
+mesh routes rain on the terrain itself. Every one of these is a row in the package's
+`field_mapping.md`.
+
 ## Node vertical geometry: what an "invert" is here (audit #157)
 
 At one real manhole **three different elevations coexist** — the in-chamber channel/flow

@@ -2,9 +2,12 @@
 
 The datastore is the hub (ADR 0003/0007); each exporter is a reader off it. SWMM stays the
 primary build path and is exposed here via a thin adapter; MIKE+ is the first non-SWMM target;
-InfoWorks ICM is the second (ODIC import package, ADR 0012).
+InfoWorks ICM is the second (ODIC import package, ADR 0012); HEC-RAS is the third — a
+RAS Mapper package for a 2D rain-on-grid + pipe-network model, not the same model in another
+format (ADR 0033).
 """
 from swmmcanada.export.base import ExportResult, LossyMapping, ModelExporter
+from swmmcanada.export.hecras import HecRasExporter, export_hecras
 from swmmcanada.export.icm import IcmExporter, export_icm
 from swmmcanada.export.mikeplus import MikePlusExporter, export_mikeplus
 from swmmcanada.export.swmm import SwmmExporter
@@ -18,4 +21,6 @@ __all__ = [
     "export_mikeplus",
     "IcmExporter",
     "export_icm",
+    "HecRasExporter",
+    "export_hecras",
 ]
