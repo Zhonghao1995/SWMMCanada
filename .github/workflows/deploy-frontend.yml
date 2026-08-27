@@ -38,6 +38,7 @@ jobs:
         env:
           VITE_BASE: /SWMMCanada/
           VITE_API_URL: ${{ vars.VITE_API_URL }}
+          VITE_CARTO_KEY: ${{ secrets.VITE_CARTO_KEY }}
         run: npm run build
       - uses: actions/upload-pages-artifact@v3
         with:

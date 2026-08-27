@@ -13,9 +13,13 @@ import type { Feature, FeatureCollection } from 'geojson'
 import { Eye, EyeOff, Layers as LayersIcon, LocateFixed, X } from 'lucide-react'
 import { useStore, type LayerKey } from '../store'
 
-// Free CARTO Positron raster basemap — no API token. The glyphs endpoint (same CARTO
-// CDN as the tiles) serves the flow-direction arrows (symbol layers need a font
-// source); if it is unreachable the arrows simply do not render, nothing else breaks.
+// CARTO Positron raster basemap. CARTO now watermarks keyless tile requests
+// ("API KEY REQUIRED"), so the key is baked in at build time from VITE_CARTO_KEY
+// (.env.local locally, Actions secret on CI) — never committed. A keyless build
+// still works, just watermarked. The glyphs endpoint (same CARTO CDN, no key needed)
+// serves the flow-direction arrows (symbol layers need a font source); if it is
+// unreachable the arrows simply do not render, nothing else breaks.
+const CARTO_KEY_QS = import.meta.env.VITE_CARTO_KEY ? `?key=${import.meta.env.VITE_CARTO_KEY}` : ''
 const MAP_STYLE: StyleSpecification = {
   version: 8,
   glyphs: 'https://tiles.basemaps.cartocdn.com/fonts/{fontstack}/{range}.pbf',
@@ -23,9 +27,9 @@ const MAP_STYLE: StyleSpecification = {
     carto: {
       type: 'raster',
       tiles: [
-        'https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',
-        'https://b.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',
-        'https://c.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',
+        `https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png${CARTO_KEY_QS}`,
+        `https://b.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png${CARTO_KEY_QS}`,
+        `https://c.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png${CARTO_KEY_QS}`,
       ],
       tileSize: 256,
       attribution: '© OpenStreetMap contributors © CARTO',
