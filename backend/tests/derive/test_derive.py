@@ -11,6 +11,7 @@ SurfaceCatchment polygons are real (lon, lat) WGS84 rings that fall inside the A
 import math
 
 import numpy as np
+import pytest
 import rasterio
 from pyproj import Transformer
 from rasterio.transform import from_origin
@@ -201,3 +202,40 @@ def test_empty_overlap_keeps_existing_values(tmp_path):
     assert got.pct_imperv == 33.0
     assert got.cn == 70.0
     assert got.pct_slope == 2.5
+
+
+# --- Green-Ampt IMD antecedent option through derive (spec §G4 wiring) -------------------
+
+
+def _one_sub():
+    return SurfaceCatchment(
+        name="S1", outlet_node="J1", area_ha=1.0, pct_imperv=99.0, width_m=50.0,
+        pct_slope=99.0, cn=99.0, polygon=_polygon_4326(0.25, 0.25, 0.75, 0.75))
+
+
+def test_ga_antecedent_field_capacity_changes_imd_only(tmp_path):
+    """HSG-B fixture with no texture raster -> representative texture loam: under the
+    "field_capacity" convention IMD becomes theta_e - theta_fc; psi and Ksat stand."""
+    dem_path, landcover, soil = _make_fixtures(tmp_path)
+    got = derive_parameters([_one_sub()], dem_path, landcover, soil,
+                            ga_antecedent="field_capacity")[0]
+    dry = derive_parameters([_one_sub()], dem_path, landcover, soil)[0]
+    assert got.ga_psi_mm == dry.ga_psi_mm == 88.9
+    assert got.ga_ksat_mm_h == dry.ga_ksat_mm_h == 6.6
+    assert dry.ga_imd == 0.434
+    assert got.ga_imd == pytest.approx(0.434 - 0.270)   # loam theta_e - theta_fc
+
+
+def test_ga_antecedent_default_is_bit_identical(tmp_path):
+    """Not passing the option and passing "dry" are the same build, field for field —
+    the anti-extrapolation regression for the option's existence."""
+    dem_path, landcover, soil = _make_fixtures(tmp_path)
+    assert (derive_parameters([_one_sub()], dem_path, landcover, soil)
+            == derive_parameters([_one_sub()], dem_path, landcover, soil,
+                                 ga_antecedent="dry"))
+
+
+def test_ga_antecedent_unknown_spelling_raises(tmp_path):
+    dem_path, landcover, soil = _make_fixtures(tmp_path)
+    with pytest.raises(ValueError, match="antecedent"):
+        derive_parameters([_one_sub()], dem_path, landcover, soil, ga_antecedent="wet")

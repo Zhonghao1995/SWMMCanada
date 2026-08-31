@@ -56,12 +56,22 @@ def derive_parameters(
     dem_path: "Path | str",
     landcover: LandcoverResult,
     soil: SoilResult,
+    *,
+    ga_antecedent: str = "dry",
 ) -> List[SurfaceCatchment]:
     """Compute real SWMM parameters per subcatchment, overwriting placeholders.
 
     Returns a NEW list of SurfaceCatchment. Subcatchments with `polygon is None` are passed
     through unchanged. Empty raster overlap keeps the subcatchment's existing value.
+
+    ``ga_antecedent`` picks the Green-Ampt IMD antecedent convention (spec §G4):
+    ``"dry"`` (the default — the table's theta_e, bit-for-bit the pre-option output) or
+    ``"field_capacity"`` (theta_e − theta_fc, soil drained to −33 kPa); psi/Ksat are
+    untouched either way.
     """
+    if ga_antecedent not in infiltration.GA_ANTECEDENTS:
+        raise ValueError(f"unknown Green-Ampt antecedent {ga_antecedent!r}; "
+                         f"expected one of {infiltration.GA_ANTECEDENTS}")
     out: List[SurfaceCatchment] = []
     for sub in subcatchments:
         if not sub.polygon:
@@ -85,6 +95,12 @@ def derive_parameters(
         texture = _dominant_texture(poly_4326, soil)
         psi, ksat, imd = (infiltration.green_ampt_for_texture(texture) if texture
                           else infiltration.green_ampt_for_hsg(letter))
+        if ga_antecedent != "dry":
+            # §G4: same Rawls table, different antecedent convention — IMD only. The
+            # effective texture mirrors the tier above (real texture, else the HSG's
+            # representative one), so both conventions read the same soil.
+            key = texture or infiltration.HSG_REPRESENTATIVE_TEXTURE.get(letter or "B", "loam")
+            imd = infiltration.green_ampt_imd(key, ga_antecedent)
 
         out.append(replace(
             sub, pct_imperv=pct_imperv, cn=cn, pct_slope=pct_slope,
