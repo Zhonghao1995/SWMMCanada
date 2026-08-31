@@ -146,6 +146,28 @@ def test_as_built_inverts_dominate_the_vertical(result, storm_inputs):
     assert max(inv) - min(inv) > 5.0                    # downtown slopes to False Creek
 
 
+def test_vancouver_depth_is_calibrated_not_the_fleet_default():
+    """Vancouver's rim-anchored fallback depth is a city-calibrated constant (ADR 0020
+    amended): both depth defaults carry the calibrated value while the fleet-wide
+    assembler fallback stays untouched at 2.5 m — no extrapolation either way."""
+    from swmmcanada.sources.cities.base import AssembleConfig
+
+    cfg = VancouverNetworkConfig()
+    assert cfg.default_node_depth_m == 3.3
+    assert cfg.default_max_depth_m == 3.3
+    assert AssembleConfig().fallback_node_depth_m == 2.5
+
+
+def test_vertical_provenance_names_depth_evidence_and_datum(result):
+    """The calibrated depth must travel with its evidence wording, and the vertical datum
+    is now a confirmed fact rather than an assumption."""
+    d = result.diagnostics
+    assert "3.3" in d["vertical_basis"]
+    assert "municipal engineering records, 2026-08" in d["vertical_basis"]
+    assert d["vertical_datum"] == (
+        "CGVD28 (confirmed, municipal engineering records, 2026-08)")
+
+
 def test_real_diameters_survive(result):
     """VanMap diameters (mm) must land as metres — not collapse to the 0.30 default."""
     diam = [c.diameter_m for c in result.network.conduits]

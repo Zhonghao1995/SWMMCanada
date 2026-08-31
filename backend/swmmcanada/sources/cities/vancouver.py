@@ -26,6 +26,10 @@ so it stays ONE fetch, one assembly, one hydraulic graph — but each main is ta
 system selectable, exportable as a view, and loadable with dry-weather flow. The sanitary
 tracer stays Sanitary-only so nothing is double-counted.
 
+Vertical datum: **CGVD28, confirmed** (municipal engineering records, 2026-08) — the
+ADR 0024 "municipal as-builts are predominantly CGVD28" preference is a recorded fact for
+this city, no longer an assumption.
+
 Elevation semantics (audit #157, 2026-07-24): ``rimelev`` = ground/rim (city alias literally
 "Rim Elevation") and ``UPSTREAM_INVERT``/``DWNSTREAM_INVERT`` = pipe-end INVERTS (aliases
 "Upstream Invert" / "Downstream Invert", each with its own city-published ESTIMATED flag). Rim
@@ -184,13 +188,16 @@ def fetch_vancouver_land(bbox, *, client=None) -> dict:
 @dataclass(frozen=True)
 class VancouverNetworkConfig:
     min_slope: float = 0.001
-    default_max_depth_m: float = 2.0
+    # City-calibrated (ADR 0020 amended): the median Vancouver manhole depth from
+    # municipal engineering records, 2026-08. The fleet-wide assembler fallback stays
+    # 2.5 m — this value is Vancouver's, not anyone else's.
+    default_max_depth_m: float = 3.3
     default_roughness: float = 0.013
     default_diameter_m: float = 0.30
     outfall_link_len_m: float = 10.0
-    # ADR 0020 §3: rim-anchored vertical — invert = rimelev − this depth. 2.5 m is a
-    # typical municipal manhole depth; the constant is honest-by-provenance, not surveyed.
-    default_node_depth_m: float = 2.5
+    # ADR 0020 §3: rim-anchored vertical — invert = rimelev − this depth. Calibrated to
+    # the same municipal depth evidence as default_max_depth_m (was the generic 2.5 m).
+    default_node_depth_m: float = 3.3
 
 
 @dataclass(frozen=True)
@@ -339,6 +346,8 @@ def build_vancouver_network(
         "n_with_slope": n_with_slope,
         "vertical_basis": (
             "as-built inverts (Infrastructure_Sewer, city 'estimated' flags counted) with "
-            f"rim minus {config.default_node_depth_m} m fallback (ADR 0020 amended)"),
+            f"rim minus {config.default_node_depth_m} m fallback (ADR 0020 amended; depth "
+            "calibrated against municipal engineering records, 2026-08)"),
+        "vertical_datum": "CGVD28 (confirmed, municipal engineering records, 2026-08)",
     }
     return VancouverNetworkResult(network=result.network, diagnostics=diagnostics)
