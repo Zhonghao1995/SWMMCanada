@@ -196,7 +196,9 @@ export default function MapPanel() {
   // System toggles filter pipes AND their nodes together (an engineer hides a system,
   // not an element type). An empty allow-list must match nothing, hence the sentinel.
   const allowedSystems = [
-    ...(layers.storm ? ['storm_minor', 'storm_major'] : []),
+    // Combined mains ride with the storm toggle: they live in the storm graph and run in
+    // the same hydraulic computation (ADR 0029 — types split, model not split).
+    ...(layers.storm ? ['storm_minor', 'storm_major', 'combined'] : []),
     ...(layers.sanitary ? ['sanitary'] : []),
   ]
   const sysFilter = ['in', ['get', 'system'],
