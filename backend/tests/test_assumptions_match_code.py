@@ -107,3 +107,12 @@ class TestWidthMethod:
 
     def test_the_consequence_is_stated_not_just_the_ratio(self, doc):
         assert "responds faster" in doc
+
+
+class TestDelineationMethodLabels:
+    def test_the_reproduction_mode_label_is_documented(self, doc):
+        """`junction_parcel_row` travels into provenance like any other label; the public
+        method-label table must say what it means and that it only runs on request."""
+        from swmmcanada.validate import schema
+
+        assert f"`{schema.METHOD_JUNCTION_PARCEL_ROW}`" in doc

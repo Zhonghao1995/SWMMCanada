@@ -271,6 +271,7 @@ renamed:
 |---|---|
 | `catchbasin_parcel` | real inlets, real lot lines and roofs |
 | `junction_dem` | terrain, D8 flow paths to manholes |
+| `junction_parcel_row` | on request only: every parcel its own unit, road right-of-way one unit per node |
 | `fallback_voronoi_catchbasin` | real inlets, **geometric** division between them |
 | `fallback_voronoi_junction` | **nothing** to delineate with: land goes to the nearest node |
 
@@ -279,6 +280,17 @@ whichever node happens to be nearest is what the code does when it has no inlets
 lines and no usable terrain, and the name now says so rather than dressing an absence of
 data as a method. The two renamed entries keep their `low` confidence — this is a
 relabelling, not a demotion, because they were always the floor.
+
+`junction_parcel_row` reproduces the way a municipal drawing is organised (composition
+follows municipal engineering records, 2026-08): every parcel becomes its own subcatchment
+draining to the pipe of the street it fronts — through its lateral where one is published —
+and the road right-of-way divides into one unit per node instead of dissolving into the
+lots. Hydraulically this adds nothing over the node unit: the same land reaches the same
+pipes. What it adds is comparability — a build that can be laid against a municipal model
+unit for unit. It therefore never runs unrequested; asking for it is the only way to get
+it, and the recorded plan says whether the request could be honoured. Its units are
+lot-sized, well below the size discipline applied to drawn cells, so the share of units at
+noise scale is reported in the diagnostics instead of triggering the fallback gate.
 
 ## Subcatchment width: a flow length, not a square root
 

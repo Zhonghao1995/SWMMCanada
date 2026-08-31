@@ -769,22 +769,29 @@ def _shape_cells(seeds, parcels, aoi, crs):
 
     Chooses the shape source as before: parcel-shaped cells along real lot lines
     (``_parcel_cells``) when usable parcels exist, else Voronoi cells around the seeds.
-    Owns cell geometry repair: each piece is cleaned in the metric CRS (``_largest_valid``);
-    pieces that are empty, under 1 m², or whose stored EPSG:4326 ring fails the metric
-    round-trip (float precision) are dropped. Returns ``(pieces, method, n_dropped)`` where
-    ``pieces`` is ``[(cb_id, piece_index, poly_m, exterior_4326), ...]`` in seed order —
-    ``piece_index`` keeps the pre-drop numbering so split-piece names stay stable — and
-    ``method`` is ``"parcel"`` or ``"voronoi"``."""
-    from pyproj import Transformer
-    from shapely.geometry import Polygon
-    from shapely.ops import transform as shp_transform
-
+    Geometry repair is delegated to ``_clean_cells``. Returns ``(pieces, method,
+    n_dropped)`` where ``pieces`` is ``[(cb_id, piece_index, poly_m, exterior_4326,
+    holes_4326), ...]`` in seed order — ``piece_index`` keeps the pre-drop numbering so
+    split-piece names stay stable — and ``method`` is ``"parcel"`` or ``"voronoi"``."""
     from swmmcanada.network.subcatchments import delineate_subcatchments
 
     cells = _parcel_cells(seeds, parcels, aoi, crs)        # {cb_id: [pieces]} along real parcels
     method = "parcel" if cells else "voronoi"              # fall back to Voronoi where none exist
     if not cells:                                          # Voronoi gives one cell per seed
         cells = {cb_id: [c] for cb_id, c in delineate_subcatchments(seeds, aoi.geometry).items()}
+    pieces, n_dropped = _clean_cells(cells, crs)
+    return pieces, method, n_dropped
+
+
+def _clean_cells(cells, crs):
+    """Geometry discipline for emitted cells, shared by every shaping seam: each piece is
+    repaired in the metric CRS, dropped when empty or under 1 m², and dropped when its
+    stored EPSG:4326 ring fails the metric round-trip (float precision — the validator
+    reprojects it back before checking). Returns ``(pieces, n_dropped)`` with ``pieces`` as
+    ``[(unit_id, piece_index, poly_m, exterior_4326, holes_4326), ...]``."""
+    from pyproj import Transformer
+    from shapely.geometry import Polygon
+    from shapely.ops import transform as shp_transform
 
     to_m = Transformer.from_crs("EPSG:4326", crs, always_xy=True).transform
     to_ll = Transformer.from_crs(crs, "EPSG:4326", always_xy=True).transform
@@ -817,7 +824,7 @@ def _shape_cells(seeds, parcels, aoi, crs):
                 n_dropped += 1
                 continue
             pieces.append((cb_id, i, poly_m, exterior, holes))
-    return pieces, method, n_dropped
+    return pieces, n_dropped
 
 
 def _impervious_fraction(cell_poly, parcels_gdf, parcels_sidx, buildings_gdf, buildings_sidx,
@@ -1039,4 +1046,170 @@ def delineate_catchbasin_subcatchments(
             "n_parcels": int(len(par)), "n_buildings": int(len(bld)),
             "n_parcels_dropped_remainder": n_remainder,
             "mean_imperv": round(sum(imperv_map.values()) / len(imperv_map), 1) if imperv_map else None}
+    return subs, imperv_map, diag
+
+
+def delineate_parcel_row_subcatchments(
+    network: NetworkIn, junction_xy: Dict[str, Coord], parcels, buildings, aoi, *,
+    crs: str = "EPSG:32610",
+    config: CatchbasinSubcatchmentConfig = CatchbasinSubcatchmentConfig(),
+    laterals=None,
+):
+    """The municipal reproduction split (``junction_parcel_row``): every parcel is its own
+    unit, and the road right-of-way (AOI minus parcels) forms one unit per model node.
+
+    A municipal drawing keeps exactly these two kinds of unit apart — lots whole, street
+    land per block — all discharging to maintenance holes (composition follows municipal
+    engineering records, 2026-08). ``junction_parcel`` dissolves them into one cell per
+    node: hydraulically equivalent, but it cannot be compared unit-for-unit against such a
+    drawing, which is what this mode exists for.
+
+    Assembly of existing seams, not a new algorithm: the donut-remainder drop (Moncton),
+    metric repair, the junction-Voronoi split of the non-parcel remainder (the
+    ``_parcel_cells`` street rule, kept as its own units instead of dissolved into the
+    lots), ``_clean_cells`` geometry discipline, ``_outlet_resolver`` outlets and
+    ``_impervious_fraction`` attributes.
+
+    Outlets are generic rules, never city cases: a parcel drains to the nearer end of the
+    NEAREST conduit — the pipe in the street it fronts, via its lateral where one is
+    published (ADR 0032: laterals are the connection evidence) — and a right-of-way unit
+    drains to the node it was carved for.
+
+    Returns ``(subcatchments, imperv_map, diagnostics)`` like its sibling above; an empty
+    result leaves the caller's fallback chain to run.
+    """
+    import geopandas as gpd
+    from pyproj import Transformer
+    from shapely.geometry import MultiPoint, Point, Polygon, shape
+    from shapely.ops import transform as shp_transform, unary_union, voronoi_diagram
+
+    from swmmcanada.build.models import SurfaceCatchment
+    from swmmcanada.network.service_area import MIN_CELL_HA
+    from swmmcanada.validate import schema as vschema
+
+    if not network.junctions:
+        return [], {}, {"reason": "no network junctions"}
+    if len(junction_xy) < 2:
+        return [], {}, {"reason": "insufficient junction seeds",
+                        "n_junctions": len(junction_xy)}
+
+    parcels, n_remainder = _drop_remainder_donuts(parcels)
+
+    to_m = Transformer.from_crs("EPSG:4326", crs, always_xy=True).transform
+    to_ll = Transformer.from_crs(crs, "EPSG:4326", always_xy=True).transform
+    aoi_m = shp_transform(to_m, aoi.geometry)
+
+    par = gpd.GeoSeries([shape(f["geometry"]) for f in (parcels or []) if f.get("geometry")],
+                        crs="EPSG:4326").to_crs(crs)
+    par = par[par.notna() & ~par.is_empty]
+    par, n_repaired = repair_polygons(par) if len(par) else (par, 0)
+    par = par[par.intersects(aoi_m)]
+    if not len(par):
+        return [], {}, {"reason": "no usable parcels in the AOI",
+                        "n_parcels_dropped_remainder": n_remainder}
+
+    # Every parcel is a unit of its own, clipped to the extract but otherwise kept whole —
+    # the lot line IS the boundary, which is the point of the mode. Disconnected clip
+    # pieces stay (the _all_polygons rule: dropped land becomes a blank hole otherwise).
+    cells: Dict[str, list] = {}
+    for k, geom in enumerate(par.geometry):
+        pieces = [p for p in _all_polygons(geom.intersection(aoi_m)) if p.area > 0]
+        if pieces:
+            cells[f"P{k}"] = [_Cell(area_m2=p.area, polygon_4326=shp_transform(to_ll, p))
+                              for p in pieces]
+    n_parcel_ids = len(cells)
+
+    # The road right-of-way (AOI minus parcels) divides among the model's nodes by their
+    # Voronoi cells — the same rule `_parcel_cells` applies to the street sliver, kept as
+    # its own per-node units instead of being dissolved into the lots. Being a difference
+    # product, it grows hairline appendages where cadastre edges nearly coincide with the
+    # AOI edge; an opening at MIN_NECK_M (the boundary module's constant for "a join this
+    # thin is not a shape") trims them — invisible inside a dissolved cell, but a kept-apart
+    # strip would carry the hairline into the shape and validity checks. Parcels are NOT
+    # opened: they are published geometry, and the lot line is the point of the mode.
+    from swmmcanada.delineation.boundary import MIN_NECK_M
+
+    node_ids = list(junction_xy)
+    node_pts = [Point(*to_m(lon, lat)) for (lon, lat) in junction_xy.values()]
+    row_m = aoi_m.difference(unary_union(list(par.geometry)))
+    row_m = row_m.buffer(-MIN_NECK_M).buffer(MIN_NECK_M)
+    if not row_m.is_empty:
+        for vcell in voronoi_diagram(MultiPoint(node_pts), envelope=aoi_m).geoms:
+            owner = next((node_ids[i] for i, p in enumerate(node_pts) if vcell.covers(p)),
+                         None)
+            if owner is None:
+                continue
+            pieces = [p for p in _all_polygons(row_m.intersection(vcell)) if p.area > 0]
+            if pieces:
+                cells[f"ROW_{owner}"] = [
+                    _Cell(area_m2=p.area, polygon_4326=shp_transform(to_ll, p))
+                    for p in pieces]
+
+    pieces, n_dropped = _clean_cells(cells, crs)
+    # Validity is judged in BOTH coordinate systems, as everywhere else in this repo:
+    # `_clean_cells` guards the metric round-trip; the stored 4326 ring must hold on its
+    # own too, or validation's reprojection meets a self-intersection later.
+    kept = [t for t in pieces if Polygon(t[3]).is_valid]      # t[3] = exterior_4326
+    n_dropped += len(pieces) - len(kept)
+    pieces = kept
+    outlet_of = _outlet_resolver(network, crs, laterals)
+
+    par_gdf = gpd.GeoDataFrame(geometry=par)
+    bld = gpd.GeoSeries([shape(f["geometry"]) for f in (buildings or []) if f.get("geometry")],
+                        crs="EPSG:4326").to_crs(crs)
+    bld, _ = repair_polygons(bld) if len(bld) else (bld, 0)
+    bld_gdf = gpd.GeoDataFrame(geometry=bld)
+    par_sidx = par_gdf.sindex if len(par_gdf) else None
+    bld_sidx = bld_gdf.sindex if len(bld_gdf) else None
+
+    subs, imperv_map = [], {}
+    n_parcel_units = n_row_units = 0
+    for unit_id, i, poly_m, exterior, holes in pieces:
+        name = f"S_{unit_id}" if i == 0 else f"S_{unit_id}__{i + 1}"
+        if unit_id.startswith("ROW_"):
+            # Carved for this node, drains to this node.
+            outlet = unit_id[len("ROW_"):]
+            n_row_units += 1
+            # This land IS road reserve by construction, so the documented reserve share
+            # applies directly — identity evidence, kept through derive like parcel-based
+            # imperviousness is.
+            imperv = max(config.min_imperv,
+                         min(config.max_imperv,
+                             100.0 * config.road_reserve_impervious_frac))
+            imperv_map[name] = imperv
+        else:
+            # A lot drains to the street it faces: the nearest conduit is that street's
+            # pipe, and the lateral (where published) says so outright.
+            rep = shp_transform(to_ll, poly_m.representative_point())
+            outlet = outlet_of((rep.x, rep.y))
+            n_parcel_units += 1
+            imperv, parcel_based = _impervious_fraction(
+                poly_m, par_gdf, par_sidx, bld_gdf, bld_sidx, config=config)
+            if parcel_based:
+                imperv_map[name] = imperv
+        subs.append(SurfaceCatchment(
+            name=name, outlet_node=outlet, area_ha=poly_m.area / 1e4,
+            pct_imperv=imperv,
+            width_m=poly_m.area / characteristic_flow_length_m(poly_m),
+            pct_slope=config.default_slope_pct, polygon=exterior, holes=holes or None))
+
+    # Reported, not gated: municipal-scale lots are legitimately small, so the noise share
+    # is a number in the report rather than a silent verdict (the warning-severity lesson).
+    noise_share = (round(sum(1 for s in subs if s.area_ha < MIN_CELL_HA) / len(subs), 3)
+                   if subs else 0.0)
+    diag = {"method": vschema.METHOD_JUNCTION_PARCEL_ROW,
+            "width_method": "area_over_flow_length",
+            "n_junctions": len(junction_xy),
+            "n_parcels": int(len(par)), "n_buildings": int(len(bld)),
+            "n_parcels_repaired": n_repaired,
+            "n_parcels_dropped_remainder": n_remainder,
+            "n_parcel_ids": n_parcel_ids,
+            "n_parcel_units": n_parcel_units, "n_row_units": n_row_units,
+            "n_subcatchments": len(subs), "n_dropped_invalid": n_dropped,
+            "noise_cell_share": noise_share,
+            "mean_imperv": (round(sum(imperv_map.values()) / len(imperv_map), 1)
+                            if imperv_map else None)}
+    if not subs:
+        diag["reason"] = "no valid units after geometry discipline"
+        return [], {}, diag
     return subs, imperv_map, diag

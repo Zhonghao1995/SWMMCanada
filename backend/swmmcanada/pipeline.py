@@ -71,6 +71,10 @@ def _method_descriptor(sub_diag: Optional[dict]) -> MethodDescriptor:
         return MethodDescriptor(
             vschema.METHOD_JUNCTION_STREET,
             "each node takes the street it fronts", "medium")
+    if method == vschema.METHOD_JUNCTION_PARCEL_ROW:
+        return MethodDescriptor(
+            vschema.METHOD_JUNCTION_PARCEL_ROW,
+            "each parcel its own unit; road right-of-way one unit per node", "medium")
     if method == vschema.METHOD_JUNCTION_DEM and diag.get("seeded_on") == "catch_basin":
         kerbed = (diag.get("urban_conditioning") or {}).get("applied")
         return MethodDescriptor(
@@ -790,7 +794,7 @@ def _plan_delineation(spec, bbox, client, network, derive: bool, subcatchment_me
     where ADR 0029 Q11 is either honoured or quietly broken, and it needs coverage that does
     not depend on a DEM, a climate service and four open-data hosts being reachable.
     """
-    if subcatchment_method != "parcel":
+    if subcatchment_method not in ("parcel", "parcel_row"):
         # An explicit caller override short-circuits the resolver — but it is still a
         # decision, so it is recorded in the same shape. The land fetch is skipped: the plan
         # is already fixed, and paying for evidence nobody will read is waste.
@@ -800,6 +804,11 @@ def _plan_delineation(spec, bbox, client, network, derive: bool, subcatchment_me
             shaping="voronoi", confidence="low",
             reason=f"caller override subcatchment_method={subcatchment_method!r}",
             gates={"caller_override": True}, evidence={})
+    # "parcel_row" is NOT an override: it is a request the resolver must weigh against the
+    # AOI's evidence (no parcels here means the mode cannot run, and that verdict belongs
+    # with the recorded reason, not in this function).
+    requested = (vschema.METHOD_JUNCTION_PARCEL_ROW
+                 if subcatchment_method == "parcel_row" else None)
     land = spec.land(bbox, client)
     # Phase 0 measured every published catchment layer in the fleet as macro, so a city that
     # publishes one publishes a Level 2 boundary. Additive: a municipal server being down
@@ -824,14 +833,19 @@ def _plan_delineation(spec, bbox, client, network, derive: bool, subcatchment_me
         dem_resolution_m=dem_resolution_m,
         official_basin_level=official_level,
         city=spec.key, system="storm",
-    ))
+    ), requested_method=requested)
 
 
 def build_city(
     city, aoi, start: date, end: date, workspace, *,
     client=None,
     dem_source=None, climate_client=None, climate_buffer_deg: float = 0.3, derive: bool = True,
-    landcover_source=None, soil_source=None, subcatchment_method: str = "parcel",
+    landcover_source=None, soil_source=None,
+    #: "parcel" lets the resolver choose from evidence; "parcel_row" REQUESTS the
+    #: municipal-reproduction units (parcels whole + road right-of-way per node), which
+    #: the resolver honours when the AOI has nodes and parcels and otherwise records as an
+    #: unmet request; anything else is a caller override straight to nearest-node.
+    subcatchment_method: str = "parcel",
     infiltration=None, design_storm=None,
     #: Spec §G2 wiring stub: record the request to follow this city's registered
     #: municipal practice. It moves no parameter yet (that consumption lands in later
@@ -943,6 +957,17 @@ def build_city(
                       for n, xy in junction_xy.items()],
             land.get("parcels") or [], land.get("buildings") or [], aoi,
             crs=spec.sub_crs, laterals=land.get("laterals"),
+        )
+    if not subcatchments and plan.shaping == "parcel_row":
+        # Requested municipal reproduction: every parcel is its own unit draining to the
+        # pipe of the street it fronts, and the road right-of-way (AOI minus parcels)
+        # forms one unit per node — the way a municipal drawing is organised, kept apart
+        # instead of dissolved per node, so a build can be compared against one
+        # unit-for-unit.
+        junction_xy = {j.name: (j.x, j.y) for j in network.junctions}
+        subcatchments, imperv_map, sub_diag = base.delineate_parcel_row_subcatchments(
+            network, junction_xy, land.get("parcels") or [], land.get("buildings") or [],
+            aoi, crs=spec.sub_crs, laterals=land.get("laterals"),
         )
     water = None
     landcover = None
