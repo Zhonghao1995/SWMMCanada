@@ -1052,10 +1052,15 @@ def build_city(
         subcatchments = [replace(s, **practice_overrides["surface_parameters"])
                          for s in subcatchments]
 
-    # Sanitary tracer (ADR 0011): where the city publishes a sanitary layer, graft it in
-    # as a tagged, disconnected subgraph — AFTER subcatchments (they are storm-seeded) and
-    # with graceful degradation (a sanitary fetch failure never blocks the storm build).
-    san_diag = {"included": False, "reason": "not_published"}
+    # Wastewater — ONE branch for both systems. Sanitary is grafted in where the city
+    # publishes it (ADR 0011): a tagged, disconnected subgraph, AFTER subcatchments (they
+    # are storm-seeded), with graceful degradation (a sanitary fetch failure never blocks
+    # the storm build). Combined mains arrive inside the storm network wearing their own
+    # tag (ADR 0029 Q1/Q3) — the runoff side is already theirs; what was missing is the
+    # wastewater the same land sends them in dry weather. No graft for combined, no
+    # namespace wall, no extra outlet — the trunk stays wired into the storm graph.
+    san_diag: dict = {"included": False, "reason": "not_published"}
+    comb_diag: dict = {"included": False, "reason": "no combined mains in this model"}
     service_areas: list = []
     # ADR 0029 Q3: a selection the user made is honoured at BUILD time, not just at export.
     # Grafting a system nobody asked for and filtering it out later would still pay for the
@@ -1080,42 +1085,48 @@ def build_city(
             san_diag = {"included": True, "terminal_outlet": outlet_diag,
                         "n_junctions": len(sanres.network.junctions),
                         "n_conduits": len(sanres.network.conduits)}
-            # ADR 0031: a sanitary network with no inflow is a drawing, not a model. Derive
-            # the service areas and load them, on the SAN_-prefixed subgraph so the areas
-            # address the grafted node names rather than the pre-merge ones.
-            service_areas, sa_diag = derive_service_areas(
-                filter_system(network, "sanitary"), land.get("parcels") or [], aoi,
-                laterals=land.get("sanitary_laterals") or land.get("laterals"),
-                crs=spec.sub_crs, buildings=land.get("buildings"))
-            loaded = load_service_areas(service_areas)
-            service_areas = loaded.areas
-            san_diag["service_areas"] = {**sa_diag, **loaded.diagnostics}
         except Exception as exc:  # noqa: BLE001 — additive system, degrade with a note
             san_diag = {"included": False, "reason": f"{type(exc).__name__}: {exc}"}
-            service_areas = []
 
-    # Combined DWF (ADR 0029 Q1: combined is dual-source). Combined mains arrive inside
-    # the storm network wearing their own tag (Q3) — the runoff side is already theirs;
-    # what was missing is the wastewater the same land sends them in dry weather. Reuse
-    # the sanitary service-area pipeline on the combined subgraph: seeds fall back to the
-    # combined manholes where the city publishes no lateral layer (Vancouver). No graft,
-    # no namespace wall, no extra outlet — the trunk stays wired into the storm graph and
-    # drains where it always drained.
-    comb_diag: dict = {"included": False, "reason": "no combined mains in this model"}
     if systems is not None and "combined" not in systems:
         comb_diag = {"included": False, "reason": "not selected"}
     elif any(c.system == "combined" for c in network.conduits):
+        comb_diag = {"included": True}
+
+    # ADR 0031: a wastewater network with no inflow is a drawing, not a model. The systems
+    # that made it into the build share ONE service-area derivation over their JOINT view
+    # (the tessellation follows the selected set), and each area belongs to the system of
+    # the node it loads — deriving per system tiled the whole AOI once per system, so a
+    # mixed AOI loaded the same land twice and total DWF doubled. Runs on the
+    # SAN_-prefixed subgraph so sanitary areas address the grafted node names; seeds fall
+    # back to manholes where the city publishes no lateral layer (Vancouver). Diagnostics
+    # stay per system — the "sanitary"/"combined" provenance keys keep their meaning.
+    wastewater = [s for s, d in (("sanitary", san_diag), ("combined", comb_diag))
+                  if d.get("included")]
+    if wastewater:
         try:
-            comb_areas, csa_diag = derive_service_areas(
-                filter_system(network, "combined"), land.get("parcels") or [], aoi,
+            areas, sa_diag = derive_service_areas(
+                filter_system(network, wastewater), land.get("parcels") or [], aoi,
                 laterals=land.get("sanitary_laterals") or land.get("laterals"),
-                crs=spec.sub_crs, system="combined", buildings=land.get("buildings"))
-            comb_loaded = load_service_areas(comb_areas)
-            service_areas = list(service_areas) + comb_loaded.areas
-            comb_diag = {"included": True,
-                         "service_areas": {**csa_diag, **comb_loaded.diagnostics}}
+                crs=spec.sub_crs, buildings=land.get("buildings"))
+            if len(wastewater) > 1:
+                sa_diag["joint_seeding"] = {
+                    "systems": wastewater,
+                    "note": ("one tessellation over the joint wastewater view; each area "
+                             "attributed to its node's system, so mixed-system land is "
+                             "loaded once, not once per system")}
+            for name, diag in (("sanitary", san_diag), ("combined", comb_diag)):
+                if diag.get("included"):
+                    loaded = load_service_areas([a for a in areas if a.system == name])
+                    service_areas = list(service_areas) + loaded.areas
+                    diag["service_areas"] = {**sa_diag, **loaded.diagnostics}
         except Exception as exc:  # noqa: BLE001 — additive load, degrade with a note
-            comb_diag = {"included": False, "reason": f"{type(exc).__name__}: {exc}"}
+            note = f"{type(exc).__name__}: {exc}"
+            for diag in (san_diag, comb_diag):
+                if diag.get("included"):
+                    diag.clear()
+                    diag.update({"included": False, "reason": note})
+            service_areas = []
 
     # Head done (network producer = the city adapter); the shared build spine does the rest.
     method = _method_descriptor(sub_diag)
