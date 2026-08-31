@@ -95,6 +95,43 @@ def test_combined_mains_join_the_storm_system(result):
     assert result.diagnostics["n_combined_included"] == hist["Combined"]
 
 
+def test_combined_mains_carry_their_own_system_tag(result, storm_inputs):
+    """G1/V1 (ADR 0029 Q3): eflnttype=Combined mains stay wired into the storm graph but
+    carry system="combined"; Storm mains keep the storm tag. Tags, not a second graph."""
+    props = [f.get("properties") or {} for f in storm_inputs["mains"]]
+    combined_ids = {str(p.get("facilityid")) for p in props
+                    if p.get("eflnttype") == "Combined"}
+    storm_ids = {str(p.get("facilityid")) for p in props if p.get("eflnttype") == "Storm"}
+    assert combined_ids                                # the fixture really carries one
+    tagged = {c.name for c in result.network.conduits if c.system == "combined"}
+    assert combined_ids <= tagged
+    # only the trunk's own invented drain may ride along with the tag
+    assert all(n.startswith("C_OUT_") for n in tagged - combined_ids)
+    assert all(c.system == "storm_minor" for c in result.network.conduits
+               if c.name in storm_ids)
+
+
+def test_nodes_touched_by_a_combined_main_are_combined(result):
+    """The manhole a combined main runs through carries the wastewater too — its tag is
+    what lets the DWF loader and the combined view reach it (ADR 0029 Q3/Q5)."""
+    node_sys = {j.name: j.system for j in result.network.junctions}
+    node_sys.update({o.name: o.system for o in result.network.outfalls})
+    combined_conduits = [c for c in result.network.conduits if c.system == "combined"]
+    assert combined_conduits
+    for c in combined_conduits:
+        assert node_sys[c.from_node] == "combined", c.name
+        assert node_sys[c.to_node] == "combined", c.name
+
+
+def test_the_tagged_network_passes_system_integrity(result):
+    """storm-combined contact is legal, storm-sanitary stays an ERROR (ADR 0029 Q5) — the
+    new tags must introduce neither problem on the real fixture."""
+    from swmmcanada.validate.checks import check_system_outfalls
+
+    r = check_system_outfalls(result.network)
+    assert r.passed, r.details
+
+
 def test_as_built_inverts_dominate_the_vertical(result, storm_inputs):
     """Vertical tiers (ADR 0020 amended): the Infrastructure_Sewer as-built inverts must
     carry most pipe ends; the rim - default depth fallback stays for the rest (the fixture

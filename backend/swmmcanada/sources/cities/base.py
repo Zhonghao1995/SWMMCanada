@@ -206,6 +206,11 @@ class RawPipe:
     shape: Optional[str] = None         # city cross-section code; None -> circular (#130)
     height_m: Optional[float] = None    # real section dims for non-circular shapes
     width_m: Optional[float] = None
+    #: Drainage-system tag for sources that mix systems in ONE layer (ADR 0029 Q3):
+    #: an adapter maps its effluent/contents vocabulary here (e.g. Combined -> "combined")
+    #: and the assembler carries it onto the emitted elements. None -> the storm default,
+    #: bit-identical to the pre-tag behaviour, so untagged adapters are untouched.
+    system: Optional[str] = None
 
 
 # Drop-structure offsets beyond this are treated as published-data errors (#148): real
@@ -304,6 +309,7 @@ def assemble_network(
 
     node_xy: Dict[Coord, Coord] = {}
     inv_cands: Dict[Coord, list] = defaultdict(list)
+    node_sys_in: Dict[Coord, set] = defaultdict(set)
     edges: List[Tuple[str, Coord, Coord, Optional[float], float, float]] = []
     dropped: List[dict] = []
 
@@ -318,12 +324,14 @@ def assemble_network(
             continue
         node_xy.setdefault(ka, p.end_a)
         node_xy.setdefault(kb, p.end_b)
+        node_sys_in[ka].add(p.system or "storm_minor")
+        node_sys_in[kb].add(p.system or "storm_minor")
         if p.inv_a is not None:
             inv_cands[ka].append(p.inv_a)
         if p.inv_b is not None:
             inv_cands[kb].append(p.inv_b)
         edges.append((p.name, ka, kb, p.diameter_m, p.roughness_n, length,
-                      p.inv_a, p.inv_b, p.shape, p.height_m, p.width_m))
+                      p.inv_a, p.inv_b, p.shape, p.height_m, p.width_m, p.system))
 
     if not edges:
         return NetworkResult(NetworkIn([], [], []), {"reason": "no usable pipes", "dropped": dropped})
@@ -446,10 +454,21 @@ def assemble_network(
         if k not in direct and k in ground and ground[k] - node_inv[k] > MAX_NODE_DEPTH_M
     )
 
+    # Node system = what the incident pipes say (ADR 0029 Q3). `combined` wins a mixed
+    # node: it is the interface system (Q5) — the manhole a combined main runs through
+    # carries the wastewater too, so the DWF loader and the per-system views must see it,
+    # and a combined tag keeps every adjacent pair legal. Any other mix keeps the storm
+    # default; untagged pipes therefore reproduce today's networks bit for bit.
+    def _node_system(k: Coord) -> str:
+        tags = node_sys_in.get(k) or {"storm_minor"}
+        if "combined" in tags:
+            return "combined"
+        return next(iter(tags)) if len(tags) == 1 else "storm_minor"
+
     junctions = [
         JunctionIn(
             name=nid(k), invert_m=node_inv[k], x=node_xy[k][0], y=node_xy[k][1],
-            max_depth_m=_max_depth(k),
+            max_depth_m=_max_depth(k), system=_node_system(k),
         )
         for k in node_xy if k not in direct
     ]
@@ -458,7 +477,7 @@ def assemble_network(
     n_offset_ends = 0
     n_offsets_rejected = 0
     n_noncircular = 0
-    for name, ka, kb, dia, rough, length, inv_a, inv_b, raw_shape, h_m, w_m in edges:
+    for name, ka, kb, dia, rough, length, inv_a, inv_b, raw_shape, h_m, w_m, sys_tag in edges:
         if kb in direct:
             fr, to = ka, kb
             inv_fr, inv_to = inv_a, inv_b
@@ -504,11 +523,13 @@ def assemble_network(
             name=name, from_node=nid(fr), to_node=nid(to), length_m=length,
             diameter_m=dia if (dia and dia > 0) else config.default_diameter_m,
             roughness_n=rough or config.default_roughness,
+            system=sys_tag or "storm_minor",
             inlet_offset_m=round(inlet_off, 3), outlet_offset_m=round(outlet_off, 3),
             shape=shape, height_m=height_m, width_m=width_m,
         ))
 
-    outfalls = [OutfallIn(name=nid(k), invert_m=node_inv[k], x=node_xy[k][0], y=node_xy[k][1]) for k in direct]
+    outfalls = [OutfallIn(name=nid(k), invert_m=node_inv[k], x=node_xy[k][0], y=node_xy[k][1],
+                          system=_node_system(k)) for k in direct]
     # A component the city published no outfall for still needs somewhere to drain, so its
     # lowest node is promoted into one. That outfall is a MODELLING BOUNDARY, not a
     # structure that exists, and it is marked as such: Victoria's sanitary fixture gets 19
@@ -516,13 +537,17 @@ def assemble_network(
     # looks published passes validation quietly and is then used as if it were real.
     for k in dedicated:
         oname = f"OUT_{nid(k)}"
+        # The invented drain is the terminal node's own exit (the trunk continues past the
+        # AOI clip), so it inherits that node's system — a combined trunk keeps a combined
+        # destination instead of borrowing a storm one (ADR 0029 Q4).
         outfalls.append(OutfallIn(
             name=oname, invert_m=node_inv[k] - config.min_slope * config.outfall_link_len_m,
-            x=node_xy[k][0] + 1e-4, y=node_xy[k][1], synthesised=True))
+            x=node_xy[k][0] + 1e-4, y=node_xy[k][1], synthesised=True,
+            system=_node_system(k)))
         conduits.append(ConduitIn(
             name=f"C_{oname}", from_node=nid(k), to_node=oname,
             length_m=config.outfall_link_len_m, diameter_m=config.default_diameter_m,
-            roughness_n=config.default_roughness))
+            roughness_n=config.default_roughness, system=_node_system(k)))
 
     network = NetworkIn(junctions=junctions, outfalls=outfalls, conduits=conduits)
     _assert_invariants(network)
