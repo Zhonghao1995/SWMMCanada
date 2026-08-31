@@ -13,6 +13,9 @@ shaping and outlet-resolution seams the storm path uses, and changes only what f
 
 There is no second algorithm here, and there must not be one: the difference between a
 surface catchment and a service area is which network you hand it, not which code you run.
+A mixed AOI hands it the JOINT sanitary+combined view: the tessellation fills the AOI
+once, and each area takes the system of the node it loads — deriving per system tiled the
+same land once per system and doubled the dry-weather flow.
 
 Phase 0 (2026-08-12) found 16 supported cities publishing sanitary laterals and 12 with both
 laterals and parcels, so this path has real subjects — unlike the authoritative-polygon path,
@@ -97,17 +100,25 @@ def _rings_lonlat(poly_m, crs: str):
 
 def derive_service_areas(
     network: NetworkIn, parcels, aoi, *, laterals=None, crs: str = "EPSG:32610",
-    system: str = "sanitary", buildings=None,
+    system: Optional[str] = None, buildings=None,
 ) -> Tuple[List[SewerServiceArea], Dict]:
-    """Service areas for one sanitary/combined network. Returns ``(areas, diagnostics)``.
+    """Service areas for a wastewater network view. Returns ``(areas, diagnostics)``.
 
-    ``network`` must already be the single-system subgraph — pass a filtered network, not
-    the whole model, or storm nodes will collect wastewater.
+    ``network`` must already be the wastewater subgraph — one system, or the joint
+    sanitary+combined view of a mixed AOI. Pass a filtered network, not the whole model,
+    or storm nodes will collect wastewater.
+
+    ``system=None`` (default) tags each area with the system of the node it loads — the
+    joint-view rule: one tessellation attributes mixed-system land to whichever sewer
+    actually takes it, instead of each system tiling the AOI and loading the same land
+    twice. An explicit tag stamps every area with it (single-system callers that want the
+    view's label regardless of node tags). Either way this decides the ``system`` tag
+    only; ``geometry_source``/``loading_source`` stay their own facts (ADR 0031).
     """
     from swmmcanada.sources.cities import base
 
     if len(network.junctions) < 2:
-        return [], {"reason": "sanitary network too small to serve areas",
+        return [], {"reason": "wastewater network too small to serve areas",
                     "n_junctions": len(network.junctions)}
 
     seeds, seed_source = _seeds_from(network, laterals, crs)
@@ -130,9 +141,16 @@ def derive_service_areas(
     for seed_id, _i, poly_m, _ext, _holes in cells:
         per_node.setdefault(outlet_of(seeds[seed_id]), []).append(poly_m)
 
+    # The attribution rule of the joint view: an area belongs to the system of the node
+    # it loads. Nodes carry their tags already; the view defines which ones are here.
+    node_system = {n.name: n.system
+                   for n in list(network.junctions) + list(network.outfalls)}
+
     areas: List[SewerServiceArea] = []
     n_merged = 0
+    n_by_system: Dict[str, int] = {}
     for node, polys in per_node.items():
+        tag = system if system is not None else node_system[node]
         merged = unary_union(polys)
         parts = list(merged.geoms) if hasattr(merged, "geoms") else [merged]
         # Pieces that do not touch stay separate rather than being bridged: a node can
@@ -142,9 +160,10 @@ def derive_service_areas(
         for i, g in enumerate(sorted(parts, key=lambda g: -g.area)):
             name = f"SSA_{node}" if i == 0 else f"SSA_{node}__{i + 1}"
             exterior, holes = _rings_lonlat(g, crs)
+            n_by_system[tag] = n_by_system.get(tag, 0) + 1
             areas.append(SewerServiceArea(
                 name=name, node=node, area_ha=g.area / 1e4,
-                system=system, polygon=exterior, holes=holes or None,
+                system=tag, polygon=exterior, holes=holes or None,
                 dwelling_units=dwellings.get(name),
                 geometry_source="derived"))
 
@@ -152,6 +171,7 @@ def derive_service_areas(
         "method": f"{seed_source}-seeded, {shape_method}-shaped",
         "seed_source": seed_source, "shape_method": shape_method,
         "n_seeds": len(seeds), "n_service_areas": len(areas),
+        "n_areas_by_system": n_by_system,
         "n_dropped_invalid": n_dropped, "n_remainder_donuts": n_remainder,
         "n_connection_cells": len(cells), "n_cells_merged_into_nodes": n_merged,
         "n_with_dwelling_counts": sum(1 for a in areas if a.dwelling_units),
