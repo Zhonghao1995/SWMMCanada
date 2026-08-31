@@ -57,6 +57,40 @@ def test_green_ampt_tiers():
     assert infil.green_ampt_for_texture(None) == infil.GA_BY_TEXTURE["loam"]
 
 
+# --- Green-Ampt IMD antecedent option --------------------------------------------------
+
+def test_field_capacity_table_covers_every_texture():
+    assert set(infil.FC_BY_TEXTURE) == set(infil.GA_BY_TEXTURE)
+
+
+@pytest.mark.parametrize("texture", sorted(infil.GA_BY_TEXTURE))
+def test_imd_field_capacity_is_below_dry_and_non_negative(texture):
+    dry = infil.green_ampt_imd(texture)
+    fc = infil.green_ampt_imd(texture, antecedent="field_capacity")
+    assert dry == infil.GA_BY_TEXTURE[texture][2]     # default antecedent stays the table
+    assert 0.0 <= fc < dry
+
+
+def test_imd_field_capacity_spot_values():
+    # theta_e − theta_fc, both columns from the same Rawls-series source tables
+    assert infil.green_ampt_imd("silt loam", antecedent="field_capacity") == pytest.approx(0.156)
+    assert infil.green_ampt_imd("loamy sand", antecedent="field_capacity") == pytest.approx(0.276)
+    # heavy clays: −33 kPa retention exceeds effective porosity in the source -> clamped
+    assert infil.green_ampt_imd("clay", antecedent="field_capacity") == 0.0
+    assert infil.green_ampt_imd("sandy clay", antecedent="field_capacity") == 0.0
+
+
+def test_imd_unknown_texture_falls_back_to_loam():
+    assert infil.green_ampt_imd(None) == infil.GA_BY_TEXTURE["loam"][2]
+    assert (infil.green_ampt_imd("gravelly nonsense", antecedent="field_capacity")
+            == infil.green_ampt_imd("loam", antecedent="field_capacity"))
+
+
+def test_imd_unknown_antecedent_raises():
+    with pytest.raises(ValueError):
+        infil.green_ampt_imd("loam", antecedent="wet")
+
+
 # --- writer: [OPTIONS] INFILTRATION must match the parameter-row shape ------------------
 
 def _tiny_model(tmp_path, method: InfiltrationModel):

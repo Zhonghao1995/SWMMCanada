@@ -48,6 +48,31 @@ GA_BY_TEXTURE: Dict[str, Tuple[float, float, float]] = {
     "clay": (316.3, 0.3, 0.385),
 }
 
+# --- field capacity (−33 kPa water content) by USDA texture class ------------------------
+# Rawls, Brakensiek & Saxton (1982) Table 2. Feeds only the "field_capacity" antecedent
+# option of :func:`green_ampt_imd`; the GA_BY_TEXTURE IMD column stays the dry-antecedent
+# maximum deficit (theta_e) and remains the default everywhere.
+FC_BY_TEXTURE: Dict[str, float] = {
+    "sand": 0.091,
+    "loamy sand": 0.125,
+    "sandy loam": 0.207,
+    "loam": 0.270,
+    "silt loam": 0.330,
+    "silt": 0.330,                       # borrows silt loam, like GA_BY_TEXTURE
+    "sandy clay loam": 0.255,
+    "clay loam": 0.318,
+    "silty clay loam": 0.366,
+    "sandy clay": 0.339,
+    "silty clay": 0.387,
+    "clay": 0.396,
+}
+
+#: Antecedent-moisture conventions for the Green-Ampt initial deficit. "dry" is the
+#: project default (theta_e, the table column); "field_capacity" models soil drained to
+#: −33 kPa (theta_e − theta_fc, clamped at zero — heavy clays retain more at −33 kPa than
+#: their effective porosity in the source tables, i.e. they never drain that far).
+GA_ANTECEDENTS = ("dry", "field_capacity")
+
 # HSG -> representative texture, for soil sources that publish only HSG (HYSOGs, the
 # constant fallback). Provenance records which tier produced the GA parameters.
 HSG_REPRESENTATIVE_TEXTURE: Dict[str, str] = {
@@ -116,3 +141,16 @@ def green_ampt_for_texture(texture: Optional[str]) -> Tuple[float, float, float]
 def green_ampt_for_hsg(letter: Optional[str]) -> Tuple[float, float, float]:
     """GA parameters via the HSG's representative texture (the no-texture fallback tier)."""
     return green_ampt_for_texture(HSG_REPRESENTATIVE_TEXTURE.get(letter or "B", "loam"))
+
+
+def green_ampt_imd(texture: Optional[str], antecedent: str = "dry") -> float:
+    """IMD for a texture under a named antecedent convention (see GA_ANTECEDENTS).
+    Unknown/None texture falls back to loam, like the other tier functions."""
+    if antecedent not in GA_ANTECEDENTS:
+        raise ValueError(
+            f"unknown Green-Ampt antecedent {antecedent!r}; expected one of {GA_ANTECEDENTS}")
+    key = texture if texture in GA_BY_TEXTURE else "loam"
+    theta_e = GA_BY_TEXTURE[key][2]
+    if antecedent == "dry":
+        return theta_e
+    return max(theta_e - FC_BY_TEXTURE[key], 0.0)
