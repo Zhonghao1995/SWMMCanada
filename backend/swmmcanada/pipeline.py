@@ -108,11 +108,11 @@ def _infiltration_kwargs(infiltration) -> dict:
 
 def _validate_or_raise(network, subcatchments, aoi, method: MethodDescriptor, ws: Path,
                        delineation: Optional[dict] = None, forcing: Optional[dict] = None,
-                       water=None, served=None):
+                       water=None, served=None, city_key=None):
     """Validate the subcatchment model, always write validation.json into the package, and
     raise (stopping the build) if any error-severity check fails — so no untrusted .inp ships."""
     report = validate_model(network, subcatchments, aoi, method=method, delineation=delineation,
-                            forcing=forcing, water=water, served=served)
+                            forcing=forcing, water=water, served=served, city_key=city_key)
     (Path(ws) / vschema.VALIDATION_JSON).write_text(json.dumps(report.to_dict(), indent=2))
     if not report.ok:
         detail = "; ".join(f"{c.id}: {c.message}" for c in report.errors)
@@ -419,8 +419,11 @@ def _finish_build(
                                          "outfalls stay FREE"}
 
     _r("VALIDATING", 85)
+    # extra_provenance carries "city" only on the real-network pathway — exactly the
+    # scoping the cross-check's municipal leg wants (synthesis has no registered table).
     _validate_or_raise(network, subcatchments, aoi, method, ws, delineation=sub_diag,
-                       forcing=forcing or None, water=water, served=served)
+                       forcing=forcing or None, water=water, served=served,
+                       city_key=extra_provenance.get("city"))
 
     _r("BUILDING", 90)
     # Datastore is the PRIMARY build path (ADR 0007): write it, then build the .inp from it.
@@ -1117,7 +1120,13 @@ def build_city(
                              "loaded once, not once per system")}
             for name, diag in (("sanitary", san_diag), ("combined", comb_diag)):
                 if diag.get("included"):
-                    loaded = load_service_areas([a for a in areas if a.system == name])
+                    # Ticket 10: a followed practice's stated DWF pattern structure
+                    # configures the loading layer's pattern group for BOTH legs (one
+                    # build, one group — the writer refuses a split); None keeps the
+                    # single hourly default.
+                    loaded = load_service_areas(
+                        [a for a in areas if a.system == name],
+                        pattern_structure=practice_overrides["dwf_pattern_structure"])
                     service_areas = list(service_areas) + loaded.areas
                     diag["service_areas"] = {**sa_diag, **loaded.diagnostics}
         except Exception as exc:  # noqa: BLE001 — additive load, degrade with a note

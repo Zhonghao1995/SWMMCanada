@@ -71,3 +71,12 @@ SHAPE_AREA_OUTLIER_FACTOR = 20.0   # cell area >20× or <1/20× the median -> fl
 SHAPE_THINNESS_MAX = 8.0           # perimeter² / (4π·area) above this -> elongated
 
 INVERT_RISE_TOL_M = 0.01           # conduit rising more than this (m) -> adverse slope
+
+# --- imperviousness cross-check (ticket 13; wide first-version thresholds — the point
+# --- is visibility of the physical-vs-landcover-vs-table gap, not blocking) -----------
+IMPERV_BUILT_EXCESS_PTS = 25.0        # pct_imperv above built share by more -> disagree
+IMPERV_BUILT_DEFICIT_BUILT_PCT = 80.0 # a cell at least this built ...
+IMPERV_BUILT_DEFICIT_IMPERV_PCT = 5.0 # ... with less physical imperviousness -> disagree
+IMPERV_AGREEMENT_WARN_FRAC = 0.10     # >10% of judged cells disagreeing -> warning
+IMPERV_BUILT_SELECT_PCT = 50.0        # "predominantly built" cut for the municipal aggregate
+IMPERV_MUNICIPAL_BAND_TOL_PTS = 15.0  # aggregate outside the band by more -> warning

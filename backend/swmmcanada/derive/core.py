@@ -85,12 +85,20 @@ def derive_parameters(
         pct_imperv = _impervious_pct(poly_4326, landcover, fallback=sub.pct_imperv)
         pct_slope = _mean_slope_pct(poly_4326, dem_path, fallback=sub.pct_slope)
 
+        # One land-cover class-fraction pass serves both the TR-55 CN blend and the
+        # built-up share (ticket 13): the share of the cell in "built" classes is the
+        # coarse signal validation's imperviousness cross-check reads. None (no
+        # overlap) stays None — an absent signal, not a zero.
+        fracs = _class_fractions(poly_4326, landcover)
+        built_pct = (round(100.0 * sum(f for code, f in fracs.items()
+                                       if _NALCMS_CATEGORY.get(code) == "built"), 1)
+                     if fracs else None)
+
         # Infiltration superset (ADR 0013): ONE zonal pass gives the dominant HSG, from
         # which all three parameter sets derive; Green-Ampt prefers the real texture
         # raster when the soil source shipped one (SoilGrids), else the HSG tier.
         letter = _dominant_hsg(poly_4326, soil)
-        cn = _curve_number(letter, soil, fallback=sub.cn, poly_4326=poly_4326,
-                           landcover=landcover)
+        cn = _curve_number(letter, soil, fallback=sub.cn, fracs=fracs)
         f0, fc, decay = infiltration.horton_for_hsg(letter)
         texture = _dominant_texture(poly_4326, soil)
         psi, ksat, imd = (infiltration.green_ampt_for_texture(texture) if texture
@@ -106,6 +114,7 @@ def derive_parameters(
             sub, pct_imperv=pct_imperv, cn=cn, pct_slope=pct_slope,
             horton_f0_mm_h=f0, horton_fc_mm_h=fc, horton_decay_1_h=decay,
             ga_psi_mm=psi, ga_ksat_mm_h=ksat, ga_imd=imd,
+            landcover_built_pct=built_pct,
         ))
     return out
 
@@ -205,17 +214,16 @@ NALCMS_CATEGORY = _NALCMS_CATEGORY
 
 
 def _curve_number(letter: Optional[str], soil: SoilResult, *, fallback: float,
-                  poly_4326=None, landcover: Optional[LandcoverResult] = None) -> float:
-    """Area-weighted TR-55 CN over the cell's land-cover classes for the dominant HSG
-    (F-021). Without a usable land-cover read this degrades to the old single HSG->CN
-    lookup, and without that to the caller's fallback."""
-    if letter and poly_4326 is not None and landcover is not None:
-        fracs = _class_fractions(poly_4326, landcover)
-        if fracs:
-            hsg = letter if letter in ("A", "B", "C", "D") else "B"
-            cn = sum(frac * _CN_TABLE[_NALCMS_CATEGORY.get(code, "grass")][hsg]
-                     for code, frac in fracs.items())
-            return round(float(cn), 1)
+                  fracs: Optional[dict] = None) -> float:
+    """Area-weighted TR-55 CN over the cell's land-cover class fractions for the
+    dominant HSG (F-021). Without a usable land-cover read (empty ``fracs``) this
+    degrades to the old single HSG->CN lookup, and without that to the caller's
+    fallback."""
+    if letter and fracs:
+        hsg = letter if letter in ("A", "B", "C", "D") else "B"
+        cn = sum(frac * _CN_TABLE[_NALCMS_CATEGORY.get(code, "grass")][hsg]
+                 for code, frac in fracs.items())
+        return round(float(cn), 1)
     cn = soil.hsg_to_cn.get(letter) if letter else None
     return float(cn) if cn is not None else fallback
 

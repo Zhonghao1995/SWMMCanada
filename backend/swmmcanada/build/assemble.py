@@ -108,7 +108,8 @@ def _coord_projector(crs):
 
 
 def _write_dry_weather_flow(inp, service_areas, config) -> None:
-    """Emit ``[DWF]`` and the diurnal ``[PATTERNS]`` entry for sewer service areas (ADR 0031).
+    """Emit ``[DWF]`` and its ``[PATTERNS]`` group for sewer service areas (ADR 0031;
+    single diurnal pattern by default, monthly+hourly+weekend when loading stamped it).
 
     This is where the sanitary system stops being pipes with nothing in them. Areas arrive
     already loaded (``swmmcanada.loading``), so the writer's only job is to place the flow on
@@ -124,11 +125,23 @@ def _write_dry_weather_flow(inp, service_areas, config) -> None:
     if not loaded:
         return
 
-    from swmmcanada.loading.dwf import diurnal_pattern, to_flow_units
+    from swmmcanada.loading.dwf import (DIURNAL_PATTERN_NAME, dwf_patterns_for,
+                                        to_flow_units)
 
-    name, factors = diurnal_pattern()
+    # The pattern group is loading configuration (ticket 10): areas arrive stamped with
+    # the [DWF] pattern references (one name, or monthly+hourly+weekend), and the writer
+    # emits exactly that. An unstamped area (hand-made, or a pre-ticket datastore) keeps
+    # the single hourly pattern; two different stamps in one build mean the loading
+    # configuration split somewhere upstream — fail loudly rather than average them.
+    stamps = {getattr(a, "dwf_pattern", None) or DIURNAL_PATTERN_NAME for a in loaded}
+    if len(stamps) > 1:
+        raise ValueError(f"service areas carry {len(stamps)} different DWF pattern "
+                         f"groups ({sorted(stamps)}); one build takes one loading "
+                         f"configuration")
+    names = stamps.pop().split()
     patterns = inp.get(SEC.PATTERNS) or Pattern.create_section()
-    patterns.add_obj(Pattern(name, Pattern.CYCLES.HOURLY, factors=list(factors)))
+    for name, cycle, factors in dwf_patterns_for(names):
+        patterns.add_obj(Pattern(name, getattr(Pattern.CYCLES, cycle), factors=list(factors)))
     inp[SEC.PATTERNS] = patterns
 
     by_node: dict = {}
@@ -140,7 +153,8 @@ def _write_dry_weather_flow(inp, service_areas, config) -> None:
     units = config.flow_units.value
     dwf = inp.get(SEC.DWF) or DryWeatherFlow.create_section()
     for node, lps in sorted(by_node.items()):
-        dwf.add_obj(DryWeatherFlow(node, "FLOW", round(to_flow_units(lps, units), 8), name))
+        dwf.add_obj(DryWeatherFlow(node, "FLOW", round(to_flow_units(lps, units), 8),
+                                   *names))
     inp[SEC.DWF] = dwf
 
 

@@ -289,6 +289,135 @@ def check_shape_plausibility(geo: GeoContext):
                    n_area_outliers=len(area_outliers), n_elongated=len(elongated), sample=flagged[:10])
 
 
+# --- imperviousness cross-check (ticket 13) -------------------------------------
+
+
+def check_imperviousness_agreement(subs: List[SurfaceCatchment], *, city_key=None):
+    """Three imperviousness signals side by side, with the numbers in the report
+    (ticket 13): the physical figure (``pct_imperv``, roofs + roads where ADR 0023
+    ran), the land-cover built-up share (``landcover_built_pct``, stamped by derive
+    from the raster every build already pulls), and — for registered cities — the
+    municipal design table (``practice.design_imperviousness``).
+
+    First-version thresholds, deliberately wide (visibility, not blocking; all in
+    ``schema``): a cell disagrees when its physical figure exceeds the built share by
+    more than IMPERV_BUILT_EXCESS_PTS points (impervious surface living mostly inside
+    built land, more is physically suspect), or when a cell at least
+    IMPERV_BUILT_DEFICIT_BUILT_PCT built carries under IMPERV_BUILT_DEFICIT_IMPERV_PCT
+    physical imperviousness (a built cell where the physical pass found nearly nothing
+    — likely missing roof/road inputs). The check fails (WARNING) when more than
+    IMPERV_AGREEMENT_WARN_FRAC of judged cells disagree, or when the municipal
+    aggregate sits outside the registered residential band by more than
+    IMPERV_MUNICIPAL_BAND_TOL_PTS points.
+
+    The municipal leg is an AGGREGATE comparison and says so: no per-cell land-use
+    classification exists, so the area-weighted mean physical imperviousness over
+    predominantly built cells (built share >= IMPERV_BUILT_SELECT_PCT) is compared
+    against the residential entries of the table. It measures only — the physical
+    figure itself is never adjusted here (that is Phase 3). Note the caveat for
+    builds whose ``pct_imperv`` is itself land-cover-derived (no parcel/building
+    override): the first two signals then share one raster and the per-cell leg
+    mostly measures the impervious-lookup vs built-share gap.
+    """
+    judged = [(s, float(s.pct_imperv), float(s.landcover_built_pct))
+              for s in subs if getattr(s, "landcover_built_pct", None) is not None]
+    n_no_signal = len(subs) - len(judged)
+    if not judged:
+        return _result("imperviousness_agreement", schema.WARNING, True,
+                       "skipped: no land-cover built-up signal on any cell "
+                       "(derive disabled, or the raster covered none of them)",
+                       n_judged=0, n_no_signal=n_no_signal,
+                       municipal=_municipal_imperv_leg(city_key, []))
+
+    deviations = sorted(imperv - built for _, imperv, built in judged)
+    imperv_med = _median([imperv for _, imperv, _ in judged])
+    built_med = _median([built for _, _, built in judged])
+    excess = [s.name for s, imperv, built in judged
+              if imperv - built > schema.IMPERV_BUILT_EXCESS_PTS]
+    deficit = [s.name for s, imperv, built in judged
+               if built >= schema.IMPERV_BUILT_DEFICIT_BUILT_PCT
+               and imperv < schema.IMPERV_BUILT_DEFICIT_IMPERV_PCT]
+    flagged = sorted(set(excess) | set(deficit))
+    frac = len(flagged) / len(judged)
+
+    municipal = _municipal_imperv_leg(city_key, judged)
+    gap = municipal.get("gap_pts")
+    municipal_off = gap is not None and gap > schema.IMPERV_MUNICIPAL_BAND_TOL_PTS
+    passed = frac <= schema.IMPERV_AGREEMENT_WARN_FRAC and not municipal_off
+
+    p = lambda q: deviations[min(len(deviations) - 1, int(q * (len(deviations) - 1)))]
+    msg = (f"physical vs land-cover imperviousness agree on "
+           f"{len(judged) - len(flagged)}/{len(judged)} cells "
+           f"(median physical {imperv_med:.1f}%, median built share {built_med:.1f}%)")
+    if flagged:
+        msg = (f"{len(flagged)}/{len(judged)} cell(s) disagree with the land-cover "
+               f"built-up share ({len(excess)} claim more imperviousness than built "
+               f"land, {len(deficit)} built cells carry almost none)")
+    if municipal_off:
+        msg += (f"; municipal aggregate off the registered residential band by "
+                f"{gap:.1f} pts")
+    return _result("imperviousness_agreement", schema.WARNING, passed, msg,
+                   n_judged=len(judged), n_no_signal=n_no_signal,
+                   median_pct_imperv=round(imperv_med, 1),
+                   median_built_pct=round(built_med, 1),
+                   deviation_pts_median=round(_median(deviations), 1),
+                   deviation_pts_p05=round(p(0.05), 1),
+                   deviation_pts_p95=round(p(0.95), 1),
+                   n_over_threshold=len(flagged),
+                   over_threshold_fraction=round(frac, 4),
+                   n_excess=len(excess), n_built_low_imperv=len(deficit),
+                   sample=flagged[:10], municipal=municipal)
+
+
+#: Table keys treated as the residential band; a table naming none of these falls back
+#: to its full min-max span (and the basis string says which happened).
+_RESIDENTIAL_KEYWORDS = ("family", "residential", "townhouse", "multiplex")
+
+
+def _municipal_imperv_leg(city_key, judged) -> dict:
+    """The design-table comparison for `check_imperviousness_agreement`, or an explicit
+    "not available" — an unregistered city is a declared skip, never a defect."""
+    from swmmcanada.sources.cities.practice import municipal_practice
+
+    practice = municipal_practice(city_key)
+    table = (practice.design_imperviousness.value
+             if practice is not None and practice.design_imperviousness is not None
+             else None)
+    if not table:
+        return {"available": False,
+                "reason": "no design-imperviousness table registered for this city"}
+
+    values = sorted(float(v) for v in table.values())
+    res_values = sorted(float(v) for k, v in table.items()
+                        if any(w in str(k).lower() for w in _RESIDENTIAL_KEYWORDS))
+    band = res_values or values
+    basis = ("aggregate comparison: area-weighted mean physical imperviousness over "
+             f"cells >={schema.IMPERV_BUILT_SELECT_PCT:.0f}% built (land cover) vs the "
+             + ("registered residential categories" if res_values
+                else "full registered table span (no residential category named)")
+             + "; no per-cell land-use classification exists")
+    built_cells = [(s, imperv) for s, imperv, built in judged
+                   if built >= schema.IMPERV_BUILT_SELECT_PCT]
+    out = {"available": True, "city": city_key, "table": dict(table),
+           "table_median": _median(values),
+           "residential_band": [min(band), max(band)],
+           "n_built_cells": len(built_cells), "basis": basis,
+           "built_weighted_mean_imperv": None, "gap_pts": None}
+    weight = sum((s.area_ha or 0.0) for s, _ in built_cells)
+    if built_cells and weight > 0:
+        mean = sum((s.area_ha or 0.0) * imperv for s, imperv in built_cells) / weight
+        out["built_weighted_mean_imperv"] = round(mean, 1)
+        out["gap_pts"] = round(max(0.0, min(band) - mean, mean - max(band)), 1)
+    else:
+        out["basis"] += "; no predominantly built cells to aggregate"
+    return out
+
+
+def _median(values):
+    vals = sorted(values)
+    return float(vals[len(vals) // 2]) if vals else 0.0
+
+
 # --- forcing checks (ADR 0014) -------------------------------------------------
 
 def check_forcing_consistency(forcing: dict):

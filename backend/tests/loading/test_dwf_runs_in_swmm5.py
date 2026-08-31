@@ -27,7 +27,7 @@ RING = [(-123.370, 48.420), (-123.360, 48.420), (-123.360, 48.430), (-123.370, 4
         (-123.370, 48.420)]
 
 
-def _three_system_model(tmp_path):
+def _three_system_model(tmp_path, pattern_structure=None):
     """Storm with a subcatchment, sanitary with service areas, wired as a build produces
     them: separate namespaces, each reaching its own destination."""
     net = NetworkIn(
@@ -50,7 +50,8 @@ def _three_system_model(tmp_path):
                           [0.0] * 6 + [4.0] * 3 + [0.0] * (hours - 9))
     areas = load_service_areas([
         SewerServiceArea("SSA_1", "SAN_M1", 3.0, polygon=RING, dwelling_units=140),
-        SewerServiceArea("SSA_2", "SAN_M2", 2.0, polygon=RING, population=260.0)])
+        SewerServiceArea("SSA_2", "SAN_M2", 2.0, polygon=RING, population=260.0)],
+        pattern_structure=pattern_structure)
     cfg = BuildConfig(out_dir=tmp_path, start=date(2024, 6, 1), end=date(2024, 6, 2))
     result = build_model(
         network=net,
@@ -113,3 +114,41 @@ def test_continuity_error_is_sane(run):
                                            report)]
     assert errors, "no continuity error reported"
     assert all(abs(e) < 5.0 for e in errors), errors
+
+
+# --- the three-pattern structure through the real engine (ticket 10) -----------------
+
+@pytest.fixture(scope="module")
+def run_three_patterns(tmp_path_factory):
+    """The same model with the monthly + hourly + weekend group. The run starts on a
+    Saturday (2024-06-01), so the WEEKEND slot actually drives the first day."""
+    tmp = tmp_path_factory.mktemp("dwf_engine_three")
+    result, areas = _three_system_model(tmp, pattern_structure=("monthly", "hourly",
+                                                                "weekend"))
+    proc, report = _run(result.inp_path, tmp)
+    return proc, report, areas
+
+
+def test_the_engine_accepts_the_three_pattern_model(run_three_patterns):
+    proc, report, _ = run_three_patterns
+    assert proc.returncode == 0, proc.stdout[-2000:]
+    faults = re.findall(r"^\s*ERROR\s+\d+.*$", report, re.M)
+    assert not faults, faults[:5]
+    warnings = re.findall(r"^\s*WARNING\s+\d+.*$", report, re.M)
+    assert not warnings, warnings[:5]
+
+
+def test_three_patterns_leave_the_volume_and_continuity_where_they_were(run_three_patterns):
+    """The structure-first placeholders (weekend = weekday shape, monthly = 1.0) must not
+    scale the volume the loading layer intended, and the continuity error must stay in
+    the same magnitude band as the single-pattern run (<5%)."""
+    _, report, areas = run_three_patterns
+    m = re.search(r"Dry Weather Inflow\s*\.+\s*([\d.]+)\s+([\d.]+)", report)
+    assert m, "no Dry Weather Inflow line in the continuity table"
+    reported_ml = float(m.group(2))
+    expected_ml = areas.diagnostics["total_dwf_lps"] * 86400 / 1e6
+    assert reported_ml == pytest.approx(expected_ml, rel=0.05), (
+        f"engine saw {reported_ml} ML, we intended {expected_ml} ML")
+    errors = [float(x) for x in re.findall(r"Continuity Error \(%\)\s*\.+\s*(-?[\d.]+)",
+                                           report)]
+    assert errors and all(abs(e) < 5.0 for e in errors), errors

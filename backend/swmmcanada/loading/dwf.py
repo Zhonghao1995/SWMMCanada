@@ -130,12 +130,79 @@ DIURNAL_FACTORS: Sequence[float] = (
 )
 DIURNAL_PATTERN_NAME = "DWF_DIURNAL"
 
+#: Weekend hourly multipliers (ticket 10) — deliberately the WEEKDAY shape, verbatim.
+#: Structure-first: the weekend slot exists so a city's measured weekend curve has a
+#: place to land, but no number is invented for it — an all-1.0 "neutral" weekend would
+#: flatten Saturdays (SWMM swaps the hourly pattern out for this one on weekends), which
+#: is a behaviour change dressed up as neutrality. Reusing the weekday shape keeps the
+#: three-pattern model numerically identical to the single-pattern one until evidence
+#: replaces it.
+WEEKEND_FACTORS: Sequence[float] = DIURNAL_FACTORS
+WEEKEND_PATTERN_NAME = "DWF_WEEKEND"
+
+#: Monthly multipliers, all 1.0 — no seasonal signal is claimed until a city's own flow
+#: record supplies one (structure first, numbers await evidence). Unlike the weekend
+#: slot, neutral IS the faithful placeholder here: SWMM multiplies the monthly factor in,
+#: so 1.0 leaves every month exactly as the hourly/weekend patterns shape it.
+MONTHLY_FACTORS: Sequence[float] = (1.0,) * 12
+MONTHLY_PATTERN_NAME = "DWF_MONTHLY"
+
+#: structure keyword -> (pattern name, SWMM pattern cycle, raw factors). SWMM's [DWF]
+#: line takes up to four pattern references, each applied by its own cycle; these are
+#: the three this project defines (no daily-of-week pattern — the weekend slot already
+#: carries the weekly signal municipal practice states).
+PATTERN_STRUCTURES = {
+    "hourly": (DIURNAL_PATTERN_NAME, "HOURLY", DIURNAL_FACTORS),
+    "weekend": (WEEKEND_PATTERN_NAME, "WEEKEND", WEEKEND_FACTORS),
+    "monthly": (MONTHLY_PATTERN_NAME, "MONTHLY", MONTHLY_FACTORS),
+}
+
+#: The fleet default: the single hourly pattern, exactly the pre-ticket output.
+PATTERN_STRUCTURE_DEFAULT = ("hourly",)
+
+_PATTERN_BY_NAME = {name: (cycle, factors)
+                    for name, cycle, factors in PATTERN_STRUCTURES.values()}
+
+
+def _normalised(factors: Sequence[float]) -> List[float]:
+    """Factors scaled to mean 1.0 (and rounded as written), so a pattern redistributes
+    the average day without changing its volume."""
+    mean = sum(factors) / len(factors)
+    return [round(f / mean, 4) for f in factors]
+
+
+def dwf_pattern_group(structure: Optional[Sequence[str]] = None):
+    """``[(name, cycle, factors)]`` for a pattern structure — the loading configuration
+    the writer emits verbatim. ``structure`` lists PATTERN_STRUCTURES keywords in the
+    order the [DWF] line should reference them; ``None`` is the fleet default."""
+    keys = tuple(structure) if structure else PATTERN_STRUCTURE_DEFAULT
+    unknown = [k for k in keys if k not in PATTERN_STRUCTURES]
+    if unknown:
+        raise ValueError(f"unknown DWF pattern structure element(s) {unknown!r}; "
+                         f"supported: {sorted(PATTERN_STRUCTURES)}")
+    return [(name, cycle, _normalised(factors))
+            for name, cycle, factors in (PATTERN_STRUCTURES[k] for k in keys)]
+
+
+def dwf_patterns_for(names: Sequence[str]):
+    """``[(name, cycle, factors)]`` for stamped [DWF] pattern references — the writer's
+    lookup. An unknown name fails loudly: a [DWF] line naming a pattern nobody defines
+    would parse and then multiply by nothing."""
+    out = []
+    for name in names:
+        if name not in _PATTERN_BY_NAME:
+            raise ValueError(f"unknown DWF pattern reference {name!r}; "
+                             f"known: {sorted(_PATTERN_BY_NAME)}")
+        cycle, factors = _PATTERN_BY_NAME[name]
+        out.append((name, cycle, _normalised(factors)))
+    return out
+
 
 def diurnal_pattern():
     """(name, factors) for the hourly DWF pattern. Mean is 1.0 by construction, so the
     pattern redistributes the average day without changing its volume."""
-    mean = sum(DIURNAL_FACTORS) / len(DIURNAL_FACTORS)
-    return DIURNAL_PATTERN_NAME, [round(f / mean, 4) for f in DIURNAL_FACTORS]
+    name, _, factors = dwf_pattern_group(("hourly",))[0]
+    return name, factors
 
 
 @dataclass
@@ -144,15 +211,22 @@ class LoadingResult:
     diagnostics: Dict = field(default_factory=dict)
 
 
-def load_service_areas(areas: Sequence, assumptions: Optional[DwfAssumptions] = None
-                       ) -> LoadingResult:
+def load_service_areas(areas: Sequence, assumptions: Optional[DwfAssumptions] = None,
+                       pattern_structure: Optional[Sequence[str]] = None) -> LoadingResult:
     """Attach dry-weather flow to each service area, counting the tiers used.
 
     Returns new areas (the inputs are frozen) plus diagnostics that answer, for the build as
     a whole: how much flow, from what evidence, under which coefficient, and how much of it
     rests on an assumed density rather than a count.
+
+    ``pattern_structure`` is the DWF pattern group this loading run configures (ticket 10):
+    a sequence of :data:`PATTERN_STRUCTURES` keywords, ``None`` for the fleet default
+    single hourly pattern. The stamped ``dwf_pattern`` lists the group's pattern names in
+    [DWF] reference order; the writer emits exactly that.
     """
     a = assumptions or DwfAssumptions()
+    structure = tuple(pattern_structure) if pattern_structure else PATTERN_STRUCTURE_DEFAULT
+    pattern = " ".join(name for name, _, _ in dwf_pattern_group(structure))
     tiers: Dict[str, int] = {t.value: 0 for t in LoadingTier}
     out, total_lps, total_people = [], 0.0, 0.0
 
@@ -164,12 +238,13 @@ def load_service_areas(areas: Sequence, assumptions: Optional[DwfAssumptions] = 
         total_people += est.people
         out.append(replace(area, population=round(est.people, 1),
                            dwf_lps=round(flow, 5),
-                           dwf_pattern=DIURNAL_PATTERN_NAME,
+                           dwf_pattern=pattern,
                            loading_source=a.source))
 
     estimated = tiers[LoadingTier.AREA_DENSITY.value]
     return LoadingResult(out, {
         "n_service_areas": len(out),
+        "dwf_pattern_structure": list(structure),
         "population_tiers": tiers,
         "pct_on_assumed_density": round(100.0 * estimated / len(out), 1) if out else 0.0,
         "total_population": round(total_people),

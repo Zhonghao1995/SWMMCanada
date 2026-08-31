@@ -191,10 +191,10 @@ class TestFollowedPracticeBuild:
         block = prov["municipal_practice"]
         assert block["follow_municipal_practice"] is True
         assert block["consumed"] == ["infiltration_method", "ga_ksat_halved",
-                                     "ga_imd_antecedent", "surface_parameters"]
+                                     "ga_imd_antecedent", "surface_parameters",
+                                     "dwf_pattern_structure"]
         assert block["information_only"] == ["modelling_platform",
-                                             "design_imperviousness",
-                                             "dwf_pattern_structure"]
+                                             "design_imperviousness"]
 
 
 class TestDefaultsUntouched:
@@ -209,6 +209,66 @@ class TestDefaultsUntouched:
         assert captured["config"].infiltration is InfiltrationModel.HORTON
         assert captured["extra_provenance"]["ga_antecedent"] == "dry"
         assert captured["extra_provenance"]["municipal_practice"]["consumed"] == []
+
+
+class TestDwfPatternStructureFollowsThePractice:
+    """Ticket 10: the registered DWF pattern structure configures the loading layer's
+    pattern group under follow; a build that does not follow keeps the single hourly
+    default. The sanitary fetch is a fixture and service-area derivation is stubbed —
+    the loading call and its stamps/diagnostics are the real thing under test."""
+
+    def _sanitary_spec(self):
+        san = NetworkIn(
+            junctions=[JunctionIn("M1", 5.0, -123.3670, 48.4230, system="sanitary")],
+            outfalls=[OutfallIn("WWTP", 4.0, -123.3665, 48.4240, system="sanitary")],
+            conduits=[ConduitIn("SC1", "M1", "WWTP", 80.0, system="sanitary")])
+        net = _network()
+        return CitySpec(
+            key="vancouver", label="Vancouver fixture",
+            coverage=(-123.37, 48.42, -123.36, 48.43), sub_crs="EPSG:32610",
+            network_source="synthetic fixture",
+            storm=lambda bbox, client: base.NetworkResult(network=net),
+            land=lambda bbox, client: {},
+            sanitary=lambda bbox, client: base.NetworkResult(network=san))
+
+    @pytest.mark.parametrize("follow,stamp,structure", [
+        (True, "DWF_MONTHLY DWF_DIURNAL DWF_WEEKEND", ["monthly", "hourly", "weekend"]),
+        (False, "DWF_DIURNAL", ["hourly"]),
+    ])
+    def test_the_loaded_areas_carry_the_structure(self, tmp_path, monkeypatch,
+                                                  follow, stamp, structure):
+        from swmmcanada import pipeline
+        from swmmcanada.build.models import SewerServiceArea
+
+        dem, landcover, soil = _fixture_layers(tmp_path)
+        captured = {}
+
+        def fake_finish(ws, aoi, network, subcatchments, **kw):
+            captured.update(kw)
+            return "BUILT"
+
+        monkeypatch.setattr(pipeline, "_finish_build", fake_finish)
+        monkeypatch.setattr(pipeline, "fetch_street_graph",
+                            lambda bbox: (_ for _ in ()).throw(RuntimeError("offline")))
+        monkeypatch.setattr(pipeline, "acquire_dem", lambda *a, **k: dem)
+        monkeypatch.setattr(pipeline, "acquire_landcover", lambda *a, **k: landcover)
+        monkeypatch.setattr(pipeline, "_acquire_soil_auto", lambda *a, **k: soil)
+        monkeypatch.setattr(
+            pipeline, "derive_service_areas",
+            lambda *a, **k: ([SewerServiceArea("SSA_1", "SAN_M1", 2.0, population=100.0)],
+                             {"seeded_on": "stub"}))
+
+        result = pipeline.build_city(
+            self._sanitary_spec(), _aoi(), date(2020, 6, 1), date(2020, 6, 2),
+            tmp_path / "ws", subcatchment_method="junction", derive=True,
+            follow_municipal_practice=follow)
+        assert result == "BUILT"
+
+        areas = captured["service_areas"]
+        assert areas and all(a.dwf_pattern == stamp for a in areas)
+        # The per-build record (provenance/ASSUMPTIONS): which structure THIS build used.
+        san_block = captured["extra_provenance"]["sanitary"]
+        assert san_block["service_areas"]["dwf_pattern_structure"] == structure
 
 
 class TestGaAntecedentStandsAlone:

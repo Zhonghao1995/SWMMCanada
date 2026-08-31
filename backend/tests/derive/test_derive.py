@@ -239,3 +239,50 @@ def test_ga_antecedent_unknown_spelling_raises(tmp_path):
     dem_path, landcover, soil = _make_fixtures(tmp_path)
     with pytest.raises(ValueError, match="antecedent"):
         derive_parameters([_one_sub()], dem_path, landcover, soil, ga_antecedent="wet")
+
+
+# --- land-cover built-up share per cell (ticket 13: imperviousness cross-check input) ----
+
+
+def test_derive_stamps_the_built_up_share(tmp_path):
+    """The all-urban fixture (NALCMS class 17) is 100% built — the cross-check's coarse
+    signal, computed from the raster the build is already pulling."""
+    dem_path, landcover, soil = _make_fixtures(tmp_path)
+    got = derive_parameters([_one_sub()], dem_path, landcover, soil)[0]
+    assert got.landcover_built_pct == approx_pct(100.0)
+
+
+def test_built_share_reads_the_built_category_not_just_any_land(tmp_path):
+    """Left half urban (17), right half forest (1): a cell spanning both is ~half built."""
+    left, bottom, right, top, width, height, transform = _grid()
+    lc = np.full((height, width), 1, dtype="uint8")          # forest
+    lc[:, : width // 2] = URBAN_CLASS                        # west half built
+    lc_path = tmp_path / "landcover_mixed.tif"
+    _write_raster(lc_path, lc, transform, "uint8")
+    landcover = LandcoverResult(raster_path=lc_path, crs="EPSG:3979",
+                                legend=dict(DEFAULT_NALCMS_LEGEND),
+                                impervious=dict(DEFAULT_NALCMS_IMPERVIOUS))
+    dem_path, _lc, soil = _make_fixtures(tmp_path)
+    sub = SurfaceCatchment(name="S1", outlet_node="J1", area_ha=1.0, pct_imperv=99.0,
+                           width_m=50.0, pct_slope=99.0, cn=99.0,
+                           polygon=_polygon_4326(0.1, 0.1, 0.9, 0.9))
+    got = derive_parameters([sub], dem_path, landcover, soil)[0]
+    assert got.landcover_built_pct == pytest.approx(50.0, abs=5.0)
+
+
+def test_no_polygon_and_no_overlap_leave_the_signal_absent(tmp_path):
+    """No raster read means no signal — None, never a fabricated number, so the
+    cross-check can declare a skip instead of judging on air."""
+    dem_path, landcover, soil = _make_fixtures(tmp_path)
+    no_poly = SurfaceCatchment(name="S_no_poly", outlet_node="J9", area_ha=2.0,
+                               pct_imperv=42.0, width_m=70.0, pct_slope=3.0, cn=80.0,
+                               polygon=None)
+    assert derive_parameters([no_poly], dem_path, landcover, soil)[0].landcover_built_pct is None
+
+    left, bottom, right, top, _w, _h, _t = _grid()
+    dx, dy = (right - left) + 10_000.0, (top - bottom) + 10_000.0
+    ring = [tuple(_to_4326(x + dx, y + dy)) for x, y in
+            [(left, bottom), (right, bottom), (right, top), (left, top), (left, bottom)]]
+    far = SurfaceCatchment(name="S_far", outlet_node="J7", area_ha=1.0, pct_imperv=33.0,
+                           width_m=40.0, pct_slope=2.5, cn=70.0, polygon=ring)
+    assert derive_parameters([far], dem_path, landcover, soil)[0].landcover_built_pct is None
