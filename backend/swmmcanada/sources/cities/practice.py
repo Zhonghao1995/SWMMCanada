@@ -23,12 +23,13 @@ Three rules keep it honest:
     fake sources, e.g. ``"example municipal correspondence, 2026-01"``.
 
 Consumers (this version): the build's provenance/ASSUMPTIONS block
-(:func:`practice_provenance`), the frontend's one-line hint (:func:`practice_note`), and
-the pipeline's ``follow_municipal_practice`` option, which consumes the registered
-method / GA-convention / surface-parameter items through
-:func:`practice_build_overrides`. The design-imperviousness table and the DWF pattern
-structure have no build consumer yet and stay information-only — the per-build block
-says so instead of letting them read as applied.
+(:func:`practice_provenance`), the frontend's one-line hint (:func:`practice_note`), the
+pipeline's ``follow_municipal_practice`` option, which consumes the registered method /
+GA-convention / surface-parameter / DWF-pattern-structure items through
+:func:`practice_build_overrides`, and validation's imperviousness cross-check, which
+reads the design-imperviousness table as a comparison yardstick only. The design table
+has no BUILD consumer (no land-use classifier yet) and stays information-only in the
+per-build block — the cross-check measures, it never applies.
 """
 from dataclasses import dataclass, fields
 from typing import Any, Dict, List, Optional
@@ -105,8 +106,8 @@ MUNICIPAL_PRACTICE: Dict[str, MunicipalPractice] = {
             "n_imperv": 0.018, "n_perv": 0.41,
             "s_imperv_mm": 1.25, "s_perv_mm": 2.5, "pct_zero": 0.0}),
         # Design (planning-table) imperviousness by land-use category, percent. No build
-        # consumer yet (no land-use classifier) — information-only, on record for the
-        # cross-check and the future design-table mode.
+        # consumer (no land-use classifier) — validation's imperviousness cross-check
+        # reads it as a yardstick; the future design-table mode would be the applier.
         design_imperviousness=_aggregate_item({
             "single_family": 55.0, "townhouse_multiplex": 70.0, "arterial_row": 80.0,
             "commercial_high": 90.0, "park_green": 5.0}),
@@ -164,13 +165,15 @@ def practice_note(city_key: Optional[str]) -> Optional[str]:
 
 
 #: The stated fields a follow build actually consumes (this version): the infiltration
-#: method switch, the two Green-Ampt conventions, and the surface parameter set. The
-#: design-imperviousness table (no land-use classifier yet) and the DWF pattern
-#: structure (no multi-pattern consumer ticket yet) stay information-only. ONE tuple
-#: feeds both the application (:func:`practice_build_overrides`) and the record
-#: (:func:`practice_provenance`), so what a build does and what it says cannot drift.
+#: method switch, the two Green-Ampt conventions, the surface parameter set, and the
+#: DWF pattern structure (ticket 10 — it configures the loading layer's pattern group).
+#: The design-imperviousness table stays information-only for the BUILD (no land-use
+#: classifier yet); validation reads it for the imperviousness cross-check, which
+#: measures and never changes parameters. ONE tuple feeds both the application
+#: (:func:`practice_build_overrides`) and the record (:func:`practice_provenance`),
+#: so what a build does and what it says cannot drift.
 _CONSUMED_FIELDS = ("infiltration_method", "ga_ksat_halved", "ga_imd_antecedent",
-                    "surface_parameters")
+                    "surface_parameters", "dwf_pattern_structure")
 
 
 def practice_build_overrides(practice: Optional[MunicipalPractice]) -> dict:
@@ -178,12 +181,14 @@ def practice_build_overrides(practice: Optional[MunicipalPractice]) -> dict:
     consumable fields (``_CONSUMED_FIELDS``).
 
     Returns ``infiltration`` / ``ga_antecedent`` (stated values to switch to, or None),
-    ``ga_ksat_scale`` (multiplier on the derived Ksat) and ``surface_parameters``
-    (``SurfaceCatchment`` field overrides, or None). Callers pass the practice only when
-    following was selected; ``None`` (no record, or not following) overrides nothing.
+    ``ga_ksat_scale`` (multiplier on the derived Ksat), ``surface_parameters``
+    (``SurfaceCatchment`` field overrides, or None) and ``dwf_pattern_structure`` (the
+    loading layer's DWF pattern group, or None for the fleet default). Callers pass the
+    practice only when following was selected; ``None`` (no record, or not following)
+    overrides nothing.
     """
     out: dict = {"infiltration": None, "ga_antecedent": None, "ga_ksat_scale": 1.0,
-                 "surface_parameters": None}
+                 "surface_parameters": None, "dwf_pattern_structure": None}
     if practice is None:
         return out
     if practice.infiltration_method is not None:
@@ -198,6 +203,8 @@ def practice_build_overrides(practice: Optional[MunicipalPractice]) -> dict:
         out["ga_ksat_scale"] = 2.0
     if practice.surface_parameters is not None:
         out["surface_parameters"] = dict(practice.surface_parameters.value)
+    if practice.dwf_pattern_structure is not None:
+        out["dwf_pattern_structure"] = list(practice.dwf_pattern_structure.value)
     return out
 
 

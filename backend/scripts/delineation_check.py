@@ -14,6 +14,11 @@ Coverage is measured against the EFFECTIVE AOI (AOI ∩ served − water), the s
 the validator uses: open water and land outside the street service corridor are legitimately
 uncovered, and comparing against the raw AOI reads those as defects.
 
+The imperviousness cross-check (ticket 13) rides along on the same reasoning: it is
+WARNING-severity too, so its physical-vs-built-share deviation (impΔmed, points) and its
+disagreeing-cell count (imp>thr) are printed rather than left inside validation.json;
+"—" means the check declared a skip (no land-cover signal on any cell).
+
 Live data. Cities go down; a row saying so is a result, not a failure of this script.
 """
 import argparse
@@ -37,7 +42,7 @@ SAMPLES = {
     "london": (-81.250, 42.980, -81.235, 42.992),
 }
 
-WATCH = ("aoi_coverage", "area_conservation")
+WATCH = ("aoi_coverage", "area_conservation", "imperviousness_agreement")
 
 
 def _aoi(b):
@@ -52,6 +57,7 @@ def check(city, bbox):
         report = json.loads((Path(d) / "validation.json").read_text())
     areas = sorted(s.area_ha for s in subs if s.area_ha)
     watched = {c["id"]: c for c in report["checks"] if c["id"] in WATCH}
+    imperv = watched.get("imperviousness_agreement", {}).get("metrics", {})
     return {
         # Which method actually ran matters as much as the numbers: when Overpass is
         # unreachable the frontage split is unavailable and the plan falls back, and a table
@@ -64,6 +70,11 @@ def check(city, bbox):
             "uncovered_fraction", float("nan")),
         "conservation": watched.get("area_conservation", {}).get("metrics", {}).get(
             "fraction", float("nan")),
+        # Imperviousness cross-check numbers (ticket 13): median physical-minus-built
+        # deviation in points and the disagreeing-cell count; None when the check
+        # declared a skip (no land-cover signal).
+        "imperv_dev_med": imperv.get("deviation_pts_median"),
+        "imperv_over": imperv.get("n_over_threshold"),
         "failing": [c["id"] for c in report["checks"] if not c["passed"]],
     }
 
@@ -80,19 +91,22 @@ def main(argv=None):
         ap.error(f"no sample AOI for {unknown}; known: {', '.join(SAMPLES)}")
 
     print(f"{'city':10} {'method':26} {'cells':>6} {'median ha':>10} {'uncovered':>10} "
-          f"{'|Σ−AOI|':>9}  failing checks")
+          f"{'|Σ−AOI|':>9} {'impΔmed':>8} {'imp>thr':>7}  failing checks")
     worst = 0
     for city in cities:
         try:
             r = check(city, SAMPLES[city])
         except Exception as e:                       # a portal being down is a row, not a stop
-            print(f"{city:10} {'—':26} {'—':>6} {'—':>10} {'—':>10} {'—':>9}  "
-                  f"unavailable: {type(e).__name__}: {str(e)[:60]}")
+            print(f"{city:10} {'—':26} {'—':>6} {'—':>10} {'—':>10} {'—':>9} {'—':>8} "
+                  f"{'—':>7}  unavailable: {type(e).__name__}: {str(e)[:60]}")
             continue
         worst = max(worst, len(r["failing"]))
+        dev = ("—" if r["imperv_dev_med"] is None       # skipped: no land-cover signal
+               else f"{r['imperv_dev_med']:+.1f}")
+        over = "—" if r["imperv_over"] is None else str(r["imperv_over"])
         print(f"{city:10} {r['method'][:26]:26} {r['n']:6d} {r['median_ha']:10.3f} "
-              f"{r['uncovered']*100:9.1f}% {r['conservation']*100:8.1f}%  "
-              f"{', '.join(r['failing']) if r['failing'] else 'none'}")
+              f"{r['uncovered']*100:9.1f}% {r['conservation']*100:8.1f}% {dev:>8} "
+              f"{over:>7}  {', '.join(r['failing']) if r['failing'] else 'none'}")
     return 1 if worst else 0
 
 

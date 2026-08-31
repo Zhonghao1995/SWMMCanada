@@ -108,11 +108,11 @@ def _infiltration_kwargs(infiltration) -> dict:
 
 def _validate_or_raise(network, subcatchments, aoi, method: MethodDescriptor, ws: Path,
                        delineation: Optional[dict] = None, forcing: Optional[dict] = None,
-                       water=None, served=None):
+                       water=None, served=None, city_key=None):
     """Validate the subcatchment model, always write validation.json into the package, and
     raise (stopping the build) if any error-severity check fails — so no untrusted .inp ships."""
     report = validate_model(network, subcatchments, aoi, method=method, delineation=delineation,
-                            forcing=forcing, water=water, served=served)
+                            forcing=forcing, water=water, served=served, city_key=city_key)
     (Path(ws) / vschema.VALIDATION_JSON).write_text(json.dumps(report.to_dict(), indent=2))
     if not report.ok:
         detail = "; ".join(f"{c.id}: {c.message}" for c in report.errors)
@@ -419,8 +419,11 @@ def _finish_build(
                                          "outfalls stay FREE"}
 
     _r("VALIDATING", 85)
+    # extra_provenance carries "city" only on the real-network pathway — exactly the
+    # scoping the cross-check's municipal leg wants (synthesis has no registered table).
     _validate_or_raise(network, subcatchments, aoi, method, ws, delineation=sub_diag,
-                       forcing=forcing or None, water=water, served=served)
+                       forcing=forcing or None, water=water, served=served,
+                       city_key=extra_provenance.get("city"))
 
     _r("BUILDING", 90)
     # Datastore is the PRIMARY build path (ADR 0007): write it, then build the .inp from it.
@@ -1087,7 +1090,11 @@ def build_city(
                 filter_system(network, "sanitary"), land.get("parcels") or [], aoi,
                 laterals=land.get("sanitary_laterals") or land.get("laterals"),
                 crs=spec.sub_crs, buildings=land.get("buildings"))
-            loaded = load_service_areas(service_areas)
+            # Ticket 10: a followed practice's stated DWF pattern structure configures
+            # the loading layer's pattern group; None keeps the single hourly default.
+            loaded = load_service_areas(
+                service_areas,
+                pattern_structure=practice_overrides["dwf_pattern_structure"])
             service_areas = loaded.areas
             san_diag["service_areas"] = {**sa_diag, **loaded.diagnostics}
         except Exception as exc:  # noqa: BLE001 — additive system, degrade with a note
@@ -1110,7 +1117,10 @@ def build_city(
                 filter_system(network, "combined"), land.get("parcels") or [], aoi,
                 laterals=land.get("sanitary_laterals") or land.get("laterals"),
                 crs=spec.sub_crs, system="combined", buildings=land.get("buildings"))
-            comb_loaded = load_service_areas(comb_areas)
+            # Same loading configuration as the sanitary leg: one build, one pattern
+            # group (the writer refuses a split).
+            comb_loaded = load_service_areas(
+                comb_areas, pattern_structure=practice_overrides["dwf_pattern_structure"])
             service_areas = list(service_areas) + comb_loaded.areas
             comb_diag = {"included": True,
                          "service_areas": {**csa_diag, **comb_loaded.diagnostics}}

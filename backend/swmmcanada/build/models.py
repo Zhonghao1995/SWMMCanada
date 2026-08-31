@@ -95,6 +95,11 @@ class SurfaceCatchment:
     ga_psi_mm: float = 88.9
     ga_ksat_mm_h: float = 6.6
     ga_imd: float = 0.434
+    # Land-cover built-up share of the cell, percent (ticket 13) — the coarse raster
+    # signal validation's imperviousness cross-check compares pct_imperv against. A
+    # derive diagnostic, never written to the .inp; None = no raster read (no derive,
+    # no polygon, or no overlap), so the check can declare a skip instead of judging.
+    landcover_built_pct: Optional[float] = None
 
 
 @dataclass(frozen=True)

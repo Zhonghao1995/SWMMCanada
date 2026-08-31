@@ -100,8 +100,13 @@ def validate_model(
     forcing: Optional[dict] = None,
     water=None,
     served=None,
+    city_key: Optional[str] = None,
 ) -> ValidationReport:
-    """Run every check against the assembled model and return a structured report."""
+    """Run every check against the assembled model and return a structured report.
+
+    ``city_key`` names the registered city this model was built for (None for
+    synthesis): the imperviousness cross-check reads that city's design table as its
+    municipal yardstick, and declares the leg unavailable otherwise."""
     all_nodes = list(network.junctions) + list(network.outfalls)
     # Outlet resolution may target any node; coverage/distance diagnostics are a STORM
     # question — a sanitary manhole not covered by a (storm) subcatchment is not a gap
@@ -127,6 +132,11 @@ def validate_model(
     # Network inverts — the adverse/back-filled-invert data-quality signal, surfaced
     # before the engine run instead of in the .rpt (issue #77).
     results.append(C.check_invert_consistency(network))
+
+    # Imperviousness cross-check (ticket 13): physical vs land-cover built share vs the
+    # municipal design table, measured and reported every build; declares its own skip
+    # when the signals are absent.
+    results.append(C.check_imperviousness_agreement(subcatchments, city_key=city_key))
 
     # Geometric — operate on cells that carry a polygon; flag the ones that don't.
     results.append(C.check_geometry_absent(subcatchments))

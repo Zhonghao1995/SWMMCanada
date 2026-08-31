@@ -217,10 +217,10 @@ class TestBuildAssumptionsBlock:
         block = practice_provenance("synthville", follow=True)
         assert block["follow_municipal_practice"] is True
         assert block["consumed"] == ["infiltration_method", "ga_ksat_halved",
-                                     "ga_imd_antecedent", "surface_parameters"]
+                                     "ga_imd_antecedent", "surface_parameters",
+                                     "dwf_pattern_structure"]
         assert block["information_only"] == ["modelling_platform",
-                                             "design_imperviousness",
-                                             "dwf_pattern_structure"]
+                                             "design_imperviousness"]
         assert "information-only" in block["note"]
         assert "not implemented" not in block["note"]
 
@@ -247,7 +247,7 @@ class TestPracticeBuildOverrides:
     def test_no_practice_overrides_nothing(self):
         assert practice_build_overrides(None) == {
             "infiltration": None, "ga_antecedent": None, "ga_ksat_scale": 1.0,
-            "surface_parameters": None}
+            "surface_parameters": None, "dwf_pattern_structure": None}
 
     def test_a_full_record_yields_every_consumable(self):
         got = practice_build_overrides(_synthetic_entry())
@@ -255,6 +255,7 @@ class TestPracticeBuildOverrides:
         assert got["ga_antecedent"] == "field_capacity"
         assert got["ga_ksat_scale"] == 2.0     # stated unhalved -> x2 back to the source table
         assert got["surface_parameters"]["n_imperv"] == 0.015
+        assert got["dwf_pattern_structure"] == ["hourly", "weekend", "monthly"]
 
     def test_a_city_that_halves_like_the_fleet_keeps_the_table_value(self):
         entry = MunicipalPractice(
@@ -266,7 +267,7 @@ class TestPracticeBuildOverrides:
             modelling_platform=PracticeItem("Example Hydraulic Suite", FAKE_SOURCE, "2026-01"))
         assert practice_build_overrides(entry) == {
             "infiltration": None, "ga_antecedent": None, "ga_ksat_scale": 1.0,
-            "surface_parameters": None}
+            "surface_parameters": None, "dwf_pattern_structure": None}
 
 
 class TestBuildCityWiresTheBlockIntoProvenance:

@@ -89,6 +89,22 @@ class TestReachesTheModel:
         txt = (tmp_path / "out" / result.inp_path.name).read_text()
         assert "[DWF]" in txt and "SAN_M1" in txt
 
+    def test_a_three_pattern_stamp_survives_and_reaches_the_inp(self, tmp_path):
+        """Ticket 10 makes `dwf_pattern` truly build-consumed (the writer emits the
+        stamped group), so the parity invariant now covers the multi-name stamp too."""
+        loaded = load_service_areas(
+            [SewerServiceArea(name="SSA_1", node="SAN_M1", area_ha=2.0, polygon=RING,
+                              population=200.0)],
+            pattern_structure=("monthly", "hourly", "weekend"))
+        path = _write(tmp_path, loaded.areas)
+        back = read_datastore(path).service_areas[0]
+        assert back.dwf_pattern == "DWF_MONTHLY DWF_DIURNAL DWF_WEEKEND"
+        result = build_from_datastore(path, tmp_path / "out")
+        txt = (tmp_path / "out" / result.inp_path.name).read_text()
+        assert "DWF_MONTHLY MONTHLY" in txt and "DWF_WEEKEND WEEKEND" in txt
+        dwf_line = next(l for l in txt.splitlines() if l.startswith("SAN_M1 FLOW"))
+        assert dwf_line.split()[3:] == ["DWF_MONTHLY", "DWF_DIURNAL", "DWF_WEEKEND"]
+
     def test_a_storm_only_datastore_gets_no_dwf_section(self, tmp_path):
         path = _write(tmp_path, [])
         result = build_from_datastore(path, tmp_path / "out")

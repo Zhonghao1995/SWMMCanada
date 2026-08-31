@@ -432,6 +432,13 @@ influent replaces it.
 - **Diurnal pattern** — a standard municipal 24-hour shape (overnight minimum ~0.28,
   morning peak ~1.61), mean exactly 1.0 so it redistributes the average day without
   changing its volume. A handbook shape until a city's own flow record replaces it.
+- **Pattern structure** — the default is that single hourly pattern. A city whose
+  registered practice states a monthly + hourly + weekend structure gets all three
+  SWMM pattern slots under "follow municipal practice", and every build's provenance
+  records the structure it used. The first version is structure-first: the weekend
+  slot reuses the weekday shape and the monthly factors are all 1.0 (each pattern's
+  mean stays 1.0), so opting in changes the model's structure, not its numbers, until
+  measured weekend/seasonal curves replace the placeholders.
 
 **Population is estimated on a ladder, and which rung answered is recorded**: published
 population → dwelling count × household size → area × assumed density. An area resting on
