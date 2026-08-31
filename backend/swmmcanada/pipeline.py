@@ -56,6 +56,7 @@ from swmmcanada.sources.streets_osm import (
     fetch_building_footprints, fetch_street_graph, sample_elevations,
 )
 from swmmcanada.sources.cities import base
+from swmmcanada.sources.cities.practice import practice_provenance
 from swmmcanada.sources.cities.registry import CitySpec, city_for_point, city_spec
 
 
@@ -478,6 +479,10 @@ def build_from_aoi(
     soil_source=None,
     infiltration=None,
     design_storm=None,
+    # Spec §G2: accepted for interface symmetry with build_city (same reasoning as
+    # `systems` above). Synthesis has no city, so there is never a practice record to
+    # follow; the request is recorded honestly rather than erroring or vanishing.
+    follow_municipal_practice: bool = False,
     report=None,
 ) -> BuildResult:
     def _r(stage: str, pct: int):
@@ -585,6 +590,9 @@ def build_from_aoi(
             },
             "subcatchment_diagnostics": sub_diag,
             "pipe_sizing": sizing_diag,
+            # Spec §G2: which municipal-practice items this build had on record (none on
+            # the synthesis pathway — there is no city) and whether following was asked.
+            "municipal_practice": practice_provenance(None, follow=follow_municipal_practice),
         },
         climate_client=climate_client, climate_buffer_deg=climate_buffer_deg, report=report,
         sub_diag=sub_diag, dem=dem, water=water, served=None, design_storm=design_storm,
@@ -824,7 +832,13 @@ def build_city(
     client=None,
     dem_source=None, climate_client=None, climate_buffer_deg: float = 0.3, derive: bool = True,
     landcover_source=None, soil_source=None, subcatchment_method: str = "parcel",
-    infiltration=None, design_storm=None, report=None, systems=None,
+    infiltration=None, design_storm=None,
+    #: Spec §G2 wiring stub: record the request to follow this city's registered
+    #: municipal practice. It moves no parameter yet (that consumption lands in later
+    #: tickets) — the flag and the record travel through provenance so every build says
+    #: which conventions it had on hand and what it did about them.
+    follow_municipal_practice: bool = False,
+    report=None, systems=None,
     #: A subcatchment layer the user uploaded (GeoJSON features). Resolver priority 0 —
     #: their boundaries override every method here, because every choice this module makes
     #: is a judgement call and theirs is the one with local knowledge behind it.
@@ -1027,6 +1041,11 @@ def build_city(
             "official_outlet_agreement": _outlet_agreement_provenance(
                 spec, bbox, client, subcatchments, network),
             "sanitary": san_diag,
+            # Spec §G2: the practice inventory for THIS city — which registered items the
+            # build had on record, and whether the user asked to follow them. Defaults are
+            # untouched either way; the block says so explicitly.
+            "municipal_practice": practice_provenance(
+                spec.key, follow=follow_municipal_practice),
         },
         climate_client=climate_client, climate_buffer_deg=climate_buffer_deg, report=report,
         sub_diag=sub_diag, dem=dem, water=water, design_storm=design_storm, network_kind="city",
