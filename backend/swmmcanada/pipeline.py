@@ -56,7 +56,11 @@ from swmmcanada.sources.streets_osm import (
     fetch_building_footprints, fetch_street_graph, sample_elevations,
 )
 from swmmcanada.sources.cities import base
-from swmmcanada.sources.cities.practice import practice_provenance
+from swmmcanada.sources.cities.practice import (
+    municipal_practice,
+    practice_build_overrides,
+    practice_provenance,
+)
 from swmmcanada.sources.cities.registry import CitySpec, city_for_point, city_spec
 
 
@@ -487,6 +491,10 @@ def build_from_aoi(
     # `systems` above). Synthesis has no city, so there is never a practice record to
     # follow; the request is recorded honestly rather than erroring or vanishing.
     follow_municipal_practice: bool = False,
+    # Spec §G4: Green-Ampt IMD antecedent convention. None/"dry" keeps the table's
+    # theta_e (the fleet default, bit-for-bit); "field_capacity" derives theta_e -
+    # theta_fc. Applies to the GA parameter superset derive stores.
+    ga_antecedent=None,
     report=None,
 ) -> BuildResult:
     def _r(stage: str, pct: int):
@@ -555,7 +563,8 @@ def build_from_aoi(
         _r("SOIL", 62)
         soil = _acquire_soil_auto(tuple(aoi.bbox), ws, soil_source)
         _r("DERIVE", 70)
-        subcatchments = derive_parameters(subcatchments, dem.path, landcover, soil)
+        subcatchments = derive_parameters(subcatchments, dem.path, landcover, soil,
+                                          ga_antecedent=ga_antecedent or "dry")
         # Physical imperviousness (ADR 0023 cut 1, #138): mapped roofs + road band replace
         # the 30 m land-cover mean wherever buildings are actually mapped; unmapped cells
         # keep the raster value. Buildings are additive — failure means fallback, not a
@@ -594,6 +603,8 @@ def build_from_aoi(
             },
             "subcatchment_diagnostics": sub_diag,
             "pipe_sizing": sizing_diag,
+            # Spec §G4: the IMD antecedent convention the GA parameter superset used.
+            "ga_antecedent": ga_antecedent or "dry",
             # Spec §G2: which municipal-practice items this build had on record (none on
             # the synthesis pathway — there is no city) and whether following was asked.
             "municipal_practice": practice_provenance(None, follow=follow_municipal_practice),
@@ -847,11 +858,16 @@ def build_city(
     #: unmet request; anything else is a caller override straight to nearest-node.
     subcatchment_method: str = "parcel",
     infiltration=None, design_storm=None,
-    #: Spec §G2 wiring stub: record the request to follow this city's registered
-    #: municipal practice. It moves no parameter yet (that consumption lands in later
-    #: tickets) — the flag and the record travel through provenance so every build says
-    #: which conventions it had on hand and what it did about them.
+    #: Spec §G2: follow this city's registered municipal practice. Where the record
+    #: states a convention the build can consume (infiltration method, GA conventions,
+    #: surface parameter set), it generates the parameters for THIS build; everything
+    #: else stated stays information-only. Fleet defaults are untouched for every build
+    #: that does not select it, and provenance lists consumed vs information-only.
     follow_municipal_practice: bool = False,
+    #: Spec §G4: Green-Ampt IMD antecedent convention. None/"dry" keeps the table's
+    #: theta_e (the fleet default, bit-for-bit); "field_capacity" derives theta_e -
+    #: theta_fc. A registered practice's stated antecedent wins this knob under follow.
+    ga_antecedent=None,
     report=None, systems=None,
     #: A subcatchment layer the user uploaded (GeoJSON features). Resolver priority 0 —
     #: their boundaries override every method here, because every choice this module makes
@@ -865,6 +881,19 @@ def build_city(
     city-agnostic. ``client`` is passed to the spec's fetchers (tests inject fixtures here)."""
     spec: CitySpec = city_spec(city) if isinstance(city, str) else city
     bbox = tuple(aoi.bbox)
+
+    # "Follow municipal practice" consumption (spec §G2/§V4): where the registered
+    # record states a convention, it wins that knob — the option means "build it the
+    # way this city models it", and the frontend always posts an infiltration choice,
+    # so a caller-wins precedence would leave the option permanently dead through the
+    # UI. Resolution touches this call's locals only; fleet defaults stay untouched for
+    # every build that does not select it.
+    practice_overrides = practice_build_overrides(
+        municipal_practice(spec.key) if follow_municipal_practice else None)
+    if practice_overrides["infiltration"] is not None:
+        infiltration = practice_overrides["infiltration"]
+    if practice_overrides["ga_antecedent"] is not None:
+        ga_antecedent = practice_overrides["ga_antecedent"]
 
     def _r(stage: str, pct: int):
         if report:
@@ -1001,12 +1030,27 @@ def build_city(
             landcover = acquire_landcover(tuple(aoi.bbox), ws, source=landcover_source or NRCanLandcoverSource())
         soil = _acquire_soil_auto(tuple(aoi.bbox), ws, soil_source)
         _r("DERIVE", 70)
-        subcatchments = derive_parameters(subcatchments, dem.path, landcover, soil)
+        subcatchments = derive_parameters(subcatchments, dem.path, landcover, soil,
+                                          ga_antecedent=ga_antecedent or "dry")
         if imperv_map:  # restore parcel/building imperviousness (derive overwrote it)
             subcatchments = [
                 replace(s, pct_imperv=imperv_map[s.name]) if s.name in imperv_map else s
                 for s in subcatchments
             ]
+
+    # Followed-practice parameter transforms (spec §V4): the stated "Ksat not halved"
+    # convention recovers the source-table value from the halved fleet table (x2 — see
+    # practice_build_overrides), and the stated surface set replaces the fleet SUBAREAS
+    # defaults. Plain field transforms, applied with or without derive; both are no-ops
+    # unless follow_municipal_practice found a record stating them.
+    if practice_overrides["ga_ksat_scale"] != 1.0:
+        subcatchments = [
+            replace(s, ga_ksat_mm_h=s.ga_ksat_mm_h * practice_overrides["ga_ksat_scale"])
+            for s in subcatchments
+        ]
+    if practice_overrides["surface_parameters"]:
+        subcatchments = [replace(s, **practice_overrides["surface_parameters"])
+                         for s in subcatchments]
 
     # Sanitary tracer (ADR 0011): where the city publishes a sanitary layer, graft it in
     # as a tagged, disconnected subgraph — AFTER subcatchments (they are storm-seeded) and
@@ -1090,9 +1134,12 @@ def build_city(
                 spec, bbox, client, subcatchments, network),
             "sanitary": san_diag,
             "combined": comb_diag,
-            # Spec §G2: the practice inventory for THIS city — which registered items the
-            # build had on record, and whether the user asked to follow them. Defaults are
-            # untouched either way; the block says so explicitly.
+            # Spec §G4: the IMD antecedent convention the GA parameter superset used
+            # (a followed practice's stated antecedent already resolved into this).
+            "ga_antecedent": ga_antecedent or "dry",
+            # Spec §G2: the practice inventory for THIS city — which registered items
+            # this build consumed (only under "follow") and which it merely had on
+            # record; the block separates the two explicitly.
             "municipal_practice": practice_provenance(
                 spec.key, follow=follow_municipal_practice),
         },

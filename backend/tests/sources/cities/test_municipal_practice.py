@@ -5,13 +5,16 @@ Two behaviours matter more than the table itself:
 
   * an unregistered city answers "no practice record" (None), never a default dressed up
     as one — a fabricated record would poison every consumer downstream;
-  * registration changes NOTHING by itself. The anti-extrapolation guardrails below pin
-    the fleet defaults (Horton, the 2.5 m fallback depth, the halved-Ksat GA table, the
-    dry-antecedent IMD) and the default build's byte-level output against the table's
-    existence and contents.
+  * registration changes NOTHING by itself — consumption happens only behind the
+    explicit ``follow_municipal_practice`` option (build behaviour tested in
+    tests/test_follow_municipal_practice.py). The anti-extrapolation guardrails below
+    pin the fleet defaults (Horton, the 2.5 m fallback depth, the halved-Ksat GA table,
+    the dry-antecedent IMD) and the default build's byte-level output against the
+    table's existence and contents.
 
-All example entries here are synthetic — neutral fake values and sources, no real city's
-numbers (those arrive with their own evidence in their own ticket).
+Example entries here are synthetic — neutral fake values and sources. The registry's
+first REAL row (Vancouver, spec §V4) is data-tested below: aggregate values only, and
+its provenance wording names no municipal materials.
 """
 import dataclasses
 from datetime import date, datetime
@@ -21,6 +24,7 @@ from swmmcanada.sources.cities.practice import (
     MunicipalPractice,
     PracticeItem,
     municipal_practice,
+    practice_build_overrides,
     practice_items,
     practice_note,
     practice_provenance,
@@ -28,6 +32,7 @@ from swmmcanada.sources.cities.practice import (
 from swmmcanada.sources.cities.registry import CITIES
 
 FAKE_SOURCE = "example municipal correspondence, 2026-01"
+AGGREGATE_SOURCE = "municipal engineering records, 2026-08"
 
 
 def _synthetic_entry() -> MunicipalPractice:
@@ -75,6 +80,58 @@ class TestTableShape:
             for item in practice_items(entry):
                 assert str(item["source"]).strip(), (key, item["field"])
                 assert str(item["date"]).strip(), (key, item["field"])
+
+
+class TestVancouverRow:
+    """The registry's first real row (spec §V4): Vancouver's stated conventions, every
+    item under the AGGREGATE provenance wording. Confidentiality is part of the data
+    contract — public code carries aggregate values and the neutral wording only, so the
+    source string is asserted by EQUALITY, the strongest "names no materials" check."""
+
+    def entry(self) -> MunicipalPractice:
+        entry = municipal_practice("vancouver")
+        assert entry is not None, "vancouver practice row is not registered"
+        return entry
+
+    def test_all_seven_fields_are_stated(self):
+        assert {i["field"] for i in practice_items(self.entry())} == {
+            f.name for f in dataclasses.fields(MunicipalPractice)}
+
+    def test_every_item_uses_the_aggregate_wording_verbatim(self):
+        for item in practice_items(self.entry()):
+            assert item["source"] == AGGREGATE_SOURCE, item["field"]
+            assert item["date"] == "2026-08", item["field"]
+
+    def test_platform_and_infiltration_method(self):
+        entry = self.entry()
+        assert entry.modelling_platform.value == "InfoWorks ICM"
+        assert entry.infiltration_method.value == "GREEN_AMPT"
+
+    def test_green_ampt_conventions(self):
+        entry = self.entry()
+        assert entry.ga_ksat_halved.value is False
+        assert entry.ga_imd_antecedent.value == "field_capacity"
+
+    def test_surface_parameter_set(self):
+        assert self.entry().surface_parameters.value == {
+            "n_imperv": 0.018, "n_perv": 0.41,
+            "s_imperv_mm": 1.25, "s_perv_mm": 2.5, "pct_zero": 0.0}
+
+    def test_surface_parameter_keys_are_surfacecatchment_fields(self):
+        """The consumption contract: a followed surface set is applied as field
+        overrides, so every key must name a real SurfaceCatchment field."""
+        from swmmcanada.build.models import SurfaceCatchment
+
+        field_names = {f.name for f in dataclasses.fields(SurfaceCatchment)}
+        assert set(self.entry().surface_parameters.value) <= field_names
+
+    def test_design_imperviousness_table(self):
+        assert self.entry().design_imperviousness.value == {
+            "single_family": 55.0, "townhouse_multiplex": 70.0, "arterial_row": 80.0,
+            "commercial_high": 90.0, "park_green": 5.0}
+
+    def test_dwf_pattern_structure(self):
+        assert self.entry().dwf_pattern_structure.value == ["monthly", "hourly", "weekend"]
 
 
 class TestUnregisteredCitiesSayNoRecord:
@@ -152,18 +209,64 @@ class TestBuildAssumptionsBlock:
         assert all(i["source"] == FAKE_SOURCE for i in block["items"])
         assert "default" in block["note"].lower()
 
-    def test_selecting_follow_is_recorded_and_admits_it_did_nothing_yet(self, monkeypatch):
-        """The option is a wiring stub: parameter consumption lands in later tickets. An
-        ASSUMPTIONS block that let a no-op look like it worked would repeat the
-        warning-severity blindspot."""
+    def test_selecting_follow_lists_consumed_and_information_only(self, monkeypatch):
+        """Follow is real now: the block says exactly which stated items generated this
+        build's parameters and which are on record with no build consumer yet. A block
+        that blurred the two would repeat the warning-severity blindspot."""
         monkeypatch.setitem(MUNICIPAL_PRACTICE, "synthville", _synthetic_entry())
         block = practice_provenance("synthville", follow=True)
         assert block["follow_municipal_practice"] is True
-        assert "not implemented" in block["note"]
+        assert block["consumed"] == ["infiltration_method", "ga_ksat_halved",
+                                     "ga_imd_antecedent", "surface_parameters"]
+        assert block["information_only"] == ["modelling_platform",
+                                             "design_imperviousness",
+                                             "dwf_pattern_structure"]
+        assert "information-only" in block["note"]
+        assert "not implemented" not in block["note"]
+
+    def test_not_following_consumes_nothing(self, monkeypatch):
+        monkeypatch.setitem(MUNICIPAL_PRACTICE, "synthville", _synthetic_entry())
+        block = practice_provenance("synthville", follow=False)
+        assert block["consumed"] == []
+        assert block["information_only"] == [i["field"] for i in block["items"]]
+
+    def test_following_with_no_record_still_consumes_nothing(self):
+        block = practice_provenance("atlantis", follow=True)
+        assert block["consumed"] == [] and block["information_only"] == []
+        assert "no municipal practice on record" in block["note"]
 
     def test_the_synthesis_pathway_records_the_absence(self):
         block = practice_provenance(None, follow=False)
         assert block["recorded"] is False and block["items"] == []
+
+
+class TestPracticeBuildOverrides:
+    """One interpreter turns a followed practice into concrete build inputs, so the
+    pipeline's application and the ASSUMPTIONS consumed list cannot drift apart."""
+
+    def test_no_practice_overrides_nothing(self):
+        assert practice_build_overrides(None) == {
+            "infiltration": None, "ga_antecedent": None, "ga_ksat_scale": 1.0,
+            "surface_parameters": None}
+
+    def test_a_full_record_yields_every_consumable(self):
+        got = practice_build_overrides(_synthetic_entry())
+        assert got["infiltration"] == "GREEN_AMPT"
+        assert got["ga_antecedent"] == "field_capacity"
+        assert got["ga_ksat_scale"] == 2.0     # stated unhalved -> x2 back to the source table
+        assert got["surface_parameters"]["n_imperv"] == 0.015
+
+    def test_a_city_that_halves_like_the_fleet_keeps_the_table_value(self):
+        entry = MunicipalPractice(
+            ga_ksat_halved=PracticeItem(True, FAKE_SOURCE, "2026-01"))
+        assert practice_build_overrides(entry)["ga_ksat_scale"] == 1.0
+
+    def test_unstated_fields_override_nothing(self):
+        entry = MunicipalPractice(
+            modelling_platform=PracticeItem("Example Hydraulic Suite", FAKE_SOURCE, "2026-01"))
+        assert practice_build_overrides(entry) == {
+            "infiltration": None, "ga_antecedent": None, "ga_ksat_scale": 1.0,
+            "surface_parameters": None}
 
 
 class TestBuildCityWiresTheBlockIntoProvenance:
@@ -313,8 +416,3 @@ class TestNoExtrapolationGuardrails:
         monkeypatch.setitem(MUNICIPAL_PRACTICE, "victoria", _synthetic_entry())
         after = _build(tmp_path / "registered")
         assert before == after
-
-    def test_the_live_table_ships_empty_until_a_city_brings_evidence(self):
-        """This ticket builds the mechanism only. City rows land in their own tickets with
-        their own sources; delete this test in the ticket that adds the first row."""
-        assert MUNICIPAL_PRACTICE == {}

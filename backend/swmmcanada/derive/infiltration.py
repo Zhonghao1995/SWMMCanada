@@ -33,6 +33,10 @@ HSG_HORTON: Dict[str, Tuple[float, float, float]] = {
 # Rawls, Brakensiek & Miller (1983) Table 9 (psi cm -> mm; Ksat cm/h -> mm/h then HALVED —
 # the paper's own guidance for Green-Ampt use); IMD = effective porosity (dry-antecedent
 # maximum deficit; SWMM tracks recovery from there). "silt" (rare) borrows silt loam.
+# Halved Ksat and dry-antecedent IMD are KEPT as the fleet defaults on that published
+# guidance; a municipality whose own convention differs (e.g. unhalved Ksat,
+# field-capacity antecedent) registers the fact in sources.cities.practice, and
+# following it is a build-time transform — never an edit to this table.
 GA_BY_TEXTURE: Dict[str, Tuple[float, float, float]] = {
     "sand": (49.5, 117.8, 0.417),
     "loamy sand": (61.3, 29.9, 0.401),
