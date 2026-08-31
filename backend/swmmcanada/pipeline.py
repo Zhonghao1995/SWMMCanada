@@ -1050,6 +1050,29 @@ def build_city(
             san_diag = {"included": False, "reason": f"{type(exc).__name__}: {exc}"}
             service_areas = []
 
+    # Combined DWF (ADR 0029 Q1: combined is dual-source). Combined mains arrive inside
+    # the storm network wearing their own tag (Q3) — the runoff side is already theirs;
+    # what was missing is the wastewater the same land sends them in dry weather. Reuse
+    # the sanitary service-area pipeline on the combined subgraph: seeds fall back to the
+    # combined manholes where the city publishes no lateral layer (Vancouver). No graft,
+    # no namespace wall, no extra outlet — the trunk stays wired into the storm graph and
+    # drains where it always drained.
+    comb_diag: dict = {"included": False, "reason": "no combined mains in this model"}
+    if systems is not None and "combined" not in systems:
+        comb_diag = {"included": False, "reason": "not selected"}
+    elif any(c.system == "combined" for c in network.conduits):
+        try:
+            comb_areas, csa_diag = derive_service_areas(
+                filter_system(network, "combined"), land.get("parcels") or [], aoi,
+                laterals=land.get("sanitary_laterals") or land.get("laterals"),
+                crs=spec.sub_crs, system="combined", buildings=land.get("buildings"))
+            comb_loaded = load_service_areas(comb_areas)
+            service_areas = list(service_areas) + comb_loaded.areas
+            comb_diag = {"included": True,
+                         "service_areas": {**csa_diag, **comb_loaded.diagnostics}}
+        except Exception as exc:  # noqa: BLE001 — additive load, degrade with a note
+            comb_diag = {"included": False, "reason": f"{type(exc).__name__}: {exc}"}
+
     # Head done (network producer = the city adapter); the shared build spine does the rest.
     method = _method_descriptor(sub_diag)
     config = BuildConfig(out_dir=ws, start=start, end=end,
@@ -1066,6 +1089,7 @@ def build_city(
             "official_outlet_agreement": _outlet_agreement_provenance(
                 spec, bbox, client, subcatchments, network),
             "sanitary": san_diag,
+            "combined": comb_diag,
             # Spec §G2: the practice inventory for THIS city — which registered items the
             # build had on record, and whether the user asked to follow them. Defaults are
             # untouched either way; the block says so explicitly.

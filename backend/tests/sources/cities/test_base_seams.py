@@ -382,3 +382,68 @@ def test_dem_tier_never_overrides_data_rim_or_neighbour():
     assert not asked, f"sampler consulted although every node had data: {asked}"
     assert res.diagnostics["n_inv_from_dem"] == 0
     assert not any(v > 900 for v in inv.values())
+
+
+# --- ADR 0029 Q3: per-pipe system tags through ONE assembly ----------------------------
+
+def test_pipe_system_tag_reaches_conduit_and_nodes():
+    """A `RawPipe.system` survives assembly onto its ConduitIn, and each node adopts the
+    system of the pipes that meet it — `combined` winning a mixed junction, because
+    combined is the interface system (ADR 0029 Q5): the manhole a combined main runs
+    through carries the wastewater too, so the DWF loader and the per-system views must
+    be able to see it. The graph itself is not split — one assembly, one model."""
+    from swmmcanada.sources.cities.base import RawPipe, assemble_network
+    storm = RawPipe("ST", (0.0, 0.0), (0.001, 0.0), inv_a=10.0, inv_b=9.0)
+    comb = RawPipe("CB", (0.001, 0.0), (0.002, 0.0), inv_a=9.0, inv_b=8.0,
+                   system="combined")
+    res = assemble_network([storm, comb])
+    sys_of = {c.name: c.system for c in res.network.conduits}
+    assert sys_of["ST"] == "storm_minor" and sys_of["CB"] == "combined"
+    node_sys = {j.name: j.system for j in res.network.junctions}
+    node_sys.update({o.name: o.system for o in res.network.outfalls})
+    by = {c.name: c for c in res.network.conduits}
+    shared = ({by["ST"].from_node, by["ST"].to_node}
+              & {by["CB"].from_node, by["CB"].to_node}).pop()
+    storm_only = ({by["ST"].from_node, by["ST"].to_node} - {shared}).pop()
+    assert node_sys[storm_only] == "storm_minor"
+    assert node_sys[shared] == "combined"           # mixed node: the interface system wins
+
+
+def test_untagged_pipes_assemble_exactly_as_today():
+    """system=None (every existing adapter) must be bit-identical to the old behaviour:
+    the default storm tag everywhere, so no city baseline moves."""
+    from swmmcanada.sources.cities.base import RawPipe, assemble_network
+    a = RawPipe("A", (0.0, 0.0), (0.001, 0.0), inv_a=10.0, inv_b=9.0)
+    b = RawPipe("B", (0.001, 0.0), (0.002, 0.0), inv_a=9.0, inv_b=8.0)
+    res = assemble_network([a, b])
+    everything = (list(res.network.junctions) + list(res.network.outfalls)
+                  + list(res.network.conduits))
+    assert {e.system for e in everything} == {"storm_minor"}
+
+
+def test_dedicated_outfall_inherits_the_component_terminal_system():
+    """The assembler's invented drain for a fully-combined trunk is that trunk's own exit
+    (the downstream continuation past the AOI clip), so it carries the trunk's tag — the
+    combined view stays self-contained and a later wastewater-outlet pass sees a
+    destination of the system's own instead of stacking a second boundary."""
+    from swmmcanada.sources.cities.base import RawPipe, assemble_network
+    comb = RawPipe("CB", (0.05, 0.05), (0.051, 0.05), inv_a=9.0, inv_b=8.0,
+                   system="combined")
+    storm = RawPipe("ST", (0.0, 0.0), (0.001, 0.0), inv_a=10.0, inv_b=9.0)
+    res = assemble_network([comb, storm])            # two components, one invented drain each
+    outfall_sys = {o.name: o.system for o in res.network.outfalls}
+    link_sys = {c.name: c.system for c in res.network.conduits
+                if c.name.startswith("C_OUT_")}
+    assert set(outfall_sys.values()) == {"combined", "storm_minor"}
+    assert set(link_sys.values()) == {"combined", "storm_minor"}
+
+
+def test_unanimous_tag_carries_to_nodes():
+    """A single-system assembly (a sanitary fetch through the same assembler) tags its
+    nodes with that system — the node rule is 'what the incident pipes say', not a
+    combined-only special case."""
+    from swmmcanada.sources.cities.base import RawPipe, assemble_network
+    san = RawPipe("SA", (0.0, 0.0), (0.001, 0.0), inv_a=5.0, inv_b=4.0, system="sanitary")
+    res = assemble_network([san])
+    assert {j.system for j in res.network.junctions} == {"sanitary"}
+    assert {o.system for o in res.network.outfalls} == {"sanitary"}

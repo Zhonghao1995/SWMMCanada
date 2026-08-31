@@ -225,6 +225,29 @@ def test_roundtrip_conduits(tmp_path):
         assert g.roughness_n == pytest.approx(e.roughness_n, abs=1e-6)
 
 
+def test_roundtrip_combined_system_tags(tmp_path):
+    """ADR 0029 Q3 x ADR 0007 parity: a combined-tagged pipe and its nodes must land in
+    the datastore with system="combined" and read back unchanged — the .inp and every
+    export view are produced FROM the datastore, so a tag that does not survive here
+    does not exist downstream."""
+    net = NetworkIn(
+        junctions=[JunctionIn("J1", invert_m=99.0, x=-75.700, y=45.410),
+                   JunctionIn("K1", invert_m=98.6, x=-75.695, y=45.412, system="combined")],
+        outfalls=[OutfallIn("O1", invert_m=98.0, x=-75.680, y=45.410, system="combined")],
+        conduits=[ConduitIn("C1", "J1", "K1", length_m=90.0),
+                  ConduitIn("K2", "K1", "O1", length_m=110.0, system="combined")],
+    )
+    out = tmp_path / "ds"
+    write_datastore(out, network=net, subcatchments=_subcatchments()[:1], rain=_rain(),
+                    config=_config(tmp_path / "build"), provenance=_provenance())
+    back = read_datastore(out).network
+    assert {j.name: j.system for j in back.junctions} == {"J1": "storm_minor",
+                                                          "K1": "combined"}
+    assert {o.name: o.system for o in back.outfalls} == {"O1": "combined"}
+    assert {c.name: c.system for c in back.conduits} == {"C1": "storm_minor",
+                                                         "K2": "combined"}
+
+
 def test_roundtrip_subcatchments_scalars(tmp_path):
     ds = _write_and_read(tmp_path)
     got = ds.subcatchments

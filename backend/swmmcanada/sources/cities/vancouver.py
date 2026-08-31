@@ -18,9 +18,13 @@ depth``; rimless ends stay None for the base assembler's neighbour backfill, and
 are inferred per component. ``slope`` is real data but v1 leaves it in diagnostics —
 integrating it needs multi-anchor reconciliation (ADR 0020 §3).
 
-**Combined mains join the storm system** (author decision, 2026-07-10): downtown Vancouver
-is largely combined (9.7k Combined vs 17.2k Storm mains city-wide) and combined pipes do
-carry the stormwater; the sanitary tracer stays Sanitary-only so nothing is double-counted.
+**Combined mains ride in the storm fetch and carry their own system tag** (ADR 0029 Q3;
+supersedes the 2026-07-10 fold-into-storm decision): downtown Vancouver is largely combined
+(9.7k Combined vs 17.2k Storm mains city-wide) and combined pipes do carry the stormwater,
+so it stays ONE fetch, one assembly, one hydraulic graph — but each main is tagged by its
+``eflnttype`` (Storm -> storm, Combined -> combined), which is what makes the combined
+system selectable, exportable as a view, and loadable with dry-weather flow. The sanitary
+tracer stays Sanitary-only so nothing is double-counted.
 
 Elevation semantics (audit #157, 2026-07-24): ``rimelev`` = ground/rim (city alias literally
 "Rim Elevation") and ``UPSTREAM_INVERT``/``DWNSTREAM_INVERT`` = pipe-end INVERTS (aliases
@@ -60,7 +64,8 @@ CATCHBASINS = f"{OPEN_DATA}/sewer-catch-basins/exports/geojson"
 PARCELS = f"{OPEN_DATA}/property-parcel-polygons/exports/geojson"
 BUILDINGS = f"{OPEN_DATA}/building-footprints-2015/exports/geojson"
 
-# ADR 0020 §2: combined mains carry the stormwater; sanitary tracer excludes them.
+# ADR 0020 §2 + ADR 0029 Q3: one fetch carries storm AND combined mains (combined pipes
+# carry the stormwater); the builder tags each by eflnttype. Sanitary stays separate.
 _STORM_WHERE = "(eflnttype = 'Storm' OR eflnttype = 'Combined') AND servstatus = 'In Service'"
 _SANITARY_WHERE = "eflnttype = 'Sanitary' AND servstatus = 'In Service'"
 
@@ -307,6 +312,10 @@ def build_vancouver_network(
             diameter_m=(diameter_mm / 1000.0) if (diameter_mm and diameter_mm > 0) else None,
             roughness_n=material_roughness(p.get("material"), config),
             length_m=base.num(p.get("length")),
+            # ADR 0029 Q3: tag by effluent type instead of folding Combined into storm.
+            # Unknown/blank stays with the storm default (a drainage main with no effluent
+            # tag is far more likely storm than combined) and is visible in the histogram.
+            system="combined" if eff == "Combined" else None,
         ))
 
     result = base.assemble_network(
