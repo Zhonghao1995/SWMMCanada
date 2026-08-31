@@ -26,6 +26,13 @@ METHOD_JUNCTION_STREET = "junction_street_segment"
 #: between neighbouring nodes follows real lot lines rather than a bisector through
 #: the middle of a garden.
 METHOD_JUNCTION_PARCEL = "junction_parcel"
+#: The municipal reproduction unit (composition follows municipal engineering records,
+#: 2026-08): every parcel is its own subcatchment draining to the pipe of the street it
+#: fronts, and the road right-of-way forms one unit per model node. REQUESTED only, never
+#: chosen from evidence alone — it multiplies model objects without adding information the
+#: node-aggregated unit lacks, and exists so a build can be compared unit-for-unit against
+#: a municipal drawing.
+METHOD_JUNCTION_PARCEL_ROW = "junction_parcel_row"
 
 METHOD_CATCHBASIN_PARCEL = "catchbasin_parcel"      # real inlets, parcel-shaped (Victoria)
 # The two Voronoi entries are named as fallbacks on purpose (规划书 §3 Level 5). This label
@@ -42,6 +49,7 @@ METHOD_CATCHBASIN_DEM = "catchbasin_dem"            # DEM-refined inlet service 
 METHODS = frozenset({
     METHOD_CATCHBASIN_PARCEL, METHOD_CATCHBASIN_VORONOI, METHOD_JUNCTION_VORONOI,
     METHOD_JUNCTION_DEM, METHOD_MUNICIPAL_POLYGON, METHOD_CATCHBASIN_DEM,
+    METHOD_JUNCTION_PARCEL_ROW,
 })
 
 CONFIDENCE_LEVELS = frozenset({"low", "medium", "high"})

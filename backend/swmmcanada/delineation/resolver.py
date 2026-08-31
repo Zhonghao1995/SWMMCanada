@@ -28,10 +28,11 @@ omission: only paths with data get built.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from swmmcanada.validate.schema import (METHOD_JUNCTION_DEM,
                                         METHOD_JUNCTION_PARCEL,
+                                        METHOD_JUNCTION_PARCEL_ROW,
                                         METHOD_JUNCTION_STREET,
                                         METHOD_USER_SUPPLIED,
                                         METHOD_CATCHBASIN_VORONOI,
@@ -42,6 +43,9 @@ from typing import Dict, Optional
 #: reaches provenance and the result package — `voronoi` must never be presentable as a
 #: hydrologically delineated result.
 PARCEL = "parcel"
+#: The municipal reproduction split: parcels kept whole as their own units, the road
+#: right-of-way divided among the nodes. Reached only through `requested_method`.
+PARCEL_ROW = "parcel_row"
 DEM_D8 = "dem_d8"
 STREET_SEGMENT = "street_segment"
 VORONOI = "voronoi"
@@ -116,9 +120,18 @@ class DelineationPlan:
                 "evidence": dict(self.evidence), "confidence": self.confidence}
 
 
-def resolve(evidence: Evidence) -> DelineationPlan:
+def resolve(evidence: Evidence,
+            requested_method: Optional[str] = None) -> DelineationPlan:
     """Choose the delineation plan for one AOI. Total function: it always returns a plan,
-    because the coarsest option (Voronoi of junctions) needs nothing but nodes."""
+    because the coarsest option (Voronoi of junctions) needs nothing but nodes.
+
+    ``requested_method`` — a caller's explicit ask, resolved HERE and not in the caller
+    (ADR 0029 Q11: the request is one more input; whether the evidence can honour it is
+    this module's call, and either answer is recorded in the plan's gates and reason).
+    The only requestable method today is ``junction_parcel_row``, which never wins on
+    evidence alone — it multiplies model objects without adding information the
+    node-aggregated unit lacks, so it must be asked for.
+    """
     ev = evidence.as_dict()
     # Priority 0 (规划书 §4, extended): an explicit choice outranks anything we would infer
     # AND anything the city published. Nothing below is even consulted.
@@ -153,6 +166,42 @@ def resolve(evidence: Evidence) -> DelineationPlan:
              "inlets_present": has_inlets, "land_present": has_land,
              "dem_present": evidence.dem_available, "kerb_usable": kerbs_usable,
              "terrain_usable": terrain_usable}
+
+    # A requested method is honoured when the evidence can carry it, and otherwise the
+    # normal resolution runs with the unmet request on the record — the same
+    # requested/fallback honesty the design-storm mode uses (ADR 0018).
+    if requested_method == METHOD_JUNCTION_PARCEL_ROW:
+        # The unit IS the parcel, so buildings do not substitute for one here: no parcels
+        # means no parcel units and no "everything else" remainder either.
+        supported = has_nodes and evidence.n_parcels > 0
+        req_gates = {**gates, "parcel_row_requested": True,
+                     "parcel_row_supported": supported}
+        if supported:
+            return DelineationPlan(
+                method=METHOD_JUNCTION_PARCEL_ROW, boundary=boundary, anchors=JUNCTION,
+                shaping=PARCEL_ROW, gates=req_gates, evidence=ev, confidence="medium",
+                reason=(f"requested municipal-reproduction units: each of the "
+                        f"{evidence.n_parcels} parcels is its own unit draining to the "
+                        f"pipe of the street it fronts, and the road right-of-way divides "
+                        f"among the {evidence.n_junctions} nodes"))
+        fallback = _evidence_plan(evidence, boundary, gates, ev)
+        return replace(
+            fallback, gates={**fallback.gates, **req_gates},
+            reason=(f"junction_parcel_row was requested but needs both nodes "
+                    f"({evidence.n_junctions}) and parcels ({evidence.n_parcels}); "
+                    f"falling back — {fallback.reason}"))
+
+    return _evidence_plan(evidence, boundary, gates, ev)
+
+
+def _evidence_plan(evidence: Evidence, boundary: str, gates: Dict[str, bool],
+                   ev: Dict) -> DelineationPlan:
+    """The evidence-driven choice (no request involved): best method the AOI can carry."""
+    has_nodes = gates["nodes_present"]
+    has_streets = gates["streets_present"]
+    has_land = gates["land_present"]
+    kerbs_usable = gates["kerb_usable"]
+    terrain_usable = gates["terrain_usable"]
 
     # 规划书 §4 priorities 2 and 3 are the SAME pipeline: inlets as drainage targets over a
     # conditioned surface. Kerbs are one more input, not another algorithm — they change how
