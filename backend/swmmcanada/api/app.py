@@ -66,6 +66,7 @@ from swmmcanada.build.config import InfiltrationModel
 from swmmcanada.geo import aoi_from_geojson, aoi_from_shapefile
 from swmmcanada.geo.errors import AOIOversizeError, GeoError
 from swmmcanada.pipeline import pipeline_for_aoi
+from swmmcanada.sources.cities.practice import practice_note
 from swmmcanada.sources.cities.registry import (
     DATA_TIERS,
     TYPICAL_INVERT_ERROR_M,
@@ -167,6 +168,11 @@ def create_app(*, pipeline=None, workdir=None, run_inline: bool = False) -> Fast
             "data_tier": DATA_TIERS[spec.key] if spec is not None else None,
             "typical_invert_error_m": (
                 TYPICAL_INVERT_ERROR_M[spec.key] if spec is not None else None),
+            # Spec §G2: one plain line when the matched city has municipal modelling
+            # conventions on record (null otherwise — no record means no line, never a
+            # default). The registry is the single source; the frontend only renders it.
+            "municipal_practice_note": (
+                practice_note(spec.key) if spec is not None else None),
             "in_canada": in_canada_coarse(centre_lon, centre_lat),
         }
 
@@ -181,6 +187,10 @@ def create_app(*, pipeline=None, workdir=None, run_inline: bool = False) -> Fast
         design_storm_h: int = Form(24),
         systems: Optional[str] = Form(None),
         subcatchment_layer: Optional[str] = Form(None),
+        # Spec §G2 wiring stub: ask the build to follow the matched city's registered
+        # municipal practice. Recorded in the build's provenance either way; parameter
+        # consumption lands in later tickets.
+        follow_municipal_practice: Optional[bool] = Form(None),
     ):
         aoi = await _aoi_from_request(polygon, file)
         try:
@@ -249,6 +259,8 @@ def create_app(*, pipeline=None, workdir=None, run_inline: bool = False) -> Fast
             build_fn = partial(build_fn, design_storm=design_storm)
         if selected_systems is not None:           # same contract again (ADR 0029 Q3)
             build_fn = partial(build_fn, systems=selected_systems)
+        if follow_municipal_practice:              # spec §G2 stub — bind only when asked
+            build_fn = partial(build_fn, follow_municipal_practice=True)
         if user_layer is not None:                 # resolver priority 0
             build_fn = partial(build_fn, subcatchment_layer=user_layer)
         args = (task_id, aoi, start, end, store, work_root, build_fn, mode)

@@ -134,6 +134,7 @@ export const useStore = create<AppState>((set, get) => ({
             site: {
               mode: f.mode, city: f.city, cityLabel: f.cityLabel, dataTier: f.dataTier,
               typicalInvertErrorM: f.typicalInvertErrorM, systems: f.systems,
+              municipalPracticeNote: f.municipalPracticeNote,
             },
             systems: f.systems ?? ['storm'],
           })
@@ -167,6 +168,7 @@ export const useStore = create<AppState>((set, get) => ({
             mode: parsed.mode, city: parsed.city, cityLabel: parsed.cityLabel,
             dataTier: parsed.dataTier, typicalInvertErrorM: parsed.typicalInvertErrorM,
             systems: parsed.systems,
+            municipalPracticeNote: parsed.municipalPracticeNote,
           },
           // ADR 0029: default to every system this AOI can offer. A user who has not
           // chosen expects the model they asked for, not a slice of it.

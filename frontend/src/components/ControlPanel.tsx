@@ -162,6 +162,11 @@ export default function ControlPanel() {
                     Typical error of estimated pipe elevations: about {site.typicalInvertErrorM} m.
                   </div>
                 )}
+                {site.municipalPracticeNote && (
+                  // Municipal-practice hint (registry-backed): shown only for cities with
+                  // conventions on record; the sentence itself comes from the backend.
+                  <div className="mt-0.5">{site.municipalPracticeNote}</div>
+                )}
               </>
             ) : (
               <>

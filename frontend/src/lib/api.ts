@@ -64,6 +64,9 @@ export interface SiteFacts {
   dataTier?: 'A' | 'B' | 'C' | null
   typicalInvertErrorM?: number | null
   systems?: DrainageSystem[]
+  // One plain line when the matched city has municipal modelling conventions on
+  // record (registry-backed); null means no record — and then no line is shown.
+  municipalPracticeNote?: string | null
 }
 
 export interface AoiPreview extends SiteFacts {
@@ -93,6 +96,7 @@ async function postAoiPreview(body: FormData): Promise<AoiPreview> {
     data_tier?: 'A' | 'B' | 'C' | null
     systems?: DrainageSystem[]
     typical_invert_error_m?: number | null
+    municipal_practice_note?: string | null
   }
   return {
     boundary: { type: 'Feature', properties: {}, geometry: j.geometry },
@@ -103,6 +107,7 @@ async function postAoiPreview(body: FormData): Promise<AoiPreview> {
     cityLabel: j.city_label,
     dataTier: j.data_tier,
     typicalInvertErrorM: j.typical_invert_error_m,
+    municipalPracticeNote: j.municipal_practice_note,
     // Falls back to storm rather than to everything: promising a system the AOI
     // cannot deliver is worse than offering one checkbox.
     systems: j.systems ?? ['storm'],
