@@ -250,7 +250,10 @@ def create_app(*, pipeline=None, workdir=None, run_inline: bool = False) -> Fast
 
         task_id = store.create()
         if pipeline is None:                       # auto-select the pathway by AOI location
-            build_fn, mode = pipeline_for_aoi(aoi)
+            # ``mode`` is a prediction from coverage boxes; if the feed proves it wrong the
+            # build changes pathway and the task's label follows (the frontend polls it).
+            build_fn, mode = pipeline_for_aoi(
+                aoi, on_mode=lambda m: store.update(task_id, mode=m))
         else:                                      # explicit pipeline (tests / override)
             build_fn, mode = pipeline, "injected"
         if infiltration is not None:               # bind only when asked, so injected test

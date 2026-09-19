@@ -604,24 +604,31 @@ def coverage_summary() -> list:
     ]
 
 
-def city_for_point(lon: float, lat: float) -> Optional[CitySpec]:
-    """The city whose coverage bbox contains the point, else None.
+def cities_for_point(lon: float, lat: float) -> list:
+    """Every city whose coverage bbox contains the point, most specific claim first.
 
-    Smallest containing bbox wins (ties: registry order). Adjacent-municipality regions
+    Smallest containing bbox first (ties: registry order). Adjacent-municipality regions
     (e.g. Metro Vancouver) make strict non-overlap impossible with axis-aligned boxes —
     a suburb's tight box can sit inside a neighbour's natural envelope (White Rock inside
     Surrey's, Port Coquitlam inside Coquitlam's). Nesting is therefore legal; the tighter
-    box is always the more specific claim. With disjoint boxes this reduces to the old
-    first-match behaviour."""
-    best: Optional[CitySpec] = None
-    best_area = float("inf")
+    box is always the more specific claim.
+
+    A box is a guess about where a feed has data, so the dispatcher keeps the WHOLE list:
+    when the first city's feed turns out to hold no pipes for the AOI, the build moves on
+    to the next candidate instead of shipping an empty model."""
+    hits = []
     for spec in CITIES:
         lo1, la1, lo2, la2 = spec.coverage
         if lo1 <= lon <= lo2 and la1 <= lat <= la2:
-            area = (lo2 - lo1) * (la2 - la1)
-            if area < best_area:
-                best, best_area = spec, area
-    return best
+            hits.append(((lo2 - lo1) * (la2 - la1), spec))
+    return [spec for _, spec in sorted(hits, key=lambda h: h[0])]   # stable: ties keep order
+
+
+def city_for_point(lon: float, lat: float) -> Optional[CitySpec]:
+    """The most specific city claiming the point (``cities_for_point``'s first), else None.
+    With disjoint boxes this reduces to the old first-match behaviour."""
+    hits = cities_for_point(lon, lat)
+    return hits[0] if hits else None
 
 
 def city_spec(key: str) -> CitySpec:

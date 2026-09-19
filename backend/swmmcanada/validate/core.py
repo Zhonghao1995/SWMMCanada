@@ -125,6 +125,7 @@ def validate_model(
     results: List[CheckResult] = []
 
     # Topological — always run, even for cells without a polygon.
+    results.append(C.check_model_nonempty(network, subcatchments))
     results.append(C.check_outlet_present(subcatchments))
     results.append(C.check_outlet_exists(subcatchments, node_names))
     results.append(C.check_area_positive(subcatchments))
