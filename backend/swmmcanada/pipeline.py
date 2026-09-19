@@ -61,7 +61,7 @@ from swmmcanada.sources.cities.practice import (
     practice_build_overrides,
     practice_provenance,
 )
-from swmmcanada.sources.cities.registry import CitySpec, city_for_point, city_spec
+from swmmcanada.sources.cities.registry import CitySpec, cities_for_point, city_spec
 
 
 def _method_descriptor(sub_diag: Optional[dict]) -> MethodDescriptor:
@@ -498,6 +498,10 @@ def build_from_aoi(
     # theta_e (the fleet default, bit-for-bit); "field_capacity" derives theta_e -
     # theta_fc. Applies to the GA parameter superset derive stores.
     ga_antecedent=None,
+    # Set by the dispatcher when this AOI sat inside a real-network city's coverage box but
+    # every such feed returned no pipes: which cities were tried and what was dropped.
+    # Provenance only — it changes nothing about how the network is synthesized.
+    real_network_fallback: Optional[dict] = None,
     report=None,
 ) -> BuildResult:
     def _r(stage: str, pct: int):
@@ -611,6 +615,8 @@ def build_from_aoi(
             # Spec §G2: which municipal-practice items this build had on record (none on
             # the synthesis pathway — there is no city) and whether following was asked.
             "municipal_practice": practice_provenance(None, follow=follow_municipal_practice),
+            **({"real_network_fallback": real_network_fallback}
+               if real_network_fallback else {}),
         },
         climate_client=climate_client, climate_buffer_deg=climate_buffer_deg, report=report,
         sub_diag=sub_diag, dem=dem, water=water, served=None, design_storm=design_storm,
@@ -850,6 +856,14 @@ def _plan_delineation(spec, bbox, client, network, derive: bool, subcatchment_me
     ), requested_method=requested)
 
 
+class EmptyCityNetwork(Exception):
+    """A city's feed returned no pipes for the AOI: inside its coverage box, outside its data."""
+
+    def __init__(self, spec: CitySpec):
+        super().__init__(f"{spec.key}: the municipal feed returned no pipes for this AOI")
+        self.spec = spec
+
+
 def build_city(
     city, aoi, start: date, end: date, workspace, *,
     client=None,
@@ -919,6 +933,12 @@ def build_city(
     finally:
         base.SURFACE_SAMPLER.reset(_tok)
     network = netres.network
+    if not network.conduits:
+        # A coverage box is a guess about where the feed has data; the feed is the evidence.
+        # Refuse HERE — before DEM, climate or any other acquisition — so the dispatcher can
+        # try the next city. Everything downstream quantifies over elements, so a pipeless
+        # network would otherwise run to DONE and ship a forcing-only .inp.
+        raise EmptyCityNetwork(spec)
 
     # Subcatchments. The RESOLVER is the sole method-selection entry point (ADR 0029
     # Q10/Q11): it is handed what this AOI actually contains and returns a plan carrying the
@@ -1169,14 +1189,56 @@ def build_city(
     )
 
 
-def pipeline_for_aoi(aoi):
+#: build_city options with no meaning on the synthesis pathway. ``client`` is an injection
+#: seam; the other two are user choices, so a fallback that drops them records it.
+_CITY_ONLY_OPTIONS = ("client", "subcatchment_method", "subcatchment_layer")
+
+
+def _real_mode(spec: CitySpec) -> str:
+    return f"Real municipal network: {spec.label}"
+
+
+def _build_city_or_fall_back(spec, aoi, start: date, end: date, workspace, *,
+                             fallbacks=(), on_mode=None, **options) -> BuildResult:
+    """Build from ``spec``; when its feed holds no pipes for this AOI, move on to the next
+    city whose box contains it, and when none does, synthesize — real data first,
+    synthesis as the floor, never an empty model. ``on_mode`` is told each time the pathway
+    changes, so the label a user sees follows what is actually being built."""
+    tried = []
+    for candidate in (spec, *fallbacks):
+        if tried and on_mode:
+            on_mode(_real_mode(candidate))
+        try:
+            return build_city(candidate, aoi, start, end, workspace, **options)
+        except EmptyCityNetwork:
+            tried.append(candidate)
+    if on_mode:
+        on_mode("Synthetic network from open data: no pipes in the municipal feed covering "
+                f"this AOI ({' / '.join(s.label for s in tried)})")
+    return build_from_aoi(
+        aoi, start, end, workspace,
+        real_network_fallback={
+            "tried": [s.key for s in tried],
+            "reason": "the city feed(s) covering this AOI returned no pipes",
+            "ignored_options": sorted(k for k in _CITY_ONLY_OPTIONS[1:] if k in options),
+        },
+        **{k: v for k, v in options.items() if k not in _CITY_ONLY_OPTIONS})
+
+
+def pipeline_for_aoi(aoi, on_mode=None):
     """Pick the build pathway for an AOI: a real-municipal-network city adapter when the AOI
     centre falls inside a supported city's coverage (the city registry decides), else
-    synthesize a network from open data. Returns ``(build_fn, mode_label)``."""
+    synthesize a network from open data. Returns ``(build_fn, mode_label)``.
+
+    The label is a prediction made before any fetch. Every other city whose box contains
+    the centre rides along as a fallback, and ``on_mode(label)`` is called if the build
+    ends up on a different pathway than predicted."""
     min_lon, min_lat, max_lon, max_lat = aoi.bbox
-    spec = city_for_point((min_lon + max_lon) / 2, (min_lat + max_lat) / 2)
-    if spec is not None:
-        return partial(build_city, spec), f"Real municipal network: {spec.label}"
+    candidates = cities_for_point((min_lon + max_lon) / 2, (min_lat + max_lat) / 2)
+    if candidates:
+        spec, *rest = candidates
+        return (partial(_build_city_or_fall_back, spec, fallbacks=tuple(rest), on_mode=on_mode),
+                _real_mode(spec))
     return build_from_aoi, ("Synthetic network from open data: streets-based routing, "
                             "not municipal pipe records")
 

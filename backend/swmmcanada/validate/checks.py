@@ -19,6 +19,19 @@ def _result(id, severity, passed, message, **metrics):
 # --- topological checks (no polygon needed) -----------------------------------
 
 
+def check_model_nonempty(network: NetworkIn, subs: List[SurfaceCatchment]):
+    """The checks below all quantify over elements ("every subcatchment has an outlet"),
+    so on an element-less model they pass vacuously and ``ok`` would ship a forcing-only
+    .inp. A model with no nodes, or no subcatchments to load them, is not a model — ERROR."""
+    n_nodes = len(network.junctions) + len(network.outfalls)
+    ok = n_nodes > 0 and len(subs) > 0
+    return _result("model_nonempty", schema.ERROR, ok,
+                   "the model has nodes and subcatchments" if ok
+                   else f"empty model: {n_nodes} node(s), {len(subs)} subcatchment(s) — "
+                        "no drainage network was found for this AOI",
+                   n_nodes=n_nodes, n_subcatchments=len(subs))
+
+
 def check_outlet_present(subs: List[SurfaceCatchment]):
     bad = [s.name for s in subs if not (s.outlet_node and str(s.outlet_node).strip())]
     return _result("outlet_present", schema.ERROR, not bad,

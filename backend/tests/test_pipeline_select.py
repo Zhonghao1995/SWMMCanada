@@ -16,7 +16,9 @@ def test_real_network_cities_selected():
         (-123.367, 48.423, "victoria", "Victoria"),    # Victoria, BC
         (-75.695, 45.42, "ottawa", "Ottawa"),          # Ottawa, ON
         (-81.25, 42.98, "london", "London"),           # London, ON
-        (-80.49, 43.45, "kitchener", "Kitchener"),     # Kitchener/Waterloo, ON
+        (-80.49, 43.45, "kitchener", "Kitchener"),     # downtown Kitchener — INSIDE Waterloo's box
+        (-80.5225, 43.465, "waterloo", "Waterloo"),    # Uptown Waterloo — INSIDE Kitchener's box
+        (-80.5275, 43.500, "waterloo", "Waterloo"),    # north Waterloo (Conestoga Mall)
         (-114.06, 51.05, "calgary", "Calgary"),        # Calgary, AB
         (-122.82, 49.12, "surrey", "Surrey"),          # Surrey, BC
         (-119.47, 49.88, "kelowna", "Kelowna"),        # Kelowna, BC
@@ -85,7 +87,9 @@ def test_every_city_has_a_typical_invert_error():
 def test_registry_invariants():
     """Smallest-box dispatch is sound if keys are unique and any two coverage boxes are
     either disjoint or strictly nested (a suburb's tight box inside a neighbour's envelope).
-    PARTIAL overlap stays illegal — it would create seams where 'smallest' is ambiguous."""
+    PARTIAL overlap stays illegal — it would create seams where 'smallest' is ambiguous —
+    unless one of the pair declares a boundary polygon: then the polygon, not the box,
+    settles the seam (Kitchener/Waterloo share a diagonal border no two boxes can split)."""
     keys = [s.key for s in CITIES]
     assert len(keys) == len(set(keys))
     for i, a in enumerate(CITIES):
@@ -95,7 +99,8 @@ def test_registry_invariants():
             disjoint = ax2 < bx1 or bx2 < ax1 or ay2 < by1 or by2 < ay1
             a_in_b = bx1 <= ax1 and by1 <= ay1 and ax2 <= bx2 and ay2 <= by2
             b_in_a = ax1 <= bx1 and ay1 <= by1 and bx2 <= ax2 and by2 <= ay2
-            assert disjoint or a_in_b or b_in_a, f"partial coverage overlap: {a.key} vs {b.key}"
+            assert disjoint or a_in_b or b_in_a or a.boundary or b.boundary, \
+                f"partial coverage overlap: {a.key} vs {b.key}"
             if a_in_b or b_in_a:
                 area = lambda s: (s.coverage[2] - s.coverage[0]) * (s.coverage[3] - s.coverage[1])
                 assert area(a) != area(b), f"nested boxes with equal area: {a.key} vs {b.key}"
@@ -117,3 +122,32 @@ def test_nested_coverage_prefers_smaller_box():
         assert reg.city_for_point(50.0, 50.0) is None
     finally:
         reg.CITIES = orig
+
+
+def test_a_declared_boundary_decides_candidacy_and_outranks_a_box():
+    """A spec that declares a boundary claims exactly the polygon: inside it the claim beats
+    any plain box (even a smaller one); outside it the spec is not a candidate at all."""
+    import swmmcanada.sources.cities.registry as reg
+    tri = ((0.0, 0.0), (4.0, 0.0), (0.0, 4.0), (0.0, 0.0))            # lower-left triangle
+    fenced = reg.CitySpec(key="fenced", label="Fenced", coverage=(0.0, 0.0, 4.0, 4.0),
+                          sub_crs="EPSG:32610", network_source="t", storm=None, land=None,
+                          boundary=tri)
+    boxed = reg.CitySpec(key="boxed", label="Boxed", coverage=(0.5, 0.5, 3.5, 3.5),
+                         sub_crs="EPSG:32610", network_source="t", storm=None, land=None)
+    orig = reg.CITIES
+    reg.CITIES = (boxed, fenced)
+    try:
+        assert [s.key for s in reg.cities_for_point(1.0, 1.0)] == ["fenced", "boxed"]
+        assert [s.key for s in reg.cities_for_point(3.0, 3.0)] == ["boxed"]     # outside the fence
+        assert reg.cities_for_point(3.8, 3.8) == []          # in fenced's BOX only: no claim
+    finally:
+        reg.CITIES = orig
+
+
+def test_the_kitchener_label_no_longer_claims_waterloo():
+    """The Kitchener feed is the City of Kitchener's own org; 38 of its 21,838 pipes are
+    Waterloo-owned border stubs. Its label and box must not promise the region."""
+    from swmmcanada.sources.cities.registry import city_spec
+    k = city_spec("kitchener")
+    assert "Waterloo" not in k.label and "Waterloo" not in k.network_source
+    assert city_for_point(-80.31, 43.36) is None             # Cambridge (Galt): nobody's feed

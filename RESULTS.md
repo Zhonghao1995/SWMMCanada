@@ -138,7 +138,7 @@ whole table: `backend/.venv/bin/python backend/scripts/city_table.py` (figure:
 | Victoria, BC | explicit node IDs | 1.36 | 508 / 514 / 30 | 767 | 7.5% | 11.8 → 3.5 | −0.21 / −0.23 |
 | Ottawa, ON | geometry-inferred | 2.61 | 619 / 630 / 73 | 2,461 | 15.9% | 13.7 → 5.6 | −0.56 / +0.26 |
 | London, ON | explicit node IDs | 0.91 | 187 / 188 / 14 | 352 | 3.6% | 18.3 → 7.2 | −0.27 / +0.16 |
-| Kitchener–Waterloo, ON | explicit manhole IDs | 0.90 | 454 / 456 / 23 | 341 | 0.4% | 9.6 → 3.4 | −0.13 / −0.17 |
+| Kitchener, ON | explicit manhole IDs | 0.90 | 454 / 456 / 23 | 341 | 0.4% | 9.6 → 3.4 | −0.13 / −0.17 |
 | Calgary, AB | geometry-inferred | 0.78 | 371 / 383 / 75 | 171 | 38.7% | 34.2 → 19.0 | −0.28 / −1.08 |
 | Surrey, BC | geometry-inferred | 0.81 | 159 / 160 / 23 | 243 | 1.2% | 28.4 → 6.6 | −0.09 / −0.004 |
 | Kelowna, BC | geometry-inferred | 0.80 | 144 / 145 / 20 | 161 | 9.3% | 25.2 → 9.0 | −0.13 / −0.63 |

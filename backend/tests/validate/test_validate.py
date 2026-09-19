@@ -48,6 +48,26 @@ def test_clean_model_is_ok_with_no_failures():
     assert r.errors == [] and r.warnings == []
 
 
+# --- an empty model is never "ok" -----------------------------------------------
+
+
+def test_empty_model_is_error_not_vacuously_ok():
+    """Every other error check quantifies over elements ("every subcatchment has an
+    outlet"), so on an element-less model they all pass vacuously and ok=True ships a
+    forcing-only .inp (seen live: a Waterloo AOI dispatched to a feed with no pipes there)."""
+    empty = NetworkIn(junctions=[], outfalls=[], conduits=[])
+    r = validate_model(empty, [], AOI, method=METHOD)
+    assert not r.ok
+    c = _ids(r)["model_nonempty"]
+    assert not c.passed and c.severity == schema.ERROR
+    assert c.metrics == {"n_nodes": 0, "n_subcatchments": 0}
+
+
+def test_nodes_without_subcatchments_is_error():
+    r = validate_model(NET, [], AOI, method=METHOD)
+    assert not r.ok and not _ids(r)["model_nonempty"].passed
+
+
 # --- topological errors -------------------------------------------------------
 
 
