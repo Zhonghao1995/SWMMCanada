@@ -116,6 +116,10 @@ from swmmcanada.sources.cities.vancouver import (
 from swmmcanada.sources.cities.toronto import (
     build_toronto_network, fetch_toronto_land, fetch_toronto_sanitary, fetch_toronto_storm,
 )
+from swmmcanada.sources.cities.waterloo import (
+    WATERLOO_BOUNDARY, build_waterloo_network, fetch_waterloo_land, fetch_waterloo_sanitary,
+    fetch_waterloo_storm,
+)
 from swmmcanada.sources.cities.whitby import (
     build_whitby_network, fetch_whitby_land, fetch_whitby_storm,
 )
@@ -154,6 +158,10 @@ class CitySpec:
     #: is scored against (#129, ADR 0029 Q2) — never as model units. Requires a joinable
     #: outlet key, which most of the fleet does not publish, so this is usually None.
     official_catchments: Optional[LandFn] = None
+    #: Municipal boundary as a closed (lon, lat) ring, for cities whose border no box can
+    #: follow. When declared it IS the claim: the city is a candidate only for points inside
+    #: it, and there it outranks any plain box. None = the coverage box is the claim.
+    boundary: Optional[Tuple[Tuple[float, float], ...]] = None
 
 
 CITIES: Tuple[CitySpec, ...] = (
@@ -188,15 +196,31 @@ CITIES: Tuple[CitySpec, ...] = (
         land=lambda bbox, client: fetch_london_land(bbox, client=client),
         sanitary=lambda bbox, client: build_london_network(**fetch_london_sanitary(bbox, client=client)),
     ),
-    # Kitchener–Waterloo (Region of Waterloo): explicit integer manhole-id topology; no parcel
-    # polygons published, so subcatchments fall back to catch-basin Voronoi (buildings available).
+    # Kitchener: explicit integer manhole-id topology; no parcel polygons published, so
+    # subcatchments fall back to catch-basin Voronoi (buildings available). The box hugs the
+    # feed's live extent (2026-09-18) — it is the City of Kitchener's own org, NOT a regional
+    # feed: the old region-wide box sent Waterloo and Cambridge AOIs to a feed with no pipes
+    # there. It overlaps Waterloo's box along their diagonal border; Waterloo's declared
+    # boundary settles that seam.
     CitySpec(
-        key="kitchener", label="Kitchener–Waterloo, ON",
-        coverage=(-80.70, 43.30, -80.20, 43.60), sub_crs="EPSG:32617",
-        network_source="Region of Waterloo storm sewer (real municipal network)",
+        key="kitchener", label="Kitchener, ON",
+        coverage=(-80.57, 43.35, -80.37, 43.505), sub_crs="EPSG:32617",
+        network_source="City of Kitchener storm sewer (real municipal network)",
         storm=lambda bbox, client: build_kitchener_network(**fetch_kitchener_storm(bbox, client=client)),
         land=lambda bbox, client: fetch_kitchener_land(bbox, client=client),
         sanitary=lambda bbox, client: build_kitchener_network(**fetch_kitchener_sanitary(bbox, client=client)),
+    ),
+    # Waterloo: its own AGOL org next door. Geometry topology with manhole-id labels, real
+    # per-end inverts + rims; catch basins, a parcel fabric and rooftops -> the full ADR 0005
+    # parcel/building method. Dispatches on its municipal boundary (see WATERLOO_BOUNDARY).
+    CitySpec(
+        key="waterloo", label="Waterloo, ON",
+        coverage=(-80.627, 43.432, -80.467, 43.532), sub_crs="EPSG:32617",
+        network_source="City of Waterloo storm sewer (real municipal network)",
+        storm=lambda bbox, client: build_waterloo_network(fetch_waterloo_storm(bbox, client=client)),
+        land=lambda bbox, client: fetch_waterloo_land(bbox, client=client),
+        sanitary=lambda bbox, client: build_waterloo_network(fetch_waterloo_sanitary(bbox, client=client)),
+        boundary=WATERLOO_BOUNDARY,
     ),
     # Calgary: geometry-inferred topology; parcels + buildings published.
     CitySpec(
@@ -555,7 +579,7 @@ DATA_TIERS: Dict[str, str] = {
     "vancouver": "B", "barrie": "B", "abbotsford": "B", "toronto": "B",
     "peterborough": "B", "burnaby": "B", "penticton": "B",
     "esquimalt": "B", "moncton": "B", "delta": "B", "sudbury": "B", "chilliwack": "B",
-    "portcoquitlam": "B", "windsor": "B",
+    "portcoquitlam": "B", "windsor": "B", "waterloo": "B",
     # newwestminster re-tiered B -> C (#223): 68% of its "published" pipe-end inverts
     # are manhole chamber stamps, only ~24% of ends are true pipe measurements, and
     # estimates on its steep terrain err ~4 m typical.
@@ -578,7 +602,7 @@ TYPICAL_INVERT_ERROR_M: Dict[str, Optional[float]] = {
     "penticton": 0.8, "peterborough": 0.5, "portcoquitlam": 0.4, "regina": 0.6,
     "reykjavik": None, "sarnia": 0.5, "saskatoon": 1.2, "strathcona": 1.6,
     "sudbury": 0.9, "surrey": 0.7, "toronto": 0.8, "vancouver": 1.3, "victoria": 1.3,
-    "whitby": 0.7, "whiterock": 3.3, "windsor": 0.9,
+    "waterloo": 0.5, "whitby": 0.7, "whiterock": 3.3, "windsor": 0.9,
 }
 
 
@@ -604,14 +628,25 @@ def coverage_summary() -> list:
     ]
 
 
+def _in_ring(lon: float, lat: float, ring) -> bool:
+    """Even-odd ray cast against a closed (lon, lat) ring."""
+    inside = False
+    for (x1, y1), (x2, y2) in zip(ring, ring[1:]):
+        if (y1 > lat) != (y2 > lat) and lon < x1 + (lat - y1) * (x2 - x1) / (y2 - y1):
+            inside = not inside
+    return inside
+
+
 def cities_for_point(lon: float, lat: float) -> list:
-    """Every city whose coverage bbox contains the point, most specific claim first.
+    """Every city claiming the point, most specific claim first.
 
     Smallest containing bbox first (ties: registry order). Adjacent-municipality regions
     (e.g. Metro Vancouver) make strict non-overlap impossible with axis-aligned boxes —
     a suburb's tight box can sit inside a neighbour's natural envelope (White Rock inside
     Surrey's, Port Coquitlam inside Coquitlam's). Nesting is therefore legal; the tighter
-    box is always the more specific claim.
+    box is always the more specific claim. A city that declares a ``boundary`` claims
+    exactly that polygon: outside it the city is not a candidate, inside it the claim
+    outranks every plain box.
 
     A box is a guess about where a feed has data, so the dispatcher keeps the WHOLE list:
     when the first city's feed turns out to hold no pipes for the AOI, the build moves on
@@ -619,8 +654,11 @@ def cities_for_point(lon: float, lat: float) -> list:
     hits = []
     for spec in CITIES:
         lo1, la1, lo2, la2 = spec.coverage
-        if lo1 <= lon <= lo2 and la1 <= lat <= la2:
-            hits.append(((lo2 - lo1) * (la2 - la1), spec))
+        if not (lo1 <= lon <= lo2 and la1 <= lat <= la2):
+            continue
+        if spec.boundary and not _in_ring(lon, lat, spec.boundary):
+            continue
+        hits.append(((0 if spec.boundary else 1, (lo2 - lo1) * (la2 - la1)), spec))
     return [spec for _, spec in sorted(hits, key=lambda h: h[0])]   # stable: ties keep order
 
 

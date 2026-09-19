@@ -13,9 +13,9 @@ in the [README](README.md).
 
 | | Bucket | What it means | Layers |
 |---|---|---|---|
-| 🟢 | **Real data** | measured & published, used as-is | storm pipe network (the 35 real-network cities); ground elevation; rainfall & temperature; parcel & building footprints; node / outfall / catch-basin locations |
+| 🟢 | **Real data** | measured & published, used as-is | storm pipe network (the 36 real-network cities); ground elevation; rainfall & temperature; parcel & building footprints; node / outfall / catch-basin locations |
 | 🟢 | **Derived from real data** | computed from the above by a standard, accepted method — trustworthy model inputs, the way professional models are built | imperviousness %, terrain slope, curve number (CN), evaporation, and the outlines of subcatchments that follow published streets or parcels |
-| 🟠 | **Approximated / assumed** | where direct data is thin: a sensible approximation or a standard default — apply judgment | the network **outside** the 35 cities (synthesized from streets); how subcatchments are **partitioned** (each node takes the street it fronts, not surveyed watersheds); gap-fills for missing inverts/diameters; non-circular pipes treated as circular; default roughness / depths |
+| 🟠 | **Approximated / assumed** | where direct data is thin: a sensible approximation or a standard default — apply judgment | the network **outside** the 36 cities (synthesized from streets); how subcatchments are **partitioned** (each node takes the street it fronts, not surveyed watersheds); gap-fills for missing inverts/diameters; non-circular pipes treated as circular; default roughness / depths |
 
 > In a real-network-city model, the great majority of what matters — pipes, terrain, climate, roofs, and the
 > parameters derived from them — is 🟢. The 🟠 items are normal modelling approximations to be
@@ -25,7 +25,7 @@ in the [README](README.md).
 
 | Layer | Grounding | Notes |
 |---|---|---|
-| **Storm network** (pipes, nodes, outfalls) | 🟢 Real (35 cities) · 🟠 synthesized elsewhere | Real = published inverts, diameters, materials, locations. Honest gap-fills for missing inverts (share varies by city — see the per-city table): neighbour values, the node's own rim, then the DEM surface, each counted in the diagnostics; dangling node refs snap to pipe geometry; non-circular profiles → equivalent circular (original shape kept in diagnostics). |
+| **Storm network** (pipes, nodes, outfalls) | 🟢 Real (36 cities) · 🟠 synthesized elsewhere | Real = published inverts, diameters, materials, locations. Honest gap-fills for missing inverts (share varies by city — see the per-city table): neighbour values, the node's own rim, then the DEM surface, each counted in the diagnostics; dangling node refs snap to pipe geometry; non-circular profiles → equivalent circular (original shape kept in diagnostics). |
 | **Imperviousness (%)** | 🟢 Derived | From real building roofs + road right-of-way where parcels/buildings are published; otherwise from the NALCMS land-cover raster (30 m). |
 | **Terrain slope** | 🟢 Derived | Computed from the real NRCan MRDEM (30 m). |
 | **Infiltration / curve number** | 🟢 Derived · 🟠 fallback | From real soil (SoilGrids/HYSOGs) → hydrologic soil group → SCS curve number. Falls back to a documented HSG-B default only if soil can't be fetched. |
@@ -39,7 +39,7 @@ in the [README](README.md).
 
 ## Per-city differences
 
-All 35 real-network cities use **real pipes** (🟢): published locations, connectivity,
+All 36 real-network cities use **real pipes** (🟢): published locations, connectivity,
 diameters and materials. They differ in two things — what each city publishes around the
 pipes (subcatchment/imperviousness inputs), and how complete the **vertical** data is
 (pipe inverts). The vertical tier is the honest one-glance signal:
@@ -71,7 +71,7 @@ truth). Every build reports the exact per-tier counts for *your* AOI in its diag
 | Kamloops, BC | 🟢 A (~4 %, typ. err 2.1 m)  | geometry-inferred | 🟠 catch-basin tessellation | 🟢 real buildings |
 | Kelowna, BC | 🟢 A (typ. err 0.7 m)  | geometry-inferred | 🟢 real parcel lines | 🟢 real buildings |
 | Kingston, ON | 🟠 C (~60 %, typ. err 1.4 m)  | geometry-inferred | 🟠 catch-basin tessellation | 🟢 real buildings |
-| Kitchener–Waterloo, ON | 🟢 A (typ. err 0.9 m)  | explicit node IDs | 🟠 catch-basin tessellation | 🟢 land cover (no parcels published) |
+| Kitchener, ON | 🟢 A (typ. err 0.9 m)  | explicit node IDs | 🟠 catch-basin tessellation | 🟢 land cover (no parcels published) |
 | Langley (Township), BC | 🟢 A (~7 %, typ. err 1.3 m)  | geometry-inferred | 🟢 real parcel lines | 🟢 land cover |
 | London, ON | 🟢 A (typ. err 0.8 m)  | explicit node IDs | 🟢 real parcel lines | 🟢 real buildings |
 | Moncton, NB | 🟠 B (~25 %, typ. err 0.7 m)  | geometry-inferred | 🟢 real parcel lines | 🟢 real buildings |
@@ -91,6 +91,7 @@ truth). Every build reports the exact per-tier counts for *your* AOI in its diag
 | Toronto, ON | 🟠 B (~15 %, typ. err 0.8 m)  | geometry-inferred | 🟠 catch-basin tessellation | 🟢 land cover |
 | Vancouver, BC | 🟠 B (typ. err 1.3 m)  | geometry-inferred | 🟢 real parcel lines | 🟢 real buildings |
 | Victoria, BC | 🟢 A (typ. err 1.3 m)  | explicit node IDs | 🟢 real parcel lines | 🟢 real buildings |
+| Waterloo, ON | 🟠 B (~11 %, typ. err 0.5 m)  | geometry-inferred | 🟢 real parcel lines | 🟢 real buildings |
 | Whitby, ON | 🟠 C (~70 %, typ. err 0.7 m)  | geometry-inferred | 🟠 catch-basin tessellation | 🟢 land cover |
 | White Rock, BC | 🟠 C (~36 %, typ. err 3.3 m)  | geometry-inferred | 🟢 real parcel lines | 🟢 real buildings |
 | Windsor, ON | 🟠 B (~21 %, typ. err 0.9 m)  | geometry-inferred | 🟠 junction cells (packaged download, no land layers) | 🟢 land cover |
@@ -115,10 +116,10 @@ Outside these cities, the network itself is 🟠 synthesized from OpenStreetMap 
 ## The bottom line
 
 > [!NOTE]
-> A generated model is **grounded in real data and ready to run**: the pipes (in the 35 cities),
+> A generated model is **grounded in real data and ready to run**: the pipes (in the 36 cities),
 > terrain, climate, roofs/parcels, and the parameters derived from them are real or standard
 > derivations from real data. The approximations to keep in mind are the **subcatchment
-> partitioning** and, outside the 35 cities, the **network** itself.
+> partitioning** and, outside the 36 cities, the **network** itself.
 
 > [!WARNING]
 > **Models are uncalibrated.** No parameters are fitted to observations — this is true of any

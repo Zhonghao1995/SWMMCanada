@@ -1,6 +1,6 @@
-# Kitchener / Waterloo / Cambridge / Region of Waterloo storm fixtures
+# Kitchener storm fixtures
 
-Small REAL extract from the Region of Waterloo open-data ArcGIS org, used by the offline
+Small REAL extract from the City of Kitchener open-data ArcGIS org, used by the offline
 `kitchener` adapter tests. Captured **2026-06-22**.
 
 ## Source (hosted FeatureServer org)
@@ -38,6 +38,8 @@ storm outlets 700210/700211, within the allowed downtown window
 * **Inverts are REAL**: 55/55 fixture pipes have both `UP_INVERT` and `DN_INVERT` populated
   (e.g. 320-340 m). No inverts are synthesized.
 * **4 outlets coincide (<2 m) with a pipe endpoint** -> those become direct SWMM outfalls.
-* `OWNERSHIP` spans KITCHENER / WATERLOO / CAMBRIDGE / REGION (one feed = whole region).
+* `OWNERSHIP` spans KITCHENER / REGION / MTO / WATERLOO / CAMBRIDGE — pipe owners INSIDE Kitchener,
+  not regional coverage (corrected 2026-09-18: the layer's extent is the city itself; 38 of
+  21,838 pipes are WATERLOO-owned border stubs). Waterloo has its own org and adapter.
 * **No parcel polygons** exist in this org (`Property_Ownership_Public` is POINT geometry), so the
   adapter returns `parcels: []` and subcatchment delineation falls back to catch-basin Voronoi.

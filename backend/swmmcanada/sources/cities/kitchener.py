@@ -1,6 +1,6 @@
-"""Kitchener / Waterloo / Cambridge / Region of Waterloo storm-drain adapter.
+"""City of Kitchener storm-drain adapter.
 
-The Region of Waterloo open-data org (one hosted FeatureServer org) publishes EXPLICIT pipe
+The City of Kitchener's open-data org (one hosted FeatureServer org) publishes EXPLICIT pipe
 topology: each ``Storm_Pipes`` feature carries integer ``UP_STMMANHOLEID`` / ``DN_STMMANHOLEID``
 that join to a single ``Storm_Manholes`` layer keyed by ``STMMANHOLEID`` (simpler than Victoria's
 DMH/DFG/DOF-prefixed multi-layer scheme). A sentinel id of ``-1`` (and any id absent from the
@@ -10,8 +10,10 @@ exactly with the manhole points: ``line[0]`` == upstream end, ``line[-1]`` == do
 the topology is doubly recoverable (ids + geometry) and this adapter resolves it either way before
 handing canonical pipes to the shared ``cities.base`` assembler.
 
-The single ``OWNERSHIP`` field spans KITCHENER / WATERLOO / CAMBRIDGE / REGION, so one feed covers
-every municipality in the region. Pipe ``UP_INVERT`` / ``DN_INVERT`` are real, populated double
+``OWNERSHIP`` spans KITCHENER / REGION / MTO / WATERLOO / CAMBRIDGE, but that is who owns a pipe
+INSIDE Kitchener, not regional coverage: measured live 2026-09-18, the layer's extent is the city
+itself (-80.563..-80.377, 43.355..43.501) and only 38 of 21,838 pipes are WATERLOO-owned (1
+CAMBRIDGE) — border stubs. Waterloo publishes its own network (``waterloo.py``). Pipe ``UP_INVERT`` / ``DN_INVERT`` are real, populated double
 metres (verified 2026-06-22) — no inverts are synthesized. ``WIDTH`` / ``HEIGHT`` are millimetres
 (circular pipes have WIDTH==HEIGHT) and map to an equivalent circular diameter; the build target is
 circular-only, so the original ``PIPE_SHAPE`` is kept in diagnostics.
